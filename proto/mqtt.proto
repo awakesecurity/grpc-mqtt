@@ -1,0 +1,106 @@
+syntax = "proto3";
+package mqtt;
+
+enum RCError {
+  UnknownError = 0;
+  NoParseWireType = 1;
+  NoParseBinary = 2;
+  NoParseEmbedded = 3;
+  IOGRPCCallOk = 4;
+  IOGRPCCallError = 5;
+  IOGRPCCallNotOnServer = 6;
+  IOGRPCCallNotOnClient = 7;
+  IOGRPCCallAlreadyAccepted = 8;
+  IOGRPCCallAlreadyInvoked = 9;
+  IOGRPCCallNotInvoked = 10;
+  IOGRPCCallAlreadyFinished = 11;
+  IOGRPCCallTooManyOperations = 12;
+  IOGRPCCallInvalidFlags = 13;
+  IOGRPCCallInvalidMetadata = 14;
+  IOGRPCCallInvalidMessage = 15;
+  IOGRPCCallNotServerCompletionQueue = 16;
+  IOGRPCCallBatchTooBig = 17;
+  IOGRPCCallPayloadTypeMismatch = 18;
+  IOGRPCCallCompletionQueueShutdown = 19;
+  IOGRPCTimeout = 20;
+  IOGRPCShutdown = 21;
+  IOGRPCShutdownFailure = 22;
+  IOGRPCBadStatusCode = 23;
+  IOGRPCDecode = 24;
+  IOGRPCInternalUnexpectedRecv = 25;
+  IOGRPCHandlerException = 26;
+  MQTTFailure = 27;
+}
+
+message RemoteClientError {
+  RCError error_type = 1;
+  string message = 2;
+  oneof extra {
+    int32 status_code = 3;
+    RemoteClientError embedded_error = 4;
+  }
+}
+
+message List {
+  repeated bytes value = 1;
+}
+
+message MetadataMap {
+  map<string, List> value = 1;
+}
+
+message SequencedResponse {
+  bytes payload = 1;
+  int32 sequence_num = 2;
+}
+
+message WrappedStreamChunk {
+  oneof or_error {
+    bytes value = 1;
+    RemoteClientError error = 2;
+  }
+}
+
+message WrappedStreamResponse {
+  oneof or_error {
+    StreamResponse response = 1;
+    RemoteClientError error = 2;
+  }
+}
+
+message StreamResponse {
+  MetadataMap metamap = 1;
+  int32 response_code = 2;
+  string details = 3;
+}
+
+message WrappedMQTTRequest {
+  string response_topic = 1;
+  int64 timeout = 2;
+  MetadataMap metamap = 3;
+  bytes payload = 4;
+}
+
+message WrappedUnaryResponse {
+  oneof or_err {
+    UnaryResponse response = 1;
+    RemoteClientError error = 2;
+  }
+}
+message UnaryResponse {
+  bytes body = 1;
+  MetadataMap init_metamap = 2;
+  MetadataMap trail_metamap = 3;
+  int32 response_code = 4;
+  string details = 5;
+}
+
+enum AuxControl {
+  Unknown = 0;
+  Alive = 1;
+  Terminate = 2;
+}
+
+message AuxControlMessage {
+  AuxControl value = 1;
+}

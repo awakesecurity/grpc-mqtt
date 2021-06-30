@@ -1,0 +1,36 @@
+syntax = "proto3";
+package test;
+
+service AddHello {
+  /* Unary Service */
+  rpc Add (TwoInts) returns (OneInt) {}
+
+  /* Server Streaming Service */
+  rpc HelloSS(SSRqt) returns (stream SSRpy) {}
+}
+
+service MultGoodbye {
+  /* Unary Service */
+  rpc Mult (TwoInts) returns (OneInt) {}
+
+  /* Server Streaming Service */
+  rpc GoodbyeSS(SSRqt) returns (stream SSRpy) {}
+}
+
+message TwoInts {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message OneInt {
+  int32 result = 1;
+}
+
+message SSRqt {
+  string name = 1;
+  uint32 num_replies = 2;
+}
+
+message SSRpy {
+  string greeting = 1;
+}

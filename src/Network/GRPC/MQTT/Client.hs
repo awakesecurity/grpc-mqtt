@@ -40,7 +40,7 @@ data MQTTGRPCClient = MQTTGRPCClient
     rng :: Generator
   }
 
-{- | Connects to the MQTT broker using the supplied 'MQTTConfig' and pass the `MQTTGRPCClient' to the supplied function.
+{- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
  Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 -}
 withMQTTGRPCClient :: MQTTConfig -> (MQTTGRPCClient -> IO a) -> IO a
@@ -50,7 +50,7 @@ withMQTTGRPCClient cfg =
     (normalDisconnect . mqttClient)
 
 {- | Send a gRPC request over MQTT using the provided client
- This function makes syncronous requests.
+ This function makes synchronous requests.
 -}
 mqttRequest ::
   forall request response streamtype.
@@ -116,7 +116,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           case mInitMD of
             Left err -> pure $ fromRemoteClientError err
             Right metadata -> do
-              -- Adaptor to recieve stream from MQTT
+              -- Adapter to recieve stream from MQTT
               let mqttSRecv = unwrapStreamChunk <$> orderedRead
 
               -- Run user-provided stream handler

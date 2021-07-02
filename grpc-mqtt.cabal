@@ -4,9 +4,9 @@ description:         A library for making gRPC requests over an MQTT connection
 version:             0.1.0.0
 synopsis:            Run gRPC services over an MQTT connection
 license:             Apache-2.0
-author:              Awake Networks
-maintainer:          opensource@awakenetworks.com
-copyright:           2021 Awake Networks
+author:              Arista Networks
+maintainer:          opensource@awakesecurity.com
+copyright:           2021 Arista Networks
 category:            Network
 build-type:          Simple
 extra-source-files:  proto/*.proto

@@ -144,7 +144,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                 (const action)
 
         withMQTTHeartbeat . sendTerminateOnException $ do
-          orderedRead <- mkSequencedRead $ unwrapSequencedResponse . toStrict <$> readTChan responseChan
+          let readUnwrapped = unwrapSequencedResponse . toStrict <$> readTChan responseChan
+          orderedRead <- mkSequencedRead readUnwrapped
 
           let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
               readInitMetadata = do
@@ -153,8 +154,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                 return $ fmap toMetadataMap parsedMD
 
           -- Wait for initial metadata
-          mInitMD <- readInitMetadata
-          case mInitMD of
+          readInitMetadata >>= \case
             Left err -> pure $ fromRemoteClientError err
             Right metadata -> do
               -- Adapter to recieve stream from MQTT

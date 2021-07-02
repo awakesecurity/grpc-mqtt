@@ -24,6 +24,7 @@ import Network.GRPC.MQTT.Wrapping (
  )
 
 import Control.Exception (bracket)
+import Control.Monad.Except (throwError)
 import Data.HashMap.Strict (lookup)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -202,11 +203,11 @@ getSessionId sessions topic = runExceptT $ do
   sessionId <-
     case T.splitOn "/" topic of
       (_ : _ : _ : _ : sessionId : _) -> pure sessionId
-      _ -> hoistEither $ Left "Unable to read sessionId from topic"
+      _ -> throwError "Unable to read sessionId from topic"
 
   sessionExists <- Map.member sessionId <$> readTVarIO sessions
   when sessionExists $
-    hoistEither (Left "Session already exists")
+    throwError "Session already exists"
 
   return sessionId
 

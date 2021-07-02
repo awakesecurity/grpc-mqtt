@@ -10,14 +10,27 @@ module Network.GRPC.MQTT.TH.RemoteClient (
 
 import Relude hiding (FilePath)
 
-import Network.GRPC.MQTT.TH.Proto
+import Network.GRPC.MQTT.TH.Proto (forEachService)
 
-import Filesystem.Path (FilePath)
-import Language.Haskell.TH
+import Language.Haskell.TH (
+  Dec,
+  DecsQ,
+  Name,
+  Q,
+  clause,
+  funD,
+  listE,
+  mkName,
+  normalB,
+  sigD,
+  varE,
+  varP,
+ )
 import Network.GRPC.HighLevel.Client (Client)
 import Network.GRPC.MQTT.Types (MethodMap)
 import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
+import Turtle (FilePath)
 
 mqttRemoteClientMethodMap :: FilePath -> Q [Dec]
 mqttRemoteClientMethodMap fp = fmap concat $

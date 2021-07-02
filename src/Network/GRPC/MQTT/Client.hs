@@ -9,23 +9,64 @@ module Network.GRPC.MQTT.Client (
 
 import Relude
 
-import Proto.Mqtt
+import Proto.Mqtt (
+  AuxControl (AuxControlAlive, AuxControlTerminate),
+  AuxControlMessage (AuxControlMessage),
+  RemoteClientError,
+ )
 
-import Network.GRPC.MQTT.Core
-import Network.GRPC.MQTT.Wrapping
+import Network.GRPC.MQTT.Core (connectMQTT, heartbeatPeriodSeconds)
+import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
+import Network.GRPC.MQTT.Types (
+  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
+  MQTTResult (GRPCResult),
+ )
+import Network.GRPC.MQTT.Wrapping (
+  fromRemoteClientError,
+  parseErrorToRCE,
+  toMetadataMap,
+  unwrapSequencedResponse,
+  unwrapStreamChunk,
+  unwrapStreamResponse,
+  unwrapUnaryResponse,
+  wrapRequest,
+ )
 
 import Control.Exception (bracket)
-import Crypto.Nonce
-import Network.GRPC.HighLevel
-import Network.GRPC.HighLevel.Client
-import Network.GRPC.HighLevel.Generated as HL
-import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
-import Network.GRPC.MQTT.Types
-import Network.MQTT.Client
-import Proto3.Suite
+import Crypto.Nonce (Generator, new, nonce128urlT)
+import Network.GRPC.HighLevel (
+  GRPCIOError (GRPCIOTimeout),
+  MethodName (MethodName),
+ )
+import Network.GRPC.HighLevel.Client (
+  ClientError (ClientIOError),
+  ClientResult (ClientErrorResponse),
+  TimeoutSeconds,
+ )
+import Network.GRPC.HighLevel.Generated as HL (
+  MetadataMap,
+ )
+import Network.MQTT.Client (
+  MQTTClient,
+  MQTTConfig (_msgCB),
+  MessageCallback (SimpleCallback),
+  QoS (QoS1),
+  SubOptions (_subQoS),
+  Topic,
+  normalDisconnect,
+  publishq,
+  subOptions,
+  subscribe,
+ )
+import Proto3.Suite (
+  Enumerated (Enumerated),
+  Message,
+  fromByteString,
+  toLazyByteString,
+ )
+import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
-import UnliftIO.Concurrent (threadDelay)
 import UnliftIO.Exception (onException)
 import UnliftIO.STM (TChan, newTChanIO, readTChan, writeTChan)
 import UnliftIO.Timeout (timeout)
@@ -99,7 +140,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         let withMQTTHeartbeat :: IO a -> IO a
             withMQTTHeartbeat action =
               withAsync
-                (forever (publishControlMsg AuxControlAlive >> threadDelay (heartbeatPeriod*1000000)))
+                (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
                 (const action)
 
         withMQTTHeartbeat . sendTerminateOnException $ do
@@ -125,8 +166,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
               -- Return final result
               unwrapStreamResponse <$> atomically (readTChan responseChan)
 
--- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
--- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
+{- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
+ NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
+-}
 connectMQTTGRPC :: (MonadIO m) => MQTTConfig -> m MQTTGRPCClient
 connectMQTTGRPC cfg = do
   resultChan <- newTChanIO
@@ -136,7 +178,7 @@ connectMQTTGRPC cfg = do
         SimpleCallback $ \_client _topic mqttMessage _props -> do
           atomically $ writeTChan resultChan mqttMessage
 
-  MQTTGRPCClient 
+  MQTTGRPCClient
     <$> connectMQTT cfg{_msgCB = clientMQTTHandler}
     <*> pure resultChan
     <*> new

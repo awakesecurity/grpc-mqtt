@@ -13,7 +13,7 @@ import Relude
 import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client (
   ClientResult,
-  GRPCMethodType (..),
+  GRPCMethodType (Normal, ServerStreaming),
   MetadataMap,
   StreamRecv,
   TimeoutSeconds,

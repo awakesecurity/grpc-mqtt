@@ -5,23 +5,112 @@ module Network.GRPC.MQTT.Wrapping where
 
 import Relude
 
-import Network.GRPC.MQTT.Types
+import Network.GRPC.MQTT.Types (
+  ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
+  MQTTResult (..),
+  SomeClientHandler (..),
+ )
+import Network.MQTT.Topic (Topic)
 
-import Data.ByteString.Base64
-import qualified Data.Map as M
-import Data.SortedList (fromSortedList, toSortedList)
+import Proto.Mqtt as Proto (
+  List (List, listValue),
+  MetadataMap (MetadataMap),
+  RCError (
+    RCErrorIOGRPCBadStatusCode,
+    RCErrorIOGRPCCallAlreadyAccepted,
+    RCErrorIOGRPCCallAlreadyFinished,
+    RCErrorIOGRPCCallAlreadyInvoked,
+    RCErrorIOGRPCCallBatchTooBig,
+    RCErrorIOGRPCCallCompletionQueueShutdown,
+    RCErrorIOGRPCCallError,
+    RCErrorIOGRPCCallInvalidFlags,
+    RCErrorIOGRPCCallInvalidMessage,
+    RCErrorIOGRPCCallInvalidMetadata,
+    RCErrorIOGRPCCallNotInvoked,
+    RCErrorIOGRPCCallNotOnClient,
+    RCErrorIOGRPCCallNotOnServer,
+    RCErrorIOGRPCCallNotServerCompletionQueue,
+    RCErrorIOGRPCCallOk,
+    RCErrorIOGRPCCallPayloadTypeMismatch,
+    RCErrorIOGRPCCallTooManyOperations,
+    RCErrorIOGRPCDecode,
+    RCErrorIOGRPCHandlerException,
+    RCErrorIOGRPCInternalUnexpectedRecv,
+    RCErrorIOGRPCShutdown,
+    RCErrorIOGRPCShutdownFailure,
+    RCErrorIOGRPCTimeout,
+    RCErrorMQTTFailure,
+    RCErrorNoParseBinary,
+    RCErrorNoParseEmbedded,
+    RCErrorNoParseWireType,
+    RCErrorUnknownError
+  ),
+  RemoteClientError (..),
+  RemoteClientErrorExtra (..),
+  SequencedResponse,
+  StreamResponse (
+    StreamResponse,
+    streamResponseDetails,
+    streamResponseMetamap,
+    streamResponseResponseCode
+  ),
+  UnaryResponse (
+    UnaryResponse,
+    unaryResponseBody,
+    unaryResponseDetails,
+    unaryResponseInitMetamap,
+    unaryResponseResponseCode,
+    unaryResponseTrailMetamap
+  ),
+  WrappedMQTTRequest (WrappedMQTTRequest),
+  WrappedStreamChunk (WrappedStreamChunk),
+  WrappedStreamChunkOrError (
+    WrappedStreamChunkOrErrorError,
+    WrappedStreamChunkOrErrorValue
+  ),
+  WrappedStreamResponse (WrappedStreamResponse),
+  WrappedStreamResponseOrError (
+    WrappedStreamResponseOrErrorError,
+    WrappedStreamResponseOrErrorResponse
+  ),
+  WrappedUnaryResponse (WrappedUnaryResponse),
+  WrappedUnaryResponseOrErr (
+    WrappedUnaryResponseOrErrError,
+    WrappedUnaryResponseOrErrResponse
+  ),
+ )
 
 import Control.Exception (ErrorCall, try)
+import Data.ByteString.Base64 (decodeBase64, encodeBase64)
+import qualified Data.Map as M
+import Data.SortedList (fromSortedList, toSortedList)
 import qualified Data.Vector as V
 import GHC.IO.Unsafe (unsafePerformIO)
-import Network.GRPC.HighLevel as HL
-import Network.GRPC.HighLevel.Client
-import Network.GRPC.HighLevel.Server
+import Network.GRPC.HighLevel as HL (
+  GRPCIOError (..),
+  MetadataMap (MetadataMap),
+  StatusCode,
+  StatusDetails (..),
+ )
+import Network.GRPC.HighLevel.Client (
+  ClientError (..),
+  ClientRequest (ClientNormalRequest, ClientReaderRequest),
+  ClientResult (
+    ClientErrorResponse,
+    ClientNormalResponse,
+    ClientReaderResponse
+  ),
+  GRPCMethodType (Normal, ServerStreaming),
+ )
+import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.Unsafe (CallError (..))
-import Proto.Mqtt as Proto
-import Proto3.Suite
+import Proto3.Suite (
+  Enumerated (Enumerated),
+  Message,
+  fromByteString,
+  toLazyByteString,
+ )
 import Proto3.Wire.Decode (ParseError (..))
-import Network.MQTT.Topic (Topic)
 
 -- Client Wrappers
 wrapUnaryClientHandler ::
@@ -106,7 +195,7 @@ unwrapUnaryResponse wrappedMessage = either id id parsedResult
 wrapStreamInitMetadata :: HL.MetadataMap -> LByteString
 wrapStreamInitMetadata = toLazyByteString . fromMetadataMap
 
-wrapStreamResponse :: (Message response) => ClientResult 'ServerStreaming response -> LByteString
+wrapStreamResponse :: ClientResult 'ServerStreaming response -> LByteString
 wrapStreamResponse response =
   toLazyByteString . WrappedStreamResponse . Just $
     case response of
@@ -120,7 +209,7 @@ wrapStreamResponse response =
         WrappedStreamResponseOrErrorError $
           toRemoteClientError ce
 
-unwrapStreamResponse :: forall response. (Message response) => LByteString -> MQTTResult 'ServerStreaming response
+unwrapStreamResponse :: forall response. LByteString -> MQTTResult 'ServerStreaming response
 unwrapStreamResponse wrappedMessage = either id id parsedResult
  where
   parsedResult :: Either (MQTTResult 'ServerStreaming response) (MQTTResult 'ServerStreaming response)
@@ -185,6 +274,7 @@ parseWithClientError :: (Message a) => ByteString -> Either (MQTTResult streamty
 parseWithClientError = first (GRPCResult . ClientErrorResponse . ClientErrorNoParse) . fromByteString
 
 -- Protobuf type conversions
+
 -- | NB: Destroys keys that fail to decode
 toMetadataMap :: Proto.MetadataMap -> HL.MetadataMap
 toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap (convertVals <$> M.mapKeys convertKeys m)

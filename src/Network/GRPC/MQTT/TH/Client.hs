@@ -8,18 +8,33 @@ module Network.GRPC.MQTT.TH.Client (
 
 import Relude hiding (FilePath)
 
-import Network.GRPC.MQTT.TH.Proto
+import Network.GRPC.MQTT.TH.Proto (forEachService)
 
-import Filesystem.Path (FilePath)
-import Language.Haskell.TH
+import Language.Haskell.TH (
+  Dec,
+  DecsQ,
+  Name,
+  Q,
+  appE,
+  clause,
+  conE,
+  conT,
+  funD,
+  mkName,
+  normalB,
+  sigD,
+  varE,
+  varP,
+ )
 import Network.GRPC.HighLevel (MethodName (MethodName))
 import Network.GRPC.MQTT.Client (
   MQTTGRPCClient,
   mqttRequest,
  )
-import Network.GRPC.MQTT.Types (MQTTResult, MQTTRequest)
+import Network.GRPC.MQTT.Types (MQTTRequest, MQTTResult)
 import Network.MQTT.Topic (Topic)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
+import Turtle (FilePath)
 
 mqttClientFuncs :: FilePath -> Q [Dec]
 mqttClientFuncs fp = fmap concat $

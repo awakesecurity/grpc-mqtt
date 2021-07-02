@@ -4,9 +4,24 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 
 import Relude
 
-import Network.GRPC.MQTT.Core
-import Network.GRPC.MQTT.Types
-import Network.GRPC.MQTT.Wrapping
+import Network.GRPC.MQTT.Core (
+  connectMQTT,
+  heartbeatPeriodSeconds,
+ )
+import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
+import Network.GRPC.MQTT.Types (
+  ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
+  MethodMap,
+  SomeClientHandler (SomeClientHandler),
+ )
+import Network.GRPC.MQTT.Wrapping (
+  toMetadataMap,
+  wrapMQTTError,
+  wrapStreamChunk,
+  wrapStreamInitMetadata,
+  wrapStreamResponse,
+  wrapUnaryResponse,
+ )
 
 import Control.Exception (bracket)
 import Data.HashMap.Strict (lookup)
@@ -14,11 +29,35 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Network.GRPC.HighLevel (GRPCIOError)
 import qualified Network.GRPC.HighLevel as HL
-import Network.GRPC.HighLevel.Client
-import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
-import Network.MQTT.Client
-import Proto.Mqtt
-import Proto3.Suite
+import Network.GRPC.HighLevel.Client (
+  ClientError (ClientIOError),
+  ClientResult (ClientErrorResponse),
+ )
+import Network.MQTT.Client (
+  MQTTClient,
+  MQTTConfig (_msgCB),
+  MessageCallback (SimpleCallback),
+  QoS (QoS1),
+  SubOptions (_subQoS),
+  Topic,
+  normalDisconnect,
+  publishq,
+  subOptions,
+  subscribe,
+  unsubscribe,
+  waitForClient,
+ )
+import Proto.Mqtt (
+  AuxControl (AuxControlAlive, AuxControlTerminate),
+  AuxControlMessage (AuxControlMessage),
+  WrappedMQTTRequest (WrappedMQTTRequest),
+ )
+import Proto3.Suite (
+  Enumerated (Enumerated),
+  Message,
+  fromByteString,
+ )
+import Turtle (NominalDiffTime)
 import UnliftIO (timeout)
 import UnliftIO.Async (Async, async, cancel, waitEither_, withAsync)
 import UnliftIO.Exception (throwString)
@@ -136,7 +175,7 @@ makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage = do
           waitEither_ handlerThread heartbeatThread
        where
         -- Wait slightly longer than the heartbeatPeriod to allow for network delays
-        heartbeatMon = watchdog (heartbeatPeriod + 1) sessionHeartbeat
+        heartbeatMon = watchdog (heartbeatPeriodSeconds + 1) sessionHeartbeat
 
 -- | Handles AuxControl signals from the "/control" topic
 manageSession :: SessionMap -> SessionId -> LByteString -> IO ()
@@ -174,12 +213,13 @@ getSessionId sessions topic = runExceptT $ do
 {- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
  Intended to be used with 'race'
 -}
-watchdog :: TimeoutSeconds -> TMVar () -> IO ()
+watchdog :: NominalDiffTime -> TMVar () -> IO ()
 watchdog timeLimit var = loop
  where
+  uSecs = floor $ timeLimit * 1000000
   loop =
     whenJustM
-      (timeout (timeLimit * 1000000) $ atomically (takeTMVar var))
+      (timeout uSecs $ atomically (takeTMVar var))
       (const loop)
 
 -- | Passes chunks of data from a gRPC stream onto MQTT

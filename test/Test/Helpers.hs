@@ -2,16 +2,38 @@ module Test.Helpers where
 
 import Relude
 
-import Data.Default
+import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
-import Data.X509.CertificateStore
-import Network.Connection
-import Network.GRPC.HighLevel.Client
-import Network.GRPC.MQTT
-import Network.TLS
-import Network.TLS.Extra.Cipher
+import Data.X509.CertificateStore (
+  CertificateStore,
+  readCertificateStore,
+ )
+import Network.Connection (TLSSettings (TLSSettings))
+import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
+import Network.GRPC.MQTT (
+  MQTTConfig (_hostname, _port, _protocol, _tlsSettings),
+  ProtocolLevel (Protocol311),
+  mqttConfig,
+ )
+import Network.TLS (
+  ClientHooks (onCertificateRequest),
+  ClientParams (clientHooks, clientShared, clientSupported),
+  Credential,
+  Credentials (Credentials),
+  HostName,
+  Shared (sharedCAStore, sharedCredentials),
+  Supported (supportedCiphers),
+  credentialLoadX509,
+  defaultParamsClient,
+ )
+import Network.TLS.Extra.Cipher (ciphersuite_default)
 import Test.Tasty (DependencyType (AllFinish), TestName, TestTree, after)
-import Test.Tasty.HUnit
+import Test.Tasty.HUnit (
+  Assertion,
+  assertBool,
+  assertFailure,
+  testCase,
+ )
 import Test.Tasty.Runners (timed)
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTConfig
@@ -60,7 +82,7 @@ timeit limit action = do
   assertBool timeMsg $ seconds < limit
   return res
 
-streamTester :: Show response => (response -> Assertion) -> MetadataMap -> StreamRecv response -> IO ()
+streamTester :: (response -> Assertion) -> MetadataMap -> StreamRecv response -> IO ()
 streamTester assertProp _mm sr = loop
  where
   loop =

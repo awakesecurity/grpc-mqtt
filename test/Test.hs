@@ -4,28 +4,93 @@ module Main where
 
 import Relude
 
-import Test.GRPCServers
-import Test.Helpers
-import Test.ProtoClients
-import Test.ProtoRemoteClients
+import Test.GRPCServers (
+  addHelloHandlers,
+  addHelloService,
+  infiniteHelloSSHandler,
+  multGoodbyeService,
+ )
+import Test.Helpers (
+  assertContains,
+  getTestConfig,
+  notParallel,
+  streamTester,
+  timeit,
+ )
+import Test.ProtoClients (
+  addHelloMqttClient,
+  multGoodbyeMqttClient,
+ )
+import Test.ProtoRemoteClients (
+  addHelloRemoteClientMethodMap,
+  multGoodbyeRemoteClientMethodMap,
+ )
 
-import Network.GRPC.MQTT
-import Network.GRPC.MQTT.Client
-import Network.GRPC.MQTT.Core
-import Network.GRPC.MQTT.RemoteClient
-import Network.GRPC.MQTT.Sequenced
-import Network.GRPC.MQTT.Types
+import Network.GRPC.MQTT (
+  MQTTConfig (_connID, _msgCB),
+  MessageCallback (SimpleCallback),
+  QoS (QoS1),
+  SubOptions (_subQoS),
+  Topic,
+  normalDisconnect,
+  publishq,
+  subOptions,
+  subscribe,
+ )
+import Network.GRPC.MQTT.Client (withMQTTGRPCClient)
+import Network.GRPC.MQTT.Core (connectMQTT)
+import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
+import Network.GRPC.MQTT.Sequenced (
+  Sequenced (..),
+  mkSequencedRead,
+ )
+import Network.GRPC.MQTT.Types (
+  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
+  MQTTResult (GRPCResult, MQTTError),
+ )
 
-import Data.Time.Clock
-import GHC.Conc (threadDelay)
-import Network.GRPC.HighLevel.Client
-import Network.GRPC.HighLevel.Generated
-import Network.TLS
-import Proto.Test
-import Test.Tasty
-import Test.Tasty.HUnit
-import UnliftIO.Async
-import UnliftIO.STM hiding (atomically)
+import Data.Time.Clock (
+  diffUTCTime,
+  getCurrentTime,
+  nominalDiffTimeToSeconds,
+ )
+import Network.GRPC.HighLevel.Client (
+  ClientConfig (..),
+  ClientError (ClientIOError),
+  ClientResult (
+    ClientErrorResponse,
+    ClientNormalResponse,
+    ClientReaderResponse
+  ),
+  Port,
+  StatusCode (StatusOk),
+ )
+import Network.GRPC.HighLevel.Generated (
+  GRPCIOError (GRPCIOTimeout),
+  ServiceOptions (serverPort),
+  defaultServiceOptions,
+  withGRPCClient,
+ )
+import Network.TLS (HostName)
+import Proto.Test (
+  AddHello (AddHello, addHelloHelloSS),
+  MultGoodbye (MultGoodbye),
+  OneInt (OneInt),
+  SSRpy (ssrpyGreeting),
+  SSRqt (SSRqt),
+  TwoInts (TwoInts),
+  addHelloServer,
+ )
+import Test.Tasty (TestTree, defaultMain, testGroup)
+import Test.Tasty.HUnit (
+  Assertion,
+  assertBool,
+  assertFailure,
+  (@?=),
+ )
+import Turtle (sleep)
+import UnliftIO.Async (concurrently_, withAsync)
+import UnliftIO.STM (newTChanIO, readTChan, writeTChan)
 import UnliftIO.Timeout (timeout)
 
 -- Test gRPC servers
@@ -92,7 +157,7 @@ persistentMQTT = do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
-        threadDelay 1000000
+        sleep 1
         withMQTTGRPCClient awsConfig{_connID = testClientId} $ \client -> do
           let AddHello mqttAdd mqttHelloSS = addHelloMqttClient client testBaseTopic
 
@@ -129,7 +194,7 @@ streamingTermination = do
 
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
-        threadDelay 1000000
+        sleep 1
         withMQTTGRPCClient awsConfig{_connID = testClientId} $ \client -> do
           let AddHello _ mqttHelloSS = addHelloMqttClient client testBaseTopic
           let testInput = SSRqt "Alice" 1
@@ -137,7 +202,7 @@ streamingTermination = do
 
           -- Manually watching session in AWS console
           _ <- timeout 5000000 $ mqttHelloSS request
-          threadDelay 10000000
+          sleep 10
 
 testTimeout :: Assertion
 testTimeout = do
@@ -169,7 +234,7 @@ basicUnary = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptorBU"} testBaseTopic methodMap) $ \_adaptorThread -> do
         --Delay to allow remote client to start receiving MQTT messages
-        threadDelay 1000000
+        sleep 1
         withMQTTGRPCClient awsConfig{_connID = testClientId <> "BU"} $ \client -> do
           let AddHello mqttAdd _ = addHelloMqttClient client testBaseTopic
           let testInput = TwoInts 4 6
@@ -193,7 +258,7 @@ basicServerStreaming = do
 
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic methodMap) $ \_adaptorThread -> do
-        threadDelay 1000000
+        sleep 1
         testHelloCall awsConfig{_connID = testClientId <> "SS"}
 
 missingClientError :: Assertion
@@ -206,7 +271,7 @@ missingClientError = do
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \_grpcClient -> do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic []) $ \_adaptorThread -> do
-        threadDelay 1000000
+        sleep 1
         withMQTTGRPCClient awsConfig{_connID = testClientId <> "SS"} $ \client -> do
           let AddHello _ mqttHelloSS = addHelloMqttClient client testBaseTopic
               testInput = SSRqt "Alice" 2
@@ -233,7 +298,7 @@ twoServers = do
           let methodMap = methodMapAH <> methodMapMG
           -- Start serverside MQTT adaptor
           withAsync (runRemoteClient awsConfig{_connID = "testMachineSSAdaptorTS"} testBaseTopic methodMap) $ \_adaptorThread -> do
-            threadDelay 1000000
+            sleep 1
             -- Server 1
             testAddCall awsConfig{_connID = "testclientTS1"}
             testHelloCall awsConfig{_connID = "testclientTS2"}

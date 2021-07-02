@@ -12,7 +12,20 @@ build-type:          Simple
 extra-source-files:  proto/*.proto
 
 common shared-settings
-  default-language:   Haskell2010  
+  default-language:   Haskell2010 
+  ghc-options:        -Wall
+                      -Wcompat
+                      -Werror
+                      -Widentities
+                      -Wincomplete-record-updates
+                      -Wincomplete-uni-patterns
+                      -Wmissing-fields
+                      -Wmissing-home-modules
+                      -Wpartial-fields
+                      -Wredundant-constraints
+                      -Wunused-packages
+                      -fshow-warning-groups
+
   default-extensions: BangPatterns
                       DataKinds
                       DefaultSignatures
@@ -42,74 +55,60 @@ common shared-settings
                       TypeFamilies
                       TypeOperators
 
+  build-depends:      base >=4.14 && <4.15
+                    , bytestring
+                    , containers
+                    , deepseq
+                    , grpc-haskell
+                    , grpc-haskell-core
+                    , net-mqtt
+                    , proto3-suite
+                    , proto3-wire
+                    , relude
+                    , text
+                    , turtle
+                    , unliftio
+                    , vector
+
 library
-  import:              shared-settings
-  exposed-modules:     Network.GRPC.MQTT
-                       Network.GRPC.MQTT.Client
-                       Network.GRPC.MQTT.Core
-                       Network.GRPC.MQTT.RemoteClient
-                       Network.GRPC.MQTT.Sequenced
-                       Network.GRPC.MQTT.TH.Client
-                       Network.GRPC.MQTT.TH.Proto
-                       Network.GRPC.MQTT.TH.RemoteClient
-                       Network.GRPC.MQTT.Types
-                       Network.GRPC.MQTT.Wrapping
-  other-modules:       Proto.Mqtt
-  ghc-options:         -Wall
-  hs-source-dirs:      src gen
-  build-depends:       base >=4.14 && <4.15
-                     , base64
-                     , bytestring
-                     , conduit-extra
-                     , containers
-                     , deepseq
-                     , grpc-haskell
-                     , grpc-haskell-core
-                     , net-mqtt
-                     , network-conduit-tls
-                     , network-uri
-                     , nonce
-                     , proto3-suite
-                     , proto3-wire
-                     , relude
-                     , sorted-list
-                     , stm
-                     , system-filepath
-                     , template-haskell
-                     , text
-                     , unliftio
-                     , unordered-containers
-                     , vector
+  import:             shared-settings
+  exposed-modules:    Network.GRPC.MQTT
+                      Network.GRPC.MQTT.Client
+                      Network.GRPC.MQTT.Core
+                      Network.GRPC.MQTT.RemoteClient
+                      Network.GRPC.MQTT.Sequenced
+                      Network.GRPC.MQTT.TH.Client
+                      Network.GRPC.MQTT.TH.Proto
+                      Network.GRPC.MQTT.TH.RemoteClient
+                      Network.GRPC.MQTT.Types
+                      Network.GRPC.MQTT.Wrapping
+  other-modules:      Proto.Mqtt
+  -- ghc-options:
+  hs-source-dirs:     src gen
+  build-depends:      base64
+                    , conduit-extra
+                    , network-conduit-tls
+                    , nonce
+                    , sorted-list
+                    , template-haskell
+                    , unordered-containers
 
 test-suite grpc-mqtt-test
-  import:              shared-settings
-  ghc-options:         -threaded -Wall -with-rtsopts=-N2
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test gen
-  main-is:             Test.hs
-  other-modules:       Proto.Test
-                       Test.GRPCServers
-                       Test.Helpers
-                       Test.ProtoClients
-                       Test.ProtoRemoteClients
-  build-depends:       base >=4.14 && <4.15
-                     , bytestring
-                     , connection
-                     , containers
-                     , data-default
-                     , deepseq
-                     , grpc-haskell
-                     , grpc-mqtt
-                     , network-uri
-                     , proto3-suite
-                     , proto3-wire
-                     , relude
-                     , tasty
-                     , tasty-hunit
-                     , text
-                     , time
-                     , tls
-                     , unliftio
-                     , unordered-containers
-                     , vector
-                     , x509-store
+  import:             shared-settings
+  ghc-options:        -threaded -with-rtsopts=-N2
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test gen
+  main-is:            Test.hs
+  other-modules:      Proto.Test
+                      Test.GRPCServers
+                      Test.Helpers
+                      Test.ProtoClients
+                      Test.ProtoRemoteClients
+  build-depends:      grpc-mqtt   
+                    , connection
+                    , data-default
+                    , tasty
+                    , tasty-hunit
+                    , time
+                    , tls
+                    , x509-store

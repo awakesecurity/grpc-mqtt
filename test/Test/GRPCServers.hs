@@ -4,11 +4,27 @@ module Test.GRPCServers where
 
 import Relude
 
-import Proto.Test
+import Proto.Test (
+  AddHello (..),
+  MultGoodbye (..),
+  OneInt (OneInt),
+  SSRpy (SSRpy),
+  SSRqt (SSRqt),
+  TwoInts (TwoInts),
+  addHelloServer,
+  multGoodbyeServer,
+ )
 
-import Network.GRPC.HighLevel
-import Network.GRPC.HighLevel.Generated
-import UnliftIO.Concurrent (threadDelay)
+import Network.GRPC.HighLevel (
+  ServiceOptions,
+  StatusCode (StatusOk),
+ )
+import Network.GRPC.HighLevel.Generated (
+  GRPCMethodType (Normal, ServerStreaming),
+  ServerRequest (ServerNormalRequest, ServerWriterRequest),
+  ServerResponse (ServerNormalResponse, ServerWriterResponse),
+ )
+import Turtle (sleep)
 
 addHelloService :: ServiceOptions -> IO ()
 addHelloService = addHelloServer addHelloHandlers
@@ -40,7 +56,7 @@ helloSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) = d
 
   forM_ range $ \n -> do
     _ <- ssend $ greeting n
-    threadDelay 100000
+    sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_helloSS")] StatusOk "Stream is done"
  where
@@ -54,7 +70,7 @@ infiniteHelloSSHandler (ServerWriterRequest _metadata (SSRqt name _) ssend) = do
 
   forM_ range $ \n -> do
     _ <- ssend $ greeting n
-    threadDelay 100000
+    sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_infiniteHelloSS")] StatusOk "Stream is done"
  where
@@ -89,7 +105,7 @@ goodbyeSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) =
 
   forM_ range $ \n -> do
     _ <- ssend $ sendoff n
-    threadDelay 100000
+    sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_value")] StatusOk "Stream is done"
  where

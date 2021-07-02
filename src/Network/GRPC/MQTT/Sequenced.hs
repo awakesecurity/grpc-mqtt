@@ -5,7 +5,7 @@ module Network.GRPC.MQTT.Sequenced where
 import Relude
 
 import qualified Data.SortedList as SL
-import Proto.Mqtt
+import Proto.Mqtt (SequencedResponse (..))
 import Proto3.Suite (toLazyByteString)
 
 -- | A class representing types that have some for of sequence id
@@ -25,7 +25,7 @@ instance (Sequenced sa) => Eq (SequencedWrap sa) where
 instance (Sequenced sa) => Ord (SequencedWrap sa) where
   (<=) = (<=) `on` seqNum
 
--- 'Either' can be sequenced where 'Left' represents and error and will 
+-- 'Either' can be sequenced where 'Left' represents and error and will
 -- always be given first in the sequence
 instance (Sequenced a) => Sequenced (Either e a) where
   type Payload (Either e a) = Either e (Payload a)
@@ -38,10 +38,11 @@ instance Sequenced SequencedResponse where
   seqNum = fromIntegral . sequencedResponseSequenceNum
   seqPayload = sequencedResponsePayload
 
--- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
--- read the objects in order even if they are received out of order
--- NB: Objects with negative sequence numbers are always returned immediately
-mkSequencedRead :: forall m a. (MonadIO m, Sequenced a, Show a) => STM a -> m (m (Payload a))
+{- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
+ read the objects in order even if they are received out of order
+ NB: Objects with negative sequence numbers are always returned immediately
+-}
+mkSequencedRead :: forall m a. (MonadIO m, Sequenced a) => STM a -> m (m (Payload a))
 mkSequencedRead read = do
   seqVar <- newTVarIO 0
   bufferVar <- newTVarIO $ SL.toSortedList @(SequencedWrap a) []

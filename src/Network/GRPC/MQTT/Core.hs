@@ -2,7 +2,7 @@
 
 module Network.GRPC.MQTT.Core (
   connectMQTT,
-  heartbeatPeriod,
+  heartbeatPeriodSeconds,
 ) where
 
 import Relude
@@ -13,8 +13,13 @@ import Data.Conduit.Network.TLS (
   runTLSClient,
   tlsClientConfig,
  )
-import Network.MQTT.Client
-import Network.GRPC.HighLevel.Client (TimeoutSeconds)
+import Network.MQTT.Client (
+  MQTTClient,
+  MQTTConduit,
+  MQTTConfig (MQTTConfig, _hostname, _port, _tlsSettings),
+  runMQTTConduit,
+ )
+import Turtle (NominalDiffTime)
 
 -- | Connect to an MQTT broker
 connectMQTT :: MonadIO m => MQTTConfig -> m MQTTClient
@@ -30,5 +35,5 @@ connectMQTT cfg@MQTTConfig{..} = liftIO $ runMQTTConduit wrapTLS cfg
   tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
 
 -- | Period for heartbeat messages
-heartbeatPeriod :: TimeoutSeconds
-heartbeatPeriod = 10
+heartbeatPeriodSeconds :: NominalDiffTime
+heartbeatPeriodSeconds = 10

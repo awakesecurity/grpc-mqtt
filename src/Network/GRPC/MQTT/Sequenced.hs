@@ -8,7 +8,7 @@ import qualified Data.SortedList as SL
 import Proto.Mqtt (SequencedResponse (..))
 import Proto3.Suite (toLazyByteString)
 
--- | A class representing types that have some for of sequence id
+-- | A class representing types that have some form of sequence id
 class Sequenced a where
   type Payload a
   seqNum :: a -> Int
@@ -25,7 +25,7 @@ instance (Sequenced sa) => Eq (SequencedWrap sa) where
 instance (Sequenced sa) => Ord (SequencedWrap sa) where
   (<=) = (<=) `on` seqNum
 
--- 'Either' can be sequenced where 'Left' represents and error and will
+-- 'Either' can be sequenced where 'Left' represents an error and will
 -- always be given first in the sequence
 instance (Sequenced a) => Sequenced (Either e a) where
   type Payload (Either e a) = Either e (Payload a)

@@ -77,7 +77,7 @@ data Session = Session
     sessionHeartbeat :: TMVar ()
   }
 
--- | The serverside adaptor acts as a remote gRPC client.
+-- | The serverside adapter acts as a remote gRPC client.
 runRemoteClient ::
   -- | MQTT configuration for connecting to the MQTT broker
   MQTTConfig ->
@@ -112,7 +112,7 @@ makeGRPCRequest ::
   SessionMap ->
   -- | The MQTT client
   MQTTClient ->
-  -- | The full gRPC method name.
+  -- | The full gRPC method name
   ByteString ->
   -- | The raw MQTT message
   LByteString ->

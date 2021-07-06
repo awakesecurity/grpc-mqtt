@@ -8,7 +8,6 @@ import Relude
 import Network.GRPC.MQTT.Types (
   ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
   MQTTResult (..),
-  SomeClientHandler (..),
  )
 import Network.MQTT.Topic (Topic)
 
@@ -116,9 +115,9 @@ import Proto3.Wire.Decode (ParseError (..))
 wrapUnaryClientHandler ::
   (Message request, Message response) =>
   (ClientRequest 'Normal request response -> IO (ClientResult 'Normal response)) ->
-  SomeClientHandler
+  ClientHandler
 wrapUnaryClientHandler handler =
-  SomeClientHandler . ClientUnaryHandler $ \rawRequest timeout metadata ->
+  ClientUnaryHandler $ \rawRequest timeout metadata ->
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientNormalRequest req timeout metadata)
@@ -126,9 +125,9 @@ wrapUnaryClientHandler handler =
 wrapServerStreamingClientHandler ::
   (Message request, Message response) =>
   (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
-  SomeClientHandler
+  ClientHandler
 wrapServerStreamingClientHandler handler =
-  SomeClientHandler . ClientServerStreamHandler $ \rawRequest timeout metadata recv ->
+  ClientServerStreamHandler $ \rawRequest timeout metadata recv ->
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)

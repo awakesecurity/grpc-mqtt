@@ -35,6 +35,7 @@ import Test.Tasty.HUnit (
   testCase,
  )
 import Test.Tasty.Runners (timed)
+import Turtle.Prelude (need)
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTConfig
 awsMqttConfig hostName cred certStore =
@@ -57,20 +58,33 @@ awsMqttConfig hostName cred certStore =
 
 getCreds :: IO (Credential, CertificateStore)
 getCreds = do
+  certFilepath <- getEnvVar "TEST_MQTT_CERT_FILEPATH"
+  privKeyFilepath <- getEnvVar "TEST_MQTT_PRIVATE_KEY_FILEPATH"
+
   cred <-
-    credentialLoadX509 "test/certs/759594fd70-certificate.pem.crt" "test/certs/759594fd70-private.pem.key" >>= \case
+    credentialLoadX509 certFilepath privKeyFilepath >>= \case
       Right c -> pure c
       Left err -> assertFailure err
+
+  certStoreFilepath <- getEnvVar "TEST_MQTT_CERT_STORE_FILEPATH"
+
   certStore <-
-    readCertificateStore "test/certs/" >>= \case
+    readCertificateStore certStoreFilepath >>= \case
       Just cs -> pure cs
       Nothing -> assertFailure "Failed to read cert store"
   return (cred, certStore)
 
-getTestConfig :: HostName -> IO MQTTConfig
-getTestConfig host = do
+getTestConfig :: IO MQTTConfig
+getTestConfig = do
+  host <- getEnvVar "TEST_MQTT_HOSTNAME"
   (cred, certStore) <- getCreds
-  return $ awsMqttConfig host cred certStore
+  return $ awsMqttConfig (toString host) cred certStore
+
+getEnvVar :: Text -> IO String
+getEnvVar varName =
+  need varName >>= \case
+    Nothing -> assertFailure . toString $ varName <> " must be set"
+    Just val -> pure $ toString val
 
 assertContains :: LText -> LText -> Assertion
 assertContains substr str = assertBool (show $ "Stream response: " <> str <> ", did not contain " <> substr) (substr `TL.isInfixOf` str)

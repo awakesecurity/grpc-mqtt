@@ -12,7 +12,6 @@ import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
 import Network.GRPC.MQTT.Types (
   ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
   MethodMap,
-  SomeClientHandler (SomeClientHandler),
  )
 import Network.GRPC.MQTT.Wrapping (
   toMetadataMap,
@@ -133,11 +132,11 @@ makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage = do
     Nothing ->
       publishResponse . wrapMQTTError $ "Failed to find client for: " <> decodeUtf8 grpcMethod
     -- Run Unary Request
-    Just (SomeClientHandler (ClientUnaryHandler handler)) -> do
+    Just (ClientUnaryHandler handler) -> do
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
       publishResponse $ wrapUnaryResponse response
     -- Run Server Streaming Request
-    Just (SomeClientHandler (ClientServerStreamHandler handler)) -> do
+    Just (ClientServerStreamHandler handler) -> do
       getSessionId currentSessions responseTopic >>= \case
         Left err -> publishResponse . wrapMQTTError $ toLazy err
         Right sessionId -> bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor

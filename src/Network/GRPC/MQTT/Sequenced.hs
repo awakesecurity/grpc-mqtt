@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Sequenced where
 
@@ -8,10 +9,13 @@ import qualified Data.SortedList as SL
 import Proto.Mqtt (SequencedResponse (..))
 import Proto3.Suite (toLazyByteString)
 
+data SequenceIdx = Unsequenced | SequencedIdx Natural
+  deriving stock (Eq, Ord)
+
 -- | A class representing types that have some form of sequence id
 class Sequenced a where
   type Payload a
-  seqNum :: a -> Int
+  seqNum :: a -> SequenceIdx
   seqPayload :: a -> Payload a
 
 -- | A newtype wrapper to use 'seqNum` for its 'Ord' and 'Eq' instances
@@ -29,13 +33,17 @@ instance (Sequenced sa) => Ord (SequencedWrap sa) where
 -- always be given first in the sequence
 instance (Sequenced a) => Sequenced (Either e a) where
   type Payload (Either e a) = Either e (Payload a)
-  seqNum (Left _) = minBound
+  seqNum (Left _) = Unsequenced
   seqNum (Right a) = seqNum a
   seqPayload = fmap seqPayload
 
 instance Sequenced SequencedResponse where
   type Payload SequencedResponse = ByteString
-  seqNum = fromIntegral . sequencedResponseSequenceNum
+  seqNum SequencedResponse{..} =
+    if sequencedResponseSequenceNum < 0
+      then Unsequenced
+      else SequencedIdx (fromIntegral sequencedResponseSequenceNum)
+
   seqPayload = sequencedResponsePayload
 
 {- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
@@ -54,16 +62,19 @@ mkSequencedRead read = do
 
         sa <- case SL.uncons buffer of
           Just (sa, rest)
-            | curSeq == seqNum sa -> writeTVar bufferVar rest $> sa
+            | SequencedIdx idx <- seqNum sa
+              , curSeq == idx ->
+              writeTVar bufferVar rest $> sa
           _ -> coerce read
 
-        if seqNum sa < 0
-          then return $ seqPayload sa
-          else case seqNum sa `compare` curSeq of
-            -- If sequence number is less than current, it must be a duplicate, so we discard it and read again
-            LT -> orderedRead
-            EQ -> modifyTVar' seqVar (+ 1) $> seqPayload sa
-            GT -> modifyTVar' bufferVar (SL.insert sa) >> orderedRead
+        case seqNum sa of
+          Unsequenced -> return $ seqPayload sa
+          SequencedIdx idx ->
+            case idx `compare` curSeq of
+              -- If sequence number is less than current, it must be a duplicate, so we discard it and read again
+              LT -> orderedRead
+              EQ -> modifyTVar' seqVar (+ 1) $> seqPayload sa
+              GT -> modifyTVar' bufferVar (SL.insert sa) >> orderedRead
 
   return $ atomically orderedRead
 

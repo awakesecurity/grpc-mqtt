@@ -41,6 +41,7 @@ import Network.GRPC.MQTT.Client (withMQTTGRPCClient)
 import Network.GRPC.MQTT.Core (connectMQTT)
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
 import Network.GRPC.MQTT.Sequenced (
+  SequenceIdx (SequencedIdx),
   Sequenced (..),
   mkSequencedRead,
  )
@@ -71,7 +72,6 @@ import Network.GRPC.HighLevel.Generated (
   defaultServiceOptions,
   withGRPCClient,
  )
-import Network.TLS (HostName)
 import Proto.Test (
   AddHello (AddHello, addHelloHelloSS),
   MultGoodbye (MultGoodbye),
@@ -116,9 +116,6 @@ testGrpcClientConfig port =
     }
 
 -- Test Constants
-awsHost :: HostName
-awsHost = "a2t5t1lb6xq5ic-ats.iot.us-east-1.amazonaws.com"
-
 testClientId :: String
 testClientId = "testclient"
 
@@ -148,7 +145,7 @@ allTests =
 
 persistentMQTT :: Assertion
 persistentMQTT = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   -- Start gRPC Server
   withAsync runAddHelloServer $ \_grpcServerThread -> do
@@ -183,7 +180,7 @@ persistentMQTT = do
 
 streamingTermination :: Assertion
 streamingTermination = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
   let infHelloService = addHelloServer addHelloHandlers{addHelloHelloSS = infiniteHelloSSHandler}
       gRPCServer = infHelloService defaultServiceOptions{serverPort = addHelloServerPort}
   -- Start gRPC Server
@@ -206,7 +203,7 @@ streamingTermination = do
 
 testTimeout :: Assertion
 testTimeout = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   withMQTTGRPCClient awsConfig{_connID = testClientId} $ \client -> do
     let AddHello mqttAdd mqttHelloSS = addHelloMqttClient client testBaseTopic
@@ -224,7 +221,7 @@ testTimeout = do
 
 basicUnary :: Assertion
 basicUnary = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   -- Start gRPC Server
   withAsync runAddHelloServer $ \_grpcServerThread -> do
@@ -248,7 +245,7 @@ basicUnary = do
 
 basicServerStreaming :: Assertion
 basicServerStreaming = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   -- Start gRPC Server
   withAsync runAddHelloServer $ \_grpcServerThread ->
@@ -263,7 +260,7 @@ basicServerStreaming = do
 
 missingClientError :: Assertion
 missingClientError = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   -- Start gRPC Server
   withAsync runAddHelloServer $ \_grpcServerThread ->
@@ -283,7 +280,7 @@ missingClientError = do
 
 twoServers :: Assertion
 twoServers = do
-  awsConfig <- getTestConfig awsHost
+  awsConfig <- getTestConfig
 
   -- Start gRPC Server 1
   withAsync runAddHelloServer $ \_grpcServerThread1 ->
@@ -358,7 +355,7 @@ mqttLatency = do
   let testTopic = "testMachine/messages"
   let subOpts = subOptions{_subQoS = QoS1}
 
-  cfg <- getTestConfig awsHost
+  cfg <- getTestConfig
   done <- newEmptyMVar
   let awsConfig =
         cfg
@@ -379,12 +376,12 @@ mqttLatency = do
 
   timeit 1 $ normalDisconnect mc
 
-data Foo = Foo Int Char
+data Foo = Foo Natural Char
   deriving stock (Show, Eq)
 
 instance Sequenced Foo where
   type Payload Foo = Char
-  seqNum (Foo i _) = i
+  seqNum (Foo i _) = SequencedIdx i
   seqPayload (Foo _ c) = c
 
 testSequenced :: Assertion
@@ -392,7 +389,7 @@ testSequenced = do
   responseChan <- newTChanIO
   orderedRead <- mkSequencedRead $ readTChan responseChan
   let testList = [0, 1, 2, 4, 8, 7, 3, 5, 9, 6]
-  let toChar i = toEnum (i + 97)
+  let toChar i = toEnum (fromIntegral (i + 97))
 
   let producer = forM testList $ \i -> do
         atomically $ writeTChan responseChan (Foo i (toChar i))

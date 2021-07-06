@@ -3,7 +3,6 @@
 module Network.GRPC.MQTT.Types (
   MQTTResult (..),
   MethodMap,
-  SomeClientHandler (..),
   ClientHandler (..),
   MQTTRequest (..),
 ) where
@@ -34,18 +33,15 @@ data MQTTResult streamtype response
   | GRPCResult (ClientResult streamtype response)
 
 -- | A map from gRPC method names to their corresponding handler
-type MethodMap = HashMap ByteString SomeClientHandler
-
--- | Existential wrapper for 'ClientHandler'
-data SomeClientHandler = forall (a :: GRPCMethodType). SomeClientHandler (ClientHandler a)
+type MethodMap = HashMap ByteString ClientHandler
 
 -- | Client gRPC handlers used by the remote gRPC client to make requests
-data ClientHandler (a :: GRPCMethodType) where
+data ClientHandler where
   ClientUnaryHandler ::
     (Message response) =>
     (ByteString -> TimeoutSeconds -> MetadataMap -> IO (ClientResult 'Normal response)) ->
-    ClientHandler 'Normal
+    ClientHandler
   ClientServerStreamHandler ::
     (Message response) =>
     (ByteString -> TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> IO ()) -> IO (ClientResult 'ServerStreaming response)) ->
-    ClientHandler 'ServerStreaming
+    ClientHandler

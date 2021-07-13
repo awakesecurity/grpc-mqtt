@@ -10,8 +10,8 @@ let
   grpc-haskell-src = pkgs.fetchFromGitHub {
     owner  = "awakesecurity";
     repo   = "gRPC-haskell";
-    rev    = "28e9e68f3b6ba85358982a93dcc1433139524585";
-    sha256 = "0k9k7gmyjvng1sml2zhvc91g5ilrd3qwzpzv3zrx4v2bxj7s554p";
+    rev    = "e1091b9c0dc9dee8354cf63c9aebe51fa041cfd9";
+    sha256 = "0rkmcd0rnhbh4da65477hdsh3j70ma38wi1qq953bb509byhilp8";
   };
 
   proto-files = ./proto;

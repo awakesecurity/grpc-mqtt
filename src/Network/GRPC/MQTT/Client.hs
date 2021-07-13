@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Client (
-  MQTTGRPCClient,
+  MQTTGRPCClient (..),
   mqttRequest,
   withMQTTGRPCClient,
   connectMQTTGRPC,

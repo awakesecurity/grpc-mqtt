@@ -57,10 +57,11 @@ import Proto3.Suite (
   Message,
   fromByteString,
  )
+import System.IO (hPutStrLn)
 import Turtle (NominalDiffTime)
 import UnliftIO (timeout)
 import UnliftIO.Async (Async, async, cancel, waitEither_, withAsync)
-import UnliftIO.Exception (throwString)
+import UnliftIO.Exception (throwString, tryAny)
 
 -- | Represents the session ID for a request
 type SessionId = Text
@@ -96,12 +97,18 @@ runRemoteClient cfg baseTopic methodMap = do
  where
   gatewayHandler :: SessionMap -> MessageCallback
   gatewayHandler currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
-    case T.splitOn "/" topic of
+    result <- tryAny $ case T.splitOn "/" topic of
       [_, _, "grpc", "request", service, method] ->
         let grpcMethod = encodeUtf8 ("/" <> service <> "/" <> method)
          in makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage
       [_, _, "grpc", "session", sessionId, "control"] -> manageSession currentSessions sessionId mqttMessage
       _ -> throwString $ "Failed to parse topic: " <> toString topic
+
+    -- Catch and print any synchronous exception. We don't want an exception
+    -- from an individual callback thread to take down the entire MQTT client.
+    case result of
+      Left err -> hPutStrLn stderr $ displayException err
+      Right () -> pure ()
 
 -- | Perform the local gRPC call and publish the response
 makeGRPCRequest ::

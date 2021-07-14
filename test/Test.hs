@@ -386,11 +386,11 @@ malformedMessage = do
     -- Get gRPC Client
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
-      -- Start serverside MQTT adaptor
+      -- Start serverside MQTT adapter
       withAsync (runRemoteClient awsConfig{_connID = "errorTesterRC"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
         withMQTTGRPCClient awsConfig{_connID = testClientId <> "errorTester"} $ \client -> do
-          -- Publish message for non-existant service
+          -- Publish message for non-existent service
           publishq (mqttClient client) (testBaseTopic <> "/grpc/request/bad/service") "blah" False QoS1 []
           sleep 1
 

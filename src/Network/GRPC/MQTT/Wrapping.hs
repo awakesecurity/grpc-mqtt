@@ -82,7 +82,6 @@ import Proto.Mqtt as Proto (
 import Control.Exception (ErrorCall, try)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import qualified Data.Map as M
-import Data.SortedList (fromSortedList, toSortedList)
 import qualified Data.Vector as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL (
@@ -278,7 +277,7 @@ parseWithClientError = first (GRPCResult . ClientErrorResponse . ClientErrorNoPa
 toMetadataMap :: Proto.MetadataMap -> HL.MetadataMap
 toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap (convertVals <$> M.mapKeys convertKeys m)
  where
-  convertVals = maybe [] (toSortedList . V.toList . listValue)
+  convertVals = maybe [] (V.toList . listValue)
   convertKeys k =
     case decodeBase64 $ encodeUtf8 k of
       Left _err -> mempty
@@ -287,7 +286,7 @@ toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap (convertVals <$> M.mapKeys 
 fromMetadataMap :: HL.MetadataMap -> Proto.MetadataMap
 fromMetadataMap (HL.MetadataMap m) = Proto.MetadataMap (convertVals <$> M.mapKeys convertKeys m)
  where
-  convertVals = Just . List . V.fromList . fromSortedList
+  convertVals = Just . List . V.fromList
   convertKeys = fromStrict . encodeBase64
 
 toStatusCode :: Int32 -> Maybe StatusCode

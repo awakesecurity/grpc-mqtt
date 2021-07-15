@@ -37,7 +37,7 @@ import Network.GRPC.MQTT (
   subOptions,
   subscribe,
  )
-import Network.GRPC.MQTT.Client (withMQTTGRPCClient)
+import Network.GRPC.MQTT.Client (MQTTGRPCClient (mqttClient), withMQTTGRPCClient)
 import Network.GRPC.MQTT.Core (connectMQTT)
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
 import Network.GRPC.MQTT.Sequenced (
@@ -141,6 +141,7 @@ allTests =
       , ("Persistent", persistentMQTT)
       , ("Sequenced", testSequenced)
       , ("Missing Client Error", missingClientError)
+      , ("Malformed Topic", malformedMessage)
       ]
 
 persistentMQTT :: Assertion
@@ -375,6 +376,34 @@ mqttLatency = do
   assertBool ("MQTT client <-> AWS MQTT Broker <-> MQTT Server: " <> show seconds <> "s") $ seconds < 2
 
   timeit 1 $ normalDisconnect mc
+
+malformedMessage :: Assertion
+malformedMessage = do
+  awsConfig <- getTestConfig
+
+  -- Start gRPC Server
+  withAsync runAddHelloServer $ \_grpcServerThread ->
+    -- Get gRPC Client
+    withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
+      methodMap <- addHelloRemoteClientMethodMap grpcClient
+      -- Start serverside MQTT adapter
+      withAsync (runRemoteClient awsConfig{_connID = "errorTesterRC"} testBaseTopic methodMap) $ \_adaptorThread -> do
+        sleep 1
+        withMQTTGRPCClient awsConfig{_connID = testClientId <> "errorTester"} $ \client -> do
+          -- Publish message for non-existent service
+          publishq (mqttClient client) (testBaseTopic <> "/grpc/request/bad/service") "blah" False QoS1 []
+          sleep 1
+
+          -- Test server is still up and responsive
+          let AddHello mqttAdd _ = addHelloMqttClient client testBaseTopic
+          let testInput = TwoInts 4 6
+              expectedResult = OneInt 10
+              request = MQTTNormalRequest testInput 5 []
+
+          mqttAdd request >>= \case
+            GRPCResult (ClientNormalResponse result _ _ _ _) -> result @?= expectedResult
+            GRPCResult (ClientErrorResponse err) -> assertFailure $ "add Client error: " <> show err
+            MQTTError err -> assertFailure $ "add mqtt error: " <> show err
 
 data Foo = Foo Natural Char
   deriving stock (Show, Eq)

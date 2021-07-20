@@ -93,6 +93,7 @@ library
                     , sorted-list
                     , template-haskell
                     , unordered-containers
+                    , network-uri
 
 test-suite grpc-mqtt-test
   import:             shared-settings

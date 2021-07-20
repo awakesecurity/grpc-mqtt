@@ -81,14 +81,16 @@ data Session = Session
 runRemoteClient ::
   -- | MQTT configuration for connecting to the MQTT broker
   MQTTConfig ->
+    -- | Use TLS
+  Bool ->
   -- | Base topic which should uniquely identify the device
   Topic ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient cfg baseTopic methodMap = do
+runRemoteClient cfg useTLS baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
-  bracket (connectMQTT cfg{_msgCB = gatewayHandler currentSessions}) normalDisconnect $ \gatewayMQTTClient -> do
+  bracket (connectMQTT cfg{_msgCB = gatewayHandler currentSessions} useTLS) normalDisconnect $ \gatewayMQTTClient -> do
     -- Subscribe to listen for all gRPC requests
     let listeningTopic = baseTopic <> "/grpc/request/+/+"
     _ <- subscribe gatewayMQTTClient [(listeningTopic, subOptions{_subQoS = QoS1})] []

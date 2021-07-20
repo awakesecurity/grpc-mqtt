@@ -7,7 +7,7 @@ module Network.GRPC.MQTT.Core (
 
 import Relude
 
-import Data.Conduit.Network (AppData, appSink, appSource)
+import Data.Conduit.Network (AppData, appSink, appSource, runTCPClient, clientSettings, ClientSettings)
 import Data.Conduit.Network.TLS (
   TLSClientConfig (tlsClientTLSSettings),
   runTLSClient,
@@ -22,17 +22,25 @@ import Network.MQTT.Client (
 import Turtle (NominalDiffTime)
 
 -- | Connect to an MQTT broker
-connectMQTT :: MonadIO m => MQTTConfig -> m MQTTClient
-connectMQTT cfg@MQTTConfig{..} = liftIO $ runMQTTConduit wrapTLS cfg
- where
-  wrapTLS :: (MQTTConduit -> IO ()) -> IO ()
-  wrapTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
+connectMQTT :: MonadIO m => MQTTConfig -> Bool -> m MQTTClient
+connectMQTT cfg@MQTTConfig{..} useTLS = liftIO $ runMQTTConduit runClient cfg
+  where
+    runClient = if useTLS then runTLS else runTCP
+    
+    runTCP :: (MQTTConduit -> IO ()) -> IO ()
+    runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
+    
+    runTLS :: (MQTTConduit -> IO ()) -> IO ()
+    runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
 
-  toMQTTConduit :: AppData -> MQTTConduit
-  toMQTTConduit ad = (appSource ad, appSink ad)
+    toMQTTConduit :: AppData -> MQTTConduit
+    toMQTTConduit ad = (appSource ad, appSink ad)
 
-  tlsCfg :: TLSClientConfig
-  tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
+    tlsCfg :: TLSClientConfig
+    tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
+
+    tcpCfg :: ClientSettings
+    tcpCfg = clientSettings _port (encodeUtf8 _hostname)
 
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime

@@ -84,10 +84,10 @@ data MQTTGRPCClient = MQTTGRPCClient
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
  Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 -}
-withMQTTGRPCClient :: MQTTConfig -> (MQTTGRPCClient -> IO a) -> IO a
-withMQTTGRPCClient cfg =
+withMQTTGRPCClient :: MQTTConfig -> Bool -> (MQTTGRPCClient -> IO a) -> IO a
+withMQTTGRPCClient cfg useTLS =
   bracket
-    (connectMQTTGRPC cfg)
+    (connectMQTTGRPC cfg useTLS)
     (normalDisconnect . mqttClient)
 
 {- | Send a gRPC request over MQTT using the provided client
@@ -169,8 +169,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => MQTTConfig -> m MQTTGRPCClient
-connectMQTTGRPC cfg = do
+connectMQTTGRPC :: (MonadIO m) => MQTTConfig -> Bool -> m MQTTGRPCClient
+connectMQTTGRPC cfg useTLS = do
   resultChan <- newTChanIO
 
   let clientMQTTHandler :: MessageCallback
@@ -179,7 +179,7 @@ connectMQTTGRPC cfg = do
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
-    <$> connectMQTT cfg{_msgCB = clientMQTTHandler}
+    <$> connectMQTT cfg{_msgCB = clientMQTTHandler} useTLS
     <*> pure resultChan
     <*> new
 

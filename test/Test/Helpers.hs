@@ -2,6 +2,13 @@ module Test.Helpers where
 
 import Relude
 
+import Network.GRPC.MQTT (
+  MQTTConfig (_hostname, _port, _protocol, _tlsSettings),
+  ProtocolLevel (Protocol311),
+  mqttConfig,
+ )
+import Network.GRPC.MQTT.Core (MQTTConnectionConfig (Secured))
+
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
 import Data.X509.CertificateStore (
@@ -10,11 +17,6 @@ import Data.X509.CertificateStore (
  )
 import Network.Connection (TLSSettings (TLSSettings))
 import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
-import Network.GRPC.MQTT (
-  MQTTConfig (_hostname, _port, _protocol, _tlsSettings),
-  ProtocolLevel (Protocol311),
-  mqttConfig,
- )
 import Network.TLS (
   ClientHooks (onCertificateRequest),
   ClientParams (clientHooks, clientShared, clientSupported),
@@ -74,11 +76,11 @@ getCreds = do
       Nothing -> assertFailure "Failed to read cert store"
   return (cred, certStore)
 
-getTestConfig :: IO MQTTConfig
+getTestConfig :: IO MQTTConnectionConfig
 getTestConfig = do
   host <- getEnvVar "TEST_MQTT_HOSTNAME"
   (cred, certStore) <- getCreds
-  return $ awsMqttConfig (toString host) cred certStore
+  return $ Secured $ awsMqttConfig (toString host) cred certStore
 
 getEnvVar :: Text -> IO String
 getEnvVar varName =

@@ -15,7 +15,7 @@ import Proto.Mqtt (
   RemoteClientError,
  )
 
-import Network.GRPC.MQTT.Core (connectMQTT, heartbeatPeriodSeconds)
+import Network.GRPC.MQTT.Core (MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, setCallback)
 import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
@@ -48,7 +48,6 @@ import Network.GRPC.HighLevel.Generated as HL (
  )
 import Network.MQTT.Client (
   MQTTClient,
-  MQTTConfig (_msgCB),
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
@@ -84,10 +83,10 @@ data MQTTGRPCClient = MQTTGRPCClient
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
  Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 -}
-withMQTTGRPCClient :: MQTTConfig -> Bool -> (MQTTGRPCClient -> IO a) -> IO a
-withMQTTGRPCClient cfg useTLS =
+withMQTTGRPCClient :: MQTTConnectionConfig -> (MQTTGRPCClient -> IO a) -> IO a
+withMQTTGRPCClient cfg =
   bracket
-    (connectMQTTGRPC cfg useTLS)
+    (connectMQTTGRPC cfg)
     (normalDisconnect . mqttClient)
 
 {- | Send a gRPC request over MQTT using the provided client
@@ -169,8 +168,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => MQTTConfig -> Bool -> m MQTTGRPCClient
-connectMQTTGRPC cfg useTLS = do
+connectMQTTGRPC :: (MonadIO m) => MQTTConnectionConfig -> m MQTTGRPCClient
+connectMQTTGRPC cfg = do
   resultChan <- newTChanIO
 
   let clientMQTTHandler :: MessageCallback
@@ -179,7 +178,7 @@ connectMQTTGRPC cfg useTLS = do
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
-    <$> connectMQTT cfg{_msgCB = clientMQTTHandler} useTLS
+    <$> connectMQTT (cfg & setCallback clientMQTTHandler)
     <*> pure resultChan
     <*> new
 

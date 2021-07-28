@@ -5,8 +5,10 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
+  MQTTConnectionConfig,
   connectMQTT,
   heartbeatPeriodSeconds,
+  setCallback,
  )
 import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
 import Network.GRPC.MQTT.Types (
@@ -35,7 +37,6 @@ import Network.GRPC.HighLevel.Client (
  )
 import Network.MQTT.Client (
   MQTTClient,
-  MQTTConfig (_msgCB),
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
@@ -80,17 +81,16 @@ data Session = Session
 -- | The serverside adapter acts as a remote gRPC client.
 runRemoteClient ::
   -- | MQTT configuration for connecting to the MQTT broker
-  MQTTConfig ->
-    -- | Use TLS
-  Bool ->
+  MQTTConnectionConfig ->
   -- | Base topic which should uniquely identify the device
   Topic ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient cfg useTLS baseTopic methodMap = do
+runRemoteClient cfg baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
-  bracket (connectMQTT cfg{_msgCB = gatewayHandler currentSessions} useTLS) normalDisconnect $ \gatewayMQTTClient -> do
+  let gatewayConfig = cfg & setCallback (gatewayHandler currentSessions)
+  bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     -- Subscribe to listen for all gRPC requests
     let listeningTopic = baseTopic <> "/grpc/request/+/+"
     _ <- subscribe gatewayMQTTClient [(listeningTopic, subOptions{_subQoS = QoS1})] []

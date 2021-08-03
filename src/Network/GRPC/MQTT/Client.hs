@@ -21,7 +21,7 @@ import Proto.Mqtt (
   RemoteClientError,
  )
 
-import Network.GRPC.MQTT.Core (connectMQTT, heartbeatPeriodSeconds)
+import Network.GRPC.MQTT.Core (MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, setCallback)
 import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
@@ -54,7 +54,6 @@ import Network.GRPC.HighLevel.Generated as HL (
  )
 import Network.MQTT.Client (
   MQTTClient,
-  MQTTConfig (_msgCB),
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
@@ -90,7 +89,7 @@ data MQTTGRPCClient = MQTTGRPCClient
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
  Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 -}
-withMQTTGRPCClient :: MQTTConfig -> (MQTTGRPCClient -> IO a) -> IO a
+withMQTTGRPCClient :: MQTTConnectionConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient cfg =
   bracket
     (connectMQTTGRPC cfg)
@@ -175,7 +174,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => MQTTConfig -> m MQTTGRPCClient
+connectMQTTGRPC :: (MonadIO m) => MQTTConnectionConfig -> m MQTTGRPCClient
 connectMQTTGRPC cfg = do
   resultChan <- newTChanIO
 
@@ -185,7 +184,7 @@ connectMQTTGRPC cfg = do
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
-    <$> connectMQTT cfg{_msgCB = clientMQTTHandler}
+    <$> connectMQTT (cfg & setCallback clientMQTTHandler)
     <*> pure resultChan
     <*> new
 

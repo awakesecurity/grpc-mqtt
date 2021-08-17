@@ -113,3 +113,14 @@ test-suite grpc-mqtt-test
                     , time
                     , tls
                     , x509-store
+
+test-suite grpc-mqtt-spec
+  import:             shared-settings
+  ghc-options:        -threaded -with-rtsopts=-N2
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     spec
+  main-is:            Spec.hs
+  build-depends:
+      grpc-mqtt
+    , spectacle == 0.1.0
+    , unordered-containers

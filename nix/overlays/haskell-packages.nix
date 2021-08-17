@@ -43,7 +43,17 @@ in {
             gpr = null;
           };
 
-        grpc-haskell =  pkgsNew.haskell.lib.dontCheck haskellPackagesOld.grpc-haskell;
+        grpc-haskell = pkgsNew.haskell.lib.dontCheck haskellPackagesOld.grpc-haskell;
+
+        spectacle =
+          let
+            source = pkgsNew.fetchFromGitHub {
+              owner  = "awakesecurity";
+              repo   = "spectacle";
+              rev    = "24aeb669d48c3cba92594285fd1031f7ef2ae62f";
+              sha256 = "0sn0h70dsk7z0989sdrbjj896hkg42v152cchgrc8798rfjc04p1";
+            };
+          in haskellPackagesNew.callCabal2nix "spectacle" "${source}" { };
 
         grpc-mqtt =
           let

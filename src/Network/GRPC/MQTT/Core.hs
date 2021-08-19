@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Core (
@@ -12,6 +11,13 @@ module Network.GRPC.MQTT.Core (
   heartbeatPeriodSeconds,
   setCallback,
   setConnectionId,
+  Logger (..),
+  Verbosity (..),
+  logErr,
+  logWarn,
+  logInfo,
+  logDebug,
+  noLogging
 ) where
 
 import Relude
@@ -30,6 +36,34 @@ import Network.MQTT.Client (
   runMQTTConduit,
  )
 import Turtle (NominalDiffTime)
+
+data Logger = Logger
+  { log :: Text -> IO ()
+  , verbosity :: Verbosity
+  }
+
+noLogging :: Logger
+noLogging = Logger (\_ -> pure ()) Silent
+
+data Verbosity
+  = Silent
+  | Error
+  | Warn
+  | Info
+  | Debug
+  deriving (Show, Eq, Enum, Ord)
+
+logErr :: Logger -> Text -> IO ()
+logErr = logVerbosity Error
+logWarn :: Logger -> Text -> IO ()
+logWarn = logVerbosity Warn
+logInfo :: Logger -> Text -> IO ()
+logInfo = logVerbosity Info
+logDebug :: Logger -> Text -> IO ()
+logDebug = logVerbosity Debug
+
+logVerbosity :: Verbosity -> Logger -> Text -> IO ()
+logVerbosity v logger msg = when (verbosity logger >= v) $ log logger msg
 
 {- |
   Wrapper around 'MQTTConfig' indicating whether or not to use TLS for the

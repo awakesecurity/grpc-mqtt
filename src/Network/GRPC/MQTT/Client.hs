@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Client (
@@ -21,7 +20,7 @@ import Proto.Mqtt (
   RemoteClientError,
  )
 
-import Network.GRPC.MQTT.Core (MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, setCallback, Logger, logErr, logDebug)
+import Network.GRPC.MQTT.Core (Logger, MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, logDebug, logErr, setCallback)
 import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
@@ -40,6 +39,8 @@ import Network.GRPC.MQTT.Wrapping (
 
 import Control.Exception (bracket)
 import Crypto.Nonce (Generator, new, nonce128urlT)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Network.GRPC.HighLevel (
   GRPCIOError (GRPCIOTimeout),
   MethodName (MethodName),
@@ -84,7 +85,7 @@ data MQTTGRPCClient = MQTTGRPCClient
     responseChan :: TChan LByteString
   , -- | Random number generator for generating session IDs
     rng :: Generator
-  , -- | Logging 
+  , -- | Logging
     mqttLogger :: Logger
   }
 
@@ -110,7 +111,7 @@ mqttRequest ::
   IO (MQTTResult streamtype response)
 mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
-  
+
   sessionID <- nonce128urlT rng
   let responseTopic = baseTopic <> "/grpc/session/" <> sessionID
   let requestTopic = baseTopic <> "/grpc/request" <> decodeUtf8 method
@@ -139,7 +140,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       let errMsg = "Failed to subscribe to the topic: " <> responseTopic <> "Reason: " <> show subErr
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
-        
     _ -> do
       -- Process request
       case request of
@@ -147,8 +147,20 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         MQTTNormalRequest req timeLimit reqMetadata ->
           grpcTimeout timeLimit $ do
             publishRequest req timeLimit reqMetadata
-            sendTerminateOnException $
-              unwrapUnaryResponse <$> atomically (readTChan responseChan)
+            sendTerminateOnException $ do
+              let readUnwrapped = unwrapSequencedResponse . toStrict <$> readTChan responseChan
+              orderedRead <- mkSequencedRead readUnwrapped
+
+              let readAll = go []
+                   where
+                    go acc =
+                      orderedRead >>= \case
+                        Left err -> pure $ fromRemoteClientError err
+                        Right chunk
+                          | BS.null chunk -> pure $ unwrapUnaryResponse (LBS.fromChunks (reverse acc))
+                          | otherwise -> go (chunk : acc)
+
+              readAll
 
         -- Server Streaming Requests
         MQTTReaderRequest req timeLimit reqMetadata streamHandler ->

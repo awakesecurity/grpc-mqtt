@@ -36,6 +36,7 @@ import Network.GRPC.MQTT.Wrapping (
 
 import Control.Exception (bracket)
 import Control.Monad.Except (throwError)
+import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (lookup)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -167,11 +168,11 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
 
   logDebug logger $
     "Wrapped request data: "
-      <> "Response Topic: "
+      <> " Response Topic: "
       <> responseTopic
-      <> "Timeout: "
+      <> " Timeout: "
       <> show timeLimit
-      <> "Metadata: "
+      <> " Metadata: "
       <> show reqMetadata
 
   publishResponseSequenced <- mkSequencedPublish publishResponse
@@ -185,7 +186,15 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
     Just (ClientUnaryHandler handler) -> do
       logDebug logger $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
-      publishResponse $ wrapUnaryResponse response
+
+      let publishChunks :: LByteString -> IO ()
+          publishChunks bs = do
+            let (chunk, rest) = LBS.splitAt 128000 bs
+            publishResponseSequenced chunk
+            unless (LBS.null chunk) $ publishChunks rest
+
+      publishChunks $ wrapUnaryResponse response
+
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
       logDebug logger $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod

@@ -1,4 +1,4 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
@@ -23,6 +23,7 @@ import Data.X509.CertificateStore (
  )
 import Network.Connection (TLSSettings (TLSSettings))
 import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
+import Network.GRPC.MQTT.Logging (Logger, noLogging)
 import Network.TLS (
   ClientHooks (onCertificateRequest),
   ClientParams (clientHooks, clientShared, clientSupported),
@@ -35,7 +36,12 @@ import Network.TLS (
   defaultParamsClient,
  )
 import Network.TLS.Extra.Cipher (ciphersuite_default)
-import Test.Tasty (DependencyType (AllFinish), TestName, TestTree, after)
+import Test.Tasty (
+  DependencyType (AllFinish),
+  TestName,
+  TestTree,
+  after,
+ )
 import Test.Tasty.HUnit (
   Assertion,
   assertBool,
@@ -44,6 +50,9 @@ import Test.Tasty.HUnit (
  )
 import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
+
+testLogger :: Logger
+testLogger = noLogging
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTConfig
 awsMqttConfig hostName cred certStore =

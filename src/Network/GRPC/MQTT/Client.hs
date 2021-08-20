@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Client (
@@ -21,7 +20,13 @@ import Proto.Mqtt (
   RemoteClientError,
  )
 
-import Network.GRPC.MQTT.Core (MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, setCallback, Logger, logErr, logDebug)
+import Network.GRPC.MQTT.Core (
+  MQTTConnectionConfig,
+  connectMQTT,
+  heartbeatPeriodSeconds,
+  setCallback,
+ )
+import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
@@ -73,7 +78,12 @@ import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
 import UnliftIO.Exception (onException)
-import UnliftIO.STM (TChan, newTChanIO, readTChan, writeTChan)
+import UnliftIO.STM (
+  TChan,
+  newTChanIO,
+  readTChan,
+  writeTChan,
+ )
 import UnliftIO.Timeout (timeout)
 
 -- | Client for making gRPC calls over MQTT
@@ -84,7 +94,7 @@ data MQTTGRPCClient = MQTTGRPCClient
     responseChan :: TChan LByteString
   , -- | Random number generator for generating session IDs
     rng :: Generator
-  , -- | Logging 
+  , -- | Logging
     mqttLogger :: Logger
   }
 
@@ -110,7 +120,7 @@ mqttRequest ::
   IO (MQTTResult streamtype response)
 mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
-  
+
   sessionID <- nonce128urlT rng
   let responseTopic = baseTopic <> "/grpc/session/" <> sessionID
   let requestTopic = baseTopic <> "/grpc/request" <> decodeUtf8 method
@@ -123,7 +133,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         publishq mqttClient requestTopic wrappedReq False QoS1 []
 
   let publishControlMsg :: AuxControl -> IO ()
-      publishControlMsg ctrl = publishq mqttClient controlTopic ctrlMessage False QoS1 []
+      publishControlMsg ctrl = do
+        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> responseTopic
+        publishq mqttClient controlTopic ctrlMessage False QoS1 []
        where
         ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
 
@@ -139,7 +151,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       let errMsg = "Failed to subscribe to the topic: " <> responseTopic <> "Reason: " <> show subErr
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
-        
     _ -> do
       -- Process request
       case request of
@@ -173,7 +184,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
               -- Wait for initial metadata
               readInitMetadata >>= \case
-                Left err -> pure $ fromRemoteClientError err
+                Left err -> do
+                  logErr mqttLogger $ "Failed to read initial metadata: " <> show err
+                  pure $ fromRemoteClientError err
                 Right metadata -> do
                   -- Adapter to recieve stream from MQTT
                   let mqttSRecv = unwrapStreamChunk <$> orderedRead

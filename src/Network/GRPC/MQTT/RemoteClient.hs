@@ -10,15 +10,17 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
-  Logger,
   MQTTConnectionConfig,
   connectMQTT,
   heartbeatPeriodSeconds,
+  setCallback,
+ )
+import Network.GRPC.MQTT.Logging (
+  Logger,
   logDebug,
   logErr,
   logInfo,
   logWarn,
-  setCallback,
  )
 import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
 import Network.GRPC.MQTT.Types (
@@ -71,7 +73,13 @@ import Proto3.Suite (
  )
 import Turtle (NominalDiffTime)
 import UnliftIO (timeout)
-import UnliftIO.Async (Async, async, cancel, waitEither, withAsync)
+import UnliftIO.Async (
+  Async,
+  async,
+  cancel,
+  waitEither,
+  withAsync,
+ )
 import UnliftIO.Exception (throwString, try, tryAny)
 
 -- | Represents the session ID for a request
@@ -160,38 +168,43 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
       Right x -> pure x
 
   let responseTopic = toStrict lResponseTopic
+
+  let logPrefix = case T.splitOn "/" responseTopic of
+        (_ : _ : _ : _ : sessionId : _) -> "[" <> sessionId <> "] "
+        _ -> "[??] "
+      tagSession msg = logPrefix <> msg
+
   let publishResponse msg = do
-        logDebug logger $
+        logDebug logger . tagSession $
           "Publishing response to topic: " <> responseTopic <> " Raw message: " <> decodeUtf8 msg
         publishq client responseTopic msg False QoS1 []
 
-  logDebug logger $
-    "Wrapped request data: "
-      <> "Response Topic: "
-      <> responseTopic
-      <> "Timeout: "
-      <> show timeLimit
-      <> "Metadata: "
-      <> show reqMetadata
+  logDebug logger . tagSession $
+    unlines
+      [ "Wrapped request data: "
+      , "  Response Topic: " <> responseTopic
+      , "  Timeout: " <> show timeLimit
+      , "  Metadata: " <> show reqMetadata
+      ]
 
   publishResponseSequenced <- mkSequencedPublish publishResponse
 
   case lookup grpcMethod methodMap of
     Nothing -> do
       let errMsg = "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod
-      logErr logger (toStrict errMsg)
+      logErr logger . tagSession $ toStrict errMsg
       publishResponse $ wrapMQTTError errMsg
     -- Run Unary Request
     Just (ClientUnaryHandler handler) -> do
-      logDebug logger $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
+      logDebug logger . tagSession $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
       publishResponse $ wrapUnaryResponse response
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
-      logDebug logger $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod
+      logDebug logger . tagSession $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod
       getSessionId currentSessions responseTopic >>= \case
         Left err -> do
-          logErr logger err
+          logErr logger . tagSession $ err
           publishResponse . wrapMQTTError $ toLazy err
         Right sessionId -> do
           bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
@@ -212,7 +225,7 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
             throwString $
               "Failed to subscribe to the topic: " <> toString controlTopic <> "Reason: " <> show subErr
           _ -> do
-            logInfo logger $ "Begin new streaming session: " <> sessionId
+            logInfo logger . tagSession $ "Begin new streaming session"
 
             newSession <-
               Session
@@ -225,7 +238,7 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
 
       sessionCleanup :: Text -> Session -> IO ()
       sessionCleanup sessionId session = do
-        logInfo logger $ "Cleanup streaming session: " <> sessionId
+        logInfo logger . tagSession $ "Cleanup streaming session"
         atomically $ modifyTVar' currentSessions (Map.delete sessionId)
         cancel $ handlerThread session
         _ <- unsubscribe client [controlTopic] []
@@ -235,34 +248,33 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
       waitWithHeartbeatMonitor Session{..} =
         withAsync heartbeatMon $ \heartbeatThread ->
           waitEither handlerThread heartbeatThread >>= \case
-            Left () -> logDebug logger "handlerThread completed"
-            Right () -> logWarn logger "Timed out waiting for heartbeat"
+            Left () -> logDebug logger . tagSession $ "handlerThread completed"
+            Right () -> logWarn logger . tagSession $ "Timed out waiting for heartbeat"
        where
         -- Wait slightly longer than the heartbeatPeriod to allow for network delays
         heartbeatMon = watchdog (heartbeatPeriodSeconds + 1) sessionHeartbeat
 
 -- | Handles AuxControl signals from the "/control" topic
 manageSession :: Logger -> SessionMap -> SessionId -> LByteString -> IO ()
-manageSession logger currentSessions sessionId mqttMessage =
+manageSession logger currentSessions sessionId mqttMessage = do
+  let tagSession msg = "[" <> sessionId <> "] " <> msg
   case fromByteString (toStrict mqttMessage) of
     Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
-      logInfo logger $ "Received terminate message for session: " <> sessionId
-
+      logInfo logger . tagSession $ "Received terminate message"
       mSession <- atomically $ do
         mSession <- Map.lookup sessionId <$> readTVar currentSessions
         modifyTVar' currentSessions (Map.delete sessionId)
         return mSession
       whenJust mSession (cancel . handlerThread)
     Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
-      logDebug logger $ "Received heartbeat message for session: " <> sessionId
-
+      logDebug logger . tagSession $ "Received heartbeat message"
       whenJustM
         (Map.lookup sessionId <$> readTVarIO currentSessions)
         (\Session{..} -> void . atomically $ tryPutTMVar sessionHeartbeat ())
     Right ctrl ->
-      logWarn logger $ "Received unknown control message: " <> show ctrl <> " for session: " <> sessionId
+      logWarn logger . tagSession $ "Received unknown control message: " <> show ctrl
     Left err ->
-      logErr logger $ "Failed to parse control message for session " <> sessionId <> ": " <> show err
+      logErr logger . tagSession $ "Failed to parse control message: " <> show err
 
 {- | Parses the session ID out of the response topic and checks that
  the session ID is not already in use

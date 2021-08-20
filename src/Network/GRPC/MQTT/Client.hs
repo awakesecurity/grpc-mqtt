@@ -20,7 +20,13 @@ import Proto.Mqtt (
   RemoteClientError,
  )
 
-import Network.GRPC.MQTT.Core (Logger, MQTTConnectionConfig, connectMQTT, heartbeatPeriodSeconds, logDebug, logErr, setCallback)
+import Network.GRPC.MQTT.Core (
+  MQTTConnectionConfig,
+  connectMQTT,
+  heartbeatPeriodSeconds,
+  setCallback,
+ )
+import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
@@ -74,7 +80,12 @@ import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
 import UnliftIO.Exception (onException)
-import UnliftIO.STM (TChan, newTChanIO, readTChan, writeTChan)
+import UnliftIO.STM (
+  TChan,
+  newTChanIO,
+  readTChan,
+  writeTChan,
+ )
 import UnliftIO.Timeout (timeout)
 
 -- | Client for making gRPC calls over MQTT
@@ -124,7 +135,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         publishq mqttClient requestTopic wrappedReq False QoS1 []
 
   let publishControlMsg :: AuxControl -> IO ()
-      publishControlMsg ctrl = publishq mqttClient controlTopic ctrlMessage False QoS1 []
+      publishControlMsg ctrl = do
+        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> responseTopic
+        publishq mqttClient controlTopic ctrlMessage False QoS1 []
        where
         ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
 
@@ -185,7 +198,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
               -- Wait for initial metadata
               readInitMetadata >>= \case
-                Left err -> pure $ fromRemoteClientError err
+                Left err -> do
+                  logErr mqttLogger $ "Failed to read initial metadata: " <> show err
+                  pure $ fromRemoteClientError err
                 Right metadata -> do
                   -- Adapter to recieve stream from MQTT
                   let mqttSRecv = unwrapStreamChunk <$> orderedRead

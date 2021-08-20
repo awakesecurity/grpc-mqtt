@@ -6,11 +6,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Core (
-  MQTTConnectionConfig (..),
+  MQTTGRPCConfig (..),
   connectMQTT,
   heartbeatPeriodSeconds,
   setCallback,
   setConnectionId,
+  toFilter,
 ) where
 
 import Relude
@@ -35,28 +36,30 @@ import Network.MQTT.Client (
   MessageCallback,
   runMQTTConduit,
  )
+import Network.MQTT.Topic (Filter, Topic (unTopic), mkFilter)
+import Relude.Unsafe (fromJust)
 import Turtle (NominalDiffTime)
 
 {- |
   Wrapper around 'MQTTConfig' indicating whether or not to use TLS for the
   connection to the MQTT broker
 -}
-data MQTTConnectionConfig
+data MQTTGRPCConfig
   = Secured MQTTConfig
   | Unsecured MQTTConfig
 
 -- | Utility for setting the callback within the 'MQTTConfig'
-setCallback :: MessageCallback -> MQTTConnectionConfig -> MQTTConnectionConfig
+setCallback :: MessageCallback -> MQTTGRPCConfig -> MQTTGRPCConfig
 setCallback cb (Secured cfg) = Secured cfg{_msgCB = cb}
 setCallback cb (Unsecured cfg) = Unsecured cfg{_msgCB = cb}
 
 -- | Utility for setting the connection ID within the 'MQTTConfig'
-setConnectionId :: String -> MQTTConnectionConfig -> MQTTConnectionConfig
+setConnectionId :: String -> MQTTGRPCConfig -> MQTTGRPCConfig
 setConnectionId cid (Secured cfg) = Secured cfg{_connID = cid}
 setConnectionId cid (Unsecured cfg) = Unsecured cfg{_connID = cid}
 
 -- | Connect to an MQTT broker
-connectMQTT :: MonadIO m => MQTTConnectionConfig -> m MQTTClient
+connectMQTT :: MonadIO m => MQTTGRPCConfig -> m MQTTClient
 connectMQTT = \case
   Secured cfg@MQTTConfig{..} -> liftIO $ runMQTTConduit runTLS cfg
    where
@@ -79,3 +82,9 @@ toMQTTConduit ad = (appSource ad, appSink ad)
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
+
+{- | Topics are strictly a subset of 'Filter's so this conversion is always safe
+ | <net-mqtt PR here>
+-}
+toFilter :: Topic -> Filter
+toFilter = fromJust . mkFilter . unTopic

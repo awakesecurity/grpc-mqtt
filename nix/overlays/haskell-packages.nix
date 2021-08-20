@@ -20,6 +20,8 @@ in {
     overrides = pkgsNew.lib.composeExtensions
       (old.overrides or (_: _: { }))
       (haskellPackagesNew: haskellPackagesOld: {
+        net-mqtt = haskellPackagesNew.callHackage "net-mqtt" "0.8.0.2";
+
         range-set-list =
           pkgsNew.haskell.lib.overrideCabal
             haskellPackagesOld.range-set-list

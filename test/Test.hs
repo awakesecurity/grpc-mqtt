@@ -47,10 +47,11 @@ import Network.GRPC.MQTT.Client (
   withMQTTGRPCClient,
  )
 import Network.GRPC.MQTT.Core (
-  MQTTConnectionConfig,
+  MQTTGRPCConfig,
   connectMQTT,
   setCallback,
   setConnectionId,
+  toFilter,
  )
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
 import Network.GRPC.MQTT.Sequenced (
@@ -129,7 +130,7 @@ testClientId :: String
 testClientId = "testclient"
 
 testBaseTopic :: Topic
-testBaseTopic = "testMachine/" <> toText testClientId
+testBaseTopic = "testMachine" <> fromString testClientId
 
 -- Tests
 main :: IO ()
@@ -314,7 +315,7 @@ twoServers = do
             testMultCall (awsConfig & setConnectionId "testclientTS3")
             testGoodbyeCall (awsConfig & setConnectionId "testclientTS4")
 
-testAddCall :: MQTTConnectionConfig -> Assertion
+testAddCall :: MQTTGRPCConfig -> Assertion
 testAddCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
   let AddHello mqttAdd _ = addHelloMqttClient client testBaseTopic
   let testInput = TwoInts 4 6
@@ -326,7 +327,7 @@ testAddCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "add Client error: " <> show err
     MQTTError err -> assertFailure $ "add mqtt error: " <> show err
 
-testHelloCall :: MQTTConnectionConfig -> Assertion
+testHelloCall :: MQTTGRPCConfig -> Assertion
 testHelloCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
   let AddHello _ mqttHelloSS = addHelloMqttClient client testBaseTopic
       testInput = SSRqt "Alice" 2
@@ -337,7 +338,7 @@ testHelloCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "helloSS Client error: " <> show err
     MQTTError err -> assertFailure $ "helloSS mqtt error: " <> show err
 
-testMultCall :: MQTTConnectionConfig -> Assertion
+testMultCall :: MQTTGRPCConfig -> Assertion
 testMultCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
   let MultGoodbye mqttMult _ = multGoodbyeMqttClient client testBaseTopic
       testInput = TwoInts 4 6
@@ -349,7 +350,7 @@ testMultCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "mult Client error: " <> show err
     MQTTError err -> assertFailure $ "mult mqtt error: " <> show err
 
-testGoodbyeCall :: MQTTConnectionConfig -> Assertion
+testGoodbyeCall :: MQTTGRPCConfig -> Assertion
 testGoodbyeCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
   let MultGoodbye _ mqttGoodbyeSS = multGoodbyeMqttClient client testBaseTopic
       testInput = SSRqt "Alice" 3
@@ -374,7 +375,7 @@ mqttLatency = do
 
   mc <- timeit 1 $ connectMQTT awsConfig
 
-  _ <- timeit 1 $ subscribe mc [(testTopic, subOpts)] []
+  _ <- timeit 1 $ subscribe mc [(toFilter testTopic, subOpts)] []
 
   prepubTime <- getCurrentTime
   timeit 1 $ publishq mc testTopic "hello!" False QoS1 []

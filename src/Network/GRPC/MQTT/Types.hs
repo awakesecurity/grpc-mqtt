@@ -11,7 +11,7 @@ module Network.GRPC.MQTT.Types (
   MethodMap,
   ClientHandler (..),
   MQTTRequest (..),
-) where
+SessionId) where
 
 import Relude
 
@@ -25,6 +25,9 @@ import Network.GRPC.HighLevel.Client (
  )
 import Network.GRPC.LowLevel (ClientCall)
 import Proto3.Suite (Message)
+
+-- | Represents the session ID for a request
+type SessionId = Text
 
 -- | Analogs of 'GRPCRequest' with the unused fields removed
 data MQTTRequest (streamType :: GRPCMethodType) request response where

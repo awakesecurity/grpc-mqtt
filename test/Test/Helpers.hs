@@ -13,7 +13,7 @@ import Network.GRPC.MQTT (
   ProtocolLevel (Protocol311),
   mqttConfig,
  )
-import Network.GRPC.MQTT.Core (MQTTConnectionConfig (Secured))
+import Network.GRPC.MQTT.Core (MQTTGRPCConfig (Secured))
 
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
@@ -91,7 +91,7 @@ getCreds = do
       Nothing -> assertFailure "Failed to read cert store"
   return (cred, certStore)
 
-getTestConfig :: IO MQTTConnectionConfig
+getTestConfig :: IO MQTTGRPCConfig
 getTestConfig = do
   host <- getEnvVar "TEST_MQTT_HOSTNAME"
   (cred, certStore) <- getCreds

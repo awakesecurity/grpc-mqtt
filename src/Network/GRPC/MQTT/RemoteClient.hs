@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
@@ -15,6 +14,13 @@ import Network.GRPC.MQTT.Core (
   connectMQTT,
   heartbeatPeriodSeconds,
   setCallback,
+ )
+import Network.GRPC.MQTT.Logging (
+  Logger,
+  logDebug,
+  logErr,
+  logInfo,
+  logWarn,
  )
 import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
 import Network.GRPC.MQTT.Types (
@@ -43,6 +49,7 @@ import Network.GRPC.HighLevel.Client (
  )
 import Network.MQTT.Client (
   MQTTClient,
+  MQTTException,
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
@@ -64,11 +71,16 @@ import Proto3.Suite (
   Message,
   fromByteString,
  )
-import System.IO (hPutStrLn)
 import Turtle (NominalDiffTime)
 import UnliftIO (timeout)
-import UnliftIO.Async (Async, async, cancel, waitEither_, withAsync)
-import UnliftIO.Exception (throwString, tryAny)
+import UnliftIO.Async (
+  Async,
+  async,
+  cancel,
+  waitEither,
+  withAsync,
+ )
+import UnliftIO.Exception (throwString, try, tryAny)
 
 -- | Represents the session ID for a request
 type SessionId = Text
@@ -86,6 +98,7 @@ data Session = Session
 
 -- | The serverside adapter acts as a remote gRPC client.
 runRemoteClient ::
+  Logger ->
   -- | MQTT configuration for connecting to the MQTT broker
   MQTTConnectionConfig ->
   -- | Base topic which should uniquely identify the device
@@ -93,33 +106,48 @@ runRemoteClient ::
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient cfg baseTopic methodMap = do
+runRemoteClient logger cfg baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
   let gatewayConfig = cfg & setCallback (gatewayHandler currentSessions)
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
+    logInfo logger "Connected to MQTT Broker"
+
     -- Subscribe to listen for all gRPC requests
     let listeningTopic = baseTopic <> "/grpc/request/+/+"
-    _ <- subscribe gatewayMQTTClient [(listeningTopic, subOptions{_subQoS = QoS1})] []
-
-    waitForClient gatewayMQTTClient
+    (subResults, _) <- subscribe gatewayMQTTClient [(listeningTopic, subOptions{_subQoS = QoS1})] []
+    case subResults of
+      [Left subErr] ->
+        logErr logger $
+          "Remote Client failed to subscribe to the topic: " <> listeningTopic <> "Reason: " <> show subErr
+      _ -> do
+        try (waitForClient gatewayMQTTClient) >>= \case
+          Left (e :: MQTTException) ->
+            logErr logger $
+              "MQTT client connection terminated with exception: " <> toText (displayException e)
+          Right () ->
+            logInfo
+              logger
+              "MQTT client connection terminated normally"
  where
   gatewayHandler :: SessionMap -> MessageCallback
   gatewayHandler currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
+    logInfo logger $ "Remote Client received request at topic: " <> topic
+
     result <- tryAny $ case T.splitOn "/" topic of
       [_, _, "grpc", "request", service, method] ->
         let grpcMethod = encodeUtf8 ("/" <> service <> "/" <> method)
-         in makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage
-      [_, _, "grpc", "session", sessionId, "control"] -> manageSession currentSessions sessionId mqttMessage
-      _ -> throwString $ "Failed to parse topic: " <> toString topic
+         in makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage
+      [_, _, "grpc", "session", sessionId, "control"] -> manageSession logger currentSessions sessionId mqttMessage
+      _ -> logErr logger $ "Failed to parse topic: " <> topic
 
     -- Catch and print any synchronous exception. We don't want an exception
     -- from an individual callback thread to take down the entire MQTT client.
-    case result of
-      Left err -> hPutStrLn stderr $ displayException err
-      Right () -> pure ()
+    whenLeft_ result $ \err ->
+      logErr logger $ "gatewayHandler terminated with exception: " <> toText (displayException err)
 
 -- | Perform the local gRPC call and publish the response
 makeGRPCRequest ::
+  Logger ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   -- | The map of the current sessions
@@ -131,30 +159,55 @@ makeGRPCRequest ::
   -- | The raw MQTT message
   LByteString ->
   IO ()
-makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage = do
+makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage = do
+  logInfo logger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
+
   (WrappedMQTTRequest lResponseTopic timeLimit reqMetadata payload) <-
     case fromByteString (toStrict mqttMessage) of
-      -- Really can't do anything if we can't parse out the response topic
-      Left err -> throwString $ "Decode wrapped request failed" <> show err
+      Left err -> throwString $ "Failed to decode MQTT message: " <> show err
       Right x -> pure x
 
   let responseTopic = toStrict lResponseTopic
-  let publishResponse msg = publishq client responseTopic msg False QoS1 []
+
+  let logPrefix = case T.splitOn "/" responseTopic of
+        (_ : _ : _ : _ : sessionId : _) -> "[" <> sessionId <> "] "
+        _ -> "[??] "
+      tagSession msg = logPrefix <> msg
+
+  let publishResponse msg = do
+        logDebug logger . tagSession $
+          "Publishing response to topic: " <> responseTopic <> " Raw message: " <> decodeUtf8 msg
+        publishq client responseTopic msg False QoS1 []
+
+  logDebug logger . tagSession $
+    unlines
+      [ "Wrapped request data: "
+      , "  Response Topic: " <> responseTopic
+      , "  Timeout: " <> show timeLimit
+      , "  Metadata: " <> show reqMetadata
+      ]
 
   publishResponseSequenced <- mkSequencedPublish publishResponse
 
   case lookup grpcMethod methodMap of
-    Nothing ->
-      publishResponse . wrapMQTTError $ "Failed to find client for: " <> decodeUtf8 grpcMethod
+    Nothing -> do
+      let errMsg = "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod
+      logErr logger . tagSession $ toStrict errMsg
+      publishResponse $ wrapMQTTError errMsg
     -- Run Unary Request
     Just (ClientUnaryHandler handler) -> do
+      logDebug logger . tagSession $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
       publishResponse $ wrapUnaryResponse response
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
+      logDebug logger . tagSession $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod
       getSessionId currentSessions responseTopic >>= \case
-        Left err -> publishResponse . wrapMQTTError $ toLazy err
-        Right sessionId -> bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
+        Left err -> do
+          logErr logger . tagSession $ err
+          publishResponse . wrapMQTTError $ toLazy err
+        Right sessionId -> do
+          bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
      where
       controlTopic :: Topic
       controlTopic = responseTopic <> "/control"
@@ -166,19 +219,26 @@ makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage = do
 
       sessionInit :: Text -> IO Session
       sessionInit sessionId = do
-        _ <- subscribe client [(controlTopic, subOptions{_subQoS = QoS1})] []
+        (subResults, _) <- subscribe client [(controlTopic, subOptions{_subQoS = QoS1})] []
+        case subResults of
+          [Left subErr] ->
+            throwString $
+              "Failed to subscribe to the topic: " <> toString controlTopic <> "Reason: " <> show subErr
+          _ -> do
+            logInfo logger . tagSession $ "Begin new streaming session"
 
-        newSession <-
-          Session
-            <$> async runHandler
-            <*> newTMVarIO ()
+            newSession <-
+              Session
+                <$> async runHandler
+                <*> newTMVarIO ()
 
-        atomically $ modifyTVar' currentSessions (Map.insert sessionId newSession)
+            atomically $ modifyTVar' currentSessions (Map.insert sessionId newSession)
 
-        return newSession
+            return newSession
 
       sessionCleanup :: Text -> Session -> IO ()
       sessionCleanup sessionId session = do
+        logInfo logger . tagSession $ "Cleanup streaming session"
         atomically $ modifyTVar' currentSessions (Map.delete sessionId)
         cancel $ handlerThread session
         _ <- unsubscribe client [controlTopic] []
@@ -187,27 +247,34 @@ makeGRPCRequest methodMap currentSessions client grpcMethod mqttMessage = do
       waitWithHeartbeatMonitor :: Session -> IO ()
       waitWithHeartbeatMonitor Session{..} =
         withAsync heartbeatMon $ \heartbeatThread ->
-          waitEither_ handlerThread heartbeatThread
+          waitEither handlerThread heartbeatThread >>= \case
+            Left () -> logDebug logger . tagSession $ "handlerThread completed"
+            Right () -> logWarn logger . tagSession $ "Timed out waiting for heartbeat"
        where
         -- Wait slightly longer than the heartbeatPeriod to allow for network delays
         heartbeatMon = watchdog (heartbeatPeriodSeconds + 1) sessionHeartbeat
 
 -- | Handles AuxControl signals from the "/control" topic
-manageSession :: SessionMap -> SessionId -> LByteString -> IO ()
-manageSession currentSessions sessionId mqttMessage =
+manageSession :: Logger -> SessionMap -> SessionId -> LByteString -> IO ()
+manageSession logger currentSessions sessionId mqttMessage = do
+  let tagSession msg = "[" <> sessionId <> "] " <> msg
   case fromByteString (toStrict mqttMessage) of
     Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
+      logInfo logger . tagSession $ "Received terminate message"
       mSession <- atomically $ do
         mSession <- Map.lookup sessionId <$> readTVar currentSessions
         modifyTVar' currentSessions (Map.delete sessionId)
         return mSession
       whenJust mSession (cancel . handlerThread)
-    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) ->
+    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
+      logDebug logger . tagSession $ "Received heartbeat message"
       whenJustM
         (Map.lookup sessionId <$> readTVarIO currentSessions)
         (\Session{..} -> void . atomically $ tryPutTMVar sessionHeartbeat ())
-    -- Unknown Control Message
-    ctrl -> throwString $ "Unknown ctrl message: " <> show ctrl
+    Right ctrl ->
+      logWarn logger . tagSession $ "Received unknown control message: " <> show ctrl
+    Left err ->
+      logErr logger . tagSession $ "Failed to parse control message: " <> show err
 
 {- | Parses the session ID out of the response topic and checks that
  the session ID is not already in use
@@ -221,7 +288,7 @@ getSessionId sessions topic = runExceptT $ do
 
   sessionExists <- Map.member sessionId <$> readTVarIO sessions
   when sessionExists $
-    throwError "Session already exists"
+    throwError $ "Session already exists: " <> sessionId
 
   return sessionId
 

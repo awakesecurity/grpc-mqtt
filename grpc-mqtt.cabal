@@ -75,6 +75,7 @@ library
   exposed-modules:    Network.GRPC.MQTT
                       Network.GRPC.MQTT.Client
                       Network.GRPC.MQTT.Core
+                      Network.GRPC.MQTT.Logging
                       Network.GRPC.MQTT.RemoteClient
                       Network.GRPC.MQTT.Sequenced
                       Network.GRPC.MQTT.TH.Client

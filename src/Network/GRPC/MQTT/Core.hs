@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Core (
@@ -16,7 +15,14 @@ module Network.GRPC.MQTT.Core (
 
 import Relude
 
-import Data.Conduit.Network (AppData, ClientSettings, appSink, appSource, clientSettings, runTCPClient)
+import Data.Conduit.Network (
+  AppData,
+  ClientSettings,
+  appSink,
+  appSource,
+  clientSettings,
+  runTCPClient,
+ )
 import Data.Conduit.Network.TLS (
   TLSClientConfig (tlsClientTLSSettings),
   runTLSClient,
@@ -25,7 +31,7 @@ import Data.Conduit.Network.TLS (
 import Network.MQTT.Client (
   MQTTClient,
   MQTTConduit,
-  MQTTConfig (MQTTConfig, _connID, _hostname, _msgCB, _port, _tlsSettings),
+  MQTTConfig (..),
   MessageCallback,
   runMQTTConduit,
  )
@@ -39,10 +45,12 @@ data MQTTConnectionConfig
   = Secured MQTTConfig
   | Unsecured MQTTConfig
 
+-- | Utility for setting the callback within the 'MQTTConfig'
 setCallback :: MessageCallback -> MQTTConnectionConfig -> MQTTConnectionConfig
 setCallback cb (Secured cfg) = Secured cfg{_msgCB = cb}
 setCallback cb (Unsecured cfg) = Unsecured cfg{_msgCB = cb}
 
+-- | Utility for setting the connection ID within the 'MQTTConfig'
 setConnectionId :: String -> MQTTConnectionConfig -> MQTTConnectionConfig
 setConnectionId cid (Secured cfg) = Secured cfg{_connID = cid}
 setConnectionId cid (Unsecured cfg) = Unsecured cfg{_connID = cid}

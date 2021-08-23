@@ -212,6 +212,99 @@ instance HsJSONPB.FromJSON RCError where
  
 instance HsProtobuf.Finite RCError
  
+data Packet = Packet{packetTerminal :: Hs.Bool,
+                     packetSequenceNum :: Hs.Int32, packetPayload :: Hs.ByteString}
+            deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named Packet where
+        nameOf _ = (Hs.fromString "Packet")
+ 
+instance HsProtobuf.HasDefault Packet
+ 
+instance HsProtobuf.Message Packet where
+        encodeMessage _
+          Packet{packetTerminal = packetTerminal,
+                 packetSequenceNum = packetSequenceNum,
+                 packetPayload = packetPayload}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   packetTerminal),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
+                   packetSequenceNum),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
+                   packetPayload)])
+        decodeMessage _
+          = (Hs.pure Packet) <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 1))
+              <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 2))
+              <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 3))
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Prim HsProtobuf.Bool)
+                (HsProtobuf.Single "terminal")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
+                (HsProtobuf.Prim HsProtobuf.Int32)
+                (HsProtobuf.Single "sequence_num")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
+                (HsProtobuf.Prim HsProtobuf.Bytes)
+                (HsProtobuf.Single "payload")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB Packet where
+        toJSONPB (Packet f1 f2 f3)
+          = (HsJSONPB.object
+               ["terminal" .= f1, "sequence_num" .= f2, "payload" .= f3])
+        toEncodingPB (Packet f1 f2 f3)
+          = (HsJSONPB.pairs
+               ["terminal" .= f1, "sequence_num" .= f2, "payload" .= f3])
+ 
+instance HsJSONPB.FromJSONPB Packet where
+        parseJSONPB
+          = (HsJSONPB.withObject "Packet"
+               (\ obj ->
+                  (Hs.pure Packet) <*> obj .: "terminal" <*> obj .: "sequence_num"
+                    <*> obj .: "payload"))
+ 
+instance HsJSONPB.ToJSON Packet where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON Packet where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema Packet where
+        declareNamedSchema _
+          = do let declare_terminal = HsJSONPB.declareSchemaRef
+               packetTerminal <- declare_terminal Proxy.Proxy
+               let declare_sequence_num = HsJSONPB.declareSchemaRef
+               packetSequenceNum <- declare_sequence_num Proxy.Proxy
+               let declare_payload = HsJSONPB.declareSchemaRef
+               packetPayload <- declare_payload Proxy.Proxy
+               let _ = Hs.pure Packet <*> HsJSONPB.asProxy declare_terminal <*>
+                         HsJSONPB.asProxy declare_sequence_num
+                         <*> HsJSONPB.asProxy declare_payload
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName = Hs.Just "Packet",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("terminal", packetTerminal),
+                                                        ("sequence_num", packetSequenceNum),
+                                                        ("payload", packetPayload)]}})
+ 
 data RemoteClientError = RemoteClientError{remoteClientErrorErrorType
                                            :: HsProtobuf.Enumerated Proto.Mqtt.RCError,
                                            remoteClientErrorMessage :: Hs.Text,
@@ -513,87 +606,6 @@ instance HsJSONPB.ToSchema MetadataMap where
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
                                                        [("value", metadataMapValue)]}})
- 
-data SequencedResponse = SequencedResponse{sequencedResponsePayload
-                                           :: Hs.ByteString,
-                                           sequencedResponseSequenceNum :: Hs.Int32}
-                       deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named SequencedResponse where
-        nameOf _ = (Hs.fromString "SequencedResponse")
- 
-instance HsProtobuf.HasDefault SequencedResponse
- 
-instance HsProtobuf.Message SequencedResponse where
-        encodeMessage _
-          SequencedResponse{sequencedResponsePayload =
-                              sequencedResponsePayload,
-                            sequencedResponseSequenceNum = sequencedResponseSequenceNum}
-          = (Hs.mconcat
-               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   sequencedResponsePayload),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   sequencedResponseSequenceNum)])
-        decodeMessage _
-          = (Hs.pure SequencedResponse) <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 1))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 2))
-        dotProto _
-          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim HsProtobuf.Bytes)
-                (HsProtobuf.Single "payload")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim HsProtobuf.Int32)
-                (HsProtobuf.Single "sequence_num")
-                []
-                "")]
- 
-instance HsJSONPB.ToJSONPB SequencedResponse where
-        toJSONPB (SequencedResponse f1 f2)
-          = (HsJSONPB.object ["payload" .= f1, "sequence_num" .= f2])
-        toEncodingPB (SequencedResponse f1 f2)
-          = (HsJSONPB.pairs ["payload" .= f1, "sequence_num" .= f2])
- 
-instance HsJSONPB.FromJSONPB SequencedResponse where
-        parseJSONPB
-          = (HsJSONPB.withObject "SequencedResponse"
-               (\ obj ->
-                  (Hs.pure SequencedResponse) <*> obj .: "payload" <*>
-                    obj .: "sequence_num"))
- 
-instance HsJSONPB.ToJSON SequencedResponse where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON SequencedResponse where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema SequencedResponse where
-        declareNamedSchema _
-          = do let declare_payload = HsJSONPB.declareSchemaRef
-               sequencedResponsePayload <- declare_payload Proxy.Proxy
-               let declare_sequence_num = HsJSONPB.declareSchemaRef
-               sequencedResponseSequenceNum <- declare_sequence_num Proxy.Proxy
-               let _ = Hs.pure SequencedResponse <*>
-                         HsJSONPB.asProxy declare_payload
-                         <*> HsJSONPB.asProxy declare_sequence_num
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "SequencedResponse",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("payload", sequencedResponsePayload),
-                                                        ("sequence_num",
-                                                         sequencedResponseSequenceNum)]}})
  
 newtype WrappedStreamChunk = WrappedStreamChunk{wrappedStreamChunkOrError
                                                 :: Hs.Maybe WrappedStreamChunkOrError}

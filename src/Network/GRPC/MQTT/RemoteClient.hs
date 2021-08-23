@@ -23,7 +23,7 @@ import Network.GRPC.MQTT.Logging (
   logInfo,
   logWarn,
  )
-import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
+import Network.GRPC.MQTT.Sequenced (mkPublish)
 import Network.GRPC.MQTT.Types (
   ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
   MethodMap,
@@ -40,7 +40,6 @@ import Network.GRPC.MQTT.Wrapping (
 
 import Control.Exception (bracket)
 import Control.Monad.Except (throwError)
-import qualified Data.ByteString.Lazy as LBS
 import Data.HashMap.Strict (lookup)
 import qualified Data.Map.Strict as Map
 import Network.GRPC.HighLevel (GRPCIOError)
@@ -56,7 +55,6 @@ import Network.MQTT.Client (
   QoS (QoS1),
   SubOptions (_subQoS),
   normalDisconnect,
-  publishq,
   subOptions,
   subscribe,
   unsubscribe,
@@ -181,32 +179,27 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
         _ -> "[??] "
   let tagSession msg = logPrefix <> msg
 
-  let publishResponse msg = do
-        logDebug logger . tagSession $
-          "Publishing response to topic: " <> unTopic responseTopic <> " Raw message: " <> decodeUtf8 msg
-        publishq client responseTopic msg False QoS1 []
-
   logDebug logger . tagSession $
     unlines
       [ "Wrapped request data: "
       , "  Response Topic: " <> unTopic responseTopic
       , "  Timeout: " <> show timeLimit
-      , "  Metadata: " <> show reqMetadata
+      , "  Metadata: " <> show (toMetadataMap <$> reqMetadata)
       ]
 
-  publishResponseSequenced <- mkSequencedPublish publishResponse
+  let msgSizeLimit = 128000
+  publish <- mkPublish (logDebug logger . tagSession) responseTopic client msgSizeLimit
 
   case lookup grpcMethod methodMap of
     Nothing -> do
       let errMsg = "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod
       logErr logger . tagSession $ toStrict errMsg
-      publishResponse $ wrapMQTTError errMsg
+      publish $ wrapMQTTError errMsg
     -- Run Unary Request
     Just (ClientUnaryHandler handler) -> do
       logDebug logger . tagSession $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
-
-      publishChunked 128000 publishResponseSequenced $ wrapUnaryResponse response
+      publish $ wrapUnaryResponse response
 
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
@@ -214,7 +207,7 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
       getSessionId currentSessions responseTopic >>= \case
         Left err -> do
           logErr logger . tagSession $ err
-          publishResponse . wrapMQTTError $ toLazy err
+          publish . wrapMQTTError $ toLazy err
         Right sessionId -> do
           bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
      where
@@ -223,8 +216,8 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
 
       runHandler :: IO ()
       runHandler = do
-        handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishResponseSequenced)
-          >>= publishResponseSequenced . wrapStreamResponse
+        handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publish)
+          >>= publish . wrapStreamResponse
 
       sessionInit :: Text -> IO Session
       sessionInit sessionId = do
@@ -288,7 +281,7 @@ manageSession logger currentSessions sessionId mqttMessage = do
 {- | Parses the session ID out of the response topic and checks that
  the session ID is not already in use
 -}
-getSessionId :: SessionMap -> Topic -> IO (Either Text Text)
+getSessionId :: SessionMap -> Topic -> IO (Either Text SessionId)
 getSessionId sessions topic = runExceptT $ do
   sessionId <-
     case split topic of
@@ -322,21 +315,13 @@ streamReader ::
   HL.MetadataMap ->
   IO (Either GRPCIOError (Maybe a)) ->
   IO ()
-streamReader publishResponse _cc initMetadata recv = do
-  publishResponse $ wrapStreamInitMetadata initMetadata
+streamReader publish _cc initMetadata recv = do
+  publish $ wrapStreamInitMetadata initMetadata
   readLoop
  where
   readLoop =
     recv >>= \case
-      Left err -> publishResponse $ wrapStreamResponse @a (ClientErrorResponse $ ClientIOError err)
+      Left err -> publish $ wrapStreamResponse @a (ClientErrorResponse $ ClientIOError err)
       Right chunk -> do
-        publishResponse $ wrapStreamChunk chunk
+        publish $ wrapStreamChunk chunk
         when (isJust chunk) readLoop
-
-publishChunked :: Int64 -> (LByteString -> IO ()) -> LByteString -> IO ()
-publishChunked msgLimit publish = loop
- where
-  loop bs = do
-    let (chunk, rest) = LBS.splitAt msgLimit bs
-    publish chunk
-    unless (LBS.null chunk) $ loop rest

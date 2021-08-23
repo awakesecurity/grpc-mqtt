@@ -22,7 +22,6 @@ import Proto.Mqtt as Proto (
   RCError (..),
   RemoteClientError (..),
   RemoteClientErrorExtra (..),
-  SequencedResponse,
   StreamResponse (
     StreamResponse,
     streamResponseDetails,
@@ -52,7 +51,7 @@ import Proto.Mqtt as Proto (
   WrappedUnaryResponseOrErr (
     WrappedUnaryResponseOrErrError,
     WrappedUnaryResponseOrErrResponse
-  ),
+  ), Packet
  )
 
 import Control.Exception (ErrorCall, try)
@@ -225,9 +224,9 @@ unwrapStreamChunk (Right msg) =
             Right rsp -> Right $ Just rsp
         Just (WrappedStreamChunkOrErrorError rcErr) -> Left $ toGRPCIOError rcErr
 
-unwrapSequencedResponse :: ByteString -> Either RemoteClientError SequencedResponse
-unwrapSequencedResponse bs =
-  case fromByteString @SequencedResponse bs of
+unwrapPacket :: ByteString -> Either RemoteClientError Packet
+unwrapPacket bs =
+  case fromByteString @Packet bs of
     Left parseErr -> do
       case fromByteString @RemoteClientError bs of
         Right rce -> Left rce

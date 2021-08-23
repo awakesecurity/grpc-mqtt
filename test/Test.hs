@@ -400,7 +400,7 @@ malformedMessage = do
         sleep 1
         withMQTTGRPCClient testLogger (awsConfig & setConnectionId (testClientId <> "errorTester")) $ \client -> do
           -- Publish message for non-existent service
-          publishq (mqttClient client) (testBaseTopic <> "/grpc/request/bad/service") "blah" False QoS1 []
+          publishq (mqttClient client) (testBaseTopic <> "grpc" <> "request" <> "bad" <> "service") "blah" False QoS1 []
           sleep 1
 
           -- Test server is still up and responsive
@@ -426,6 +426,7 @@ testSequenced :: Assertion
 testSequenced = do
   responseChan <- newTChanIO
   orderedRead <- mkSequencedRead $ readTChan responseChan
+  let orderedRead' = seqPayload <$> orderedRead
   let testList = [0, 1, 2, 4, 8, 7, 3, 5, 9, 6]
   let toChar i = toEnum (fromIntegral (i + 97))
 
@@ -433,7 +434,7 @@ testSequenced = do
         atomically $ writeTChan responseChan (Foo i (toChar i))
 
       consumer = do
-        readResults <- replicateM (length testList) orderedRead
+        readResults <- replicateM (length testList) orderedRead'
         readResults @?= sort (toChar <$> testList)
 
   concurrently_ producer consumer

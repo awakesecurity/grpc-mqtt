@@ -32,6 +32,12 @@ enum RCError {
   MQTTFailure = 27;
 }
 
+message Packet {
+  bool terminal = 1;
+  int32 sequence_num = 2;
+  bytes payload = 3;
+}
+
 message RemoteClientError {
   RCError error_type = 1;
   string message = 2;
@@ -47,11 +53,6 @@ message List {
 
 message MetadataMap {
   map<string, List> value = 1;
-}
-
-message SequencedResponse {
-  bytes payload = 1;
-  int32 sequence_num = 2;
 }
 
 message WrappedStreamChunk {

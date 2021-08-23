@@ -28,7 +28,7 @@ import Network.GRPC.MQTT.Core (
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
+import Network.GRPC.MQTT.Sequenced (mkReadResponse)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
   MQTTResult (GRPCResult, MQTTError),
@@ -37,7 +37,6 @@ import Network.GRPC.MQTT.Wrapping (
   fromRemoteClientError,
   parseErrorToRCE,
   toMetadataMap,
-  unwrapSequencedResponse,
   unwrapStreamChunk,
   unwrapStreamResponse,
   unwrapUnaryResponse,
@@ -46,8 +45,6 @@ import Network.GRPC.MQTT.Wrapping (
 
 import Control.Exception (bracket, throw)
 import Crypto.Nonce (Generator, new, nonce128urlT)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Builder as Builder
 import Network.GRPC.HighLevel (
   GRPCIOError (GRPCIOTimeout),
   MethodName (MethodName),
@@ -57,9 +54,7 @@ import Network.GRPC.HighLevel.Client (
   ClientResult (ClientErrorResponse),
   TimeoutSeconds,
  )
-import Network.GRPC.HighLevel.Generated as HL (
-  MetadataMap,
- )
+import qualified Network.GRPC.HighLevel.Generated as HL
 import Network.MQTT.Client (
   MQTTClient,
   MQTTException (MQTTException),
@@ -71,7 +66,7 @@ import Network.MQTT.Client (
   subOptions,
   subscribe,
  )
-import Network.MQTT.Topic
+import Network.MQTT.Topic (Topic (unTopic), mkTopic)
 import Proto3.Suite (
   Enumerated (Enumerated),
   Message,
@@ -85,7 +80,6 @@ import UnliftIO.Exception (onException, throwString)
 import UnliftIO.STM (
   TChan,
   newTChanIO,
-  readTChan,
   writeTChan,
  )
 import UnliftIO.Timeout (timeout)
@@ -130,9 +124,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   let controlTopic = responseTopic <> "control"
 
   requestTopic <-
-    case mkTopic (decodeUtf8 method) of
+    case mkTopic ("grpc/request" <> decodeUtf8 method) of
       Nothing -> throwString $ "gRPC method forms invalid topic: " <> decodeUtf8 method
-      Just m -> pure $ baseTopic <> "grpc" <> "request" <> m
+      Just t -> pure $ baseTopic <> t
 
   let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
       publishRequest req timeLimit reqMetadata = do
@@ -153,8 +147,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         publishControlMsg AuxControlTerminate
 
   -- Build function to read response chunks in order
-  let readUnwrapped = unwrapSequencedResponse . toStrict <$> readTChan responseChan
-  orderedRead <- mkSequencedRead readUnwrapped
+  readResponse <- mkReadResponse responseChan
 
   -- Subscribe to response topic
   (subResults, _) <- subscribe mqttClient [(toFilter responseTopic, subOptions{_subQoS = QoS1})] []
@@ -170,9 +163,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         MQTTNormalRequest req timeLimit reqMetadata ->
           grpcTimeout timeLimit $ do
             publishRequest req timeLimit reqMetadata
-            sendTerminateOnException $ do
-              rsp <- readFullChunkedResponse orderedRead
-              return $ either fromRemoteClientError unwrapUnaryResponse rsp
+            sendTerminateOnException $
+              either fromRemoteClientError unwrapUnaryResponse <$> readResponse
 
         -- Server Streaming Requests
         MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
@@ -188,9 +180,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
             withMQTTHeartbeat . sendTerminateOnException $ do
               let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
                   readInitMetadata = do
-                    rawInitMD <- orderedRead
-                    let parsedMD = first parseErrorToRCE . fromByteString =<< rawInitMD
-                    return $ fmap toMetadataMap parsedMD
+                    rsp <- readResponse
+                    return $
+                      fmap toMetadataMap . tryParse . toStrict =<< rsp
 
               -- Wait for initial metadata
               readInitMetadata >>= \case
@@ -199,14 +191,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                   pure $ fromRemoteClientError err
                 Right metadata -> do
                   -- Adapter to recieve stream from MQTT
-                  let mqttSRecv = unwrapStreamChunk <$> orderedRead
+                  let mqttSRecv = unwrapStreamChunk . fmap toStrict <$> readResponse
 
                   -- Run user-provided stream handler
                   streamHandler metadata mqttSRecv
 
                   -- Return final result
-                  rsp <- readFullChunkedResponse orderedRead
-                  return $ either fromRemoteClientError unwrapStreamResponse rsp
+                  either fromRemoteClientError unwrapStreamResponse <$> readResponse
 
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
@@ -218,7 +209,7 @@ connectMQTTGRPC logger cfg = do
   let clientMQTTHandler :: MessageCallback
       clientMQTTHandler =
         SimpleCallback $ \_client topic mqttMessage _props -> do
-          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
+          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic <> " Raw: " <> decodeUtf8 mqttMessage
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
@@ -233,17 +224,6 @@ grpcTimeout timeLimit action = fromMaybe timeoutError <$> timeout (timeLimit * 1
  where
   timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
 
--- | Helper function to read potentially chunked messages and build a single response.
-readFullChunkedResponse :: Monad m => m (Either e ByteString) -> m (Either e LByteString)
-readFullChunkedResponse readChunk = loop mempty
- where
-  loop acc =
-    readChunk >>= \case
-      Left err -> pure $ Left err
-      Right chunk
-        | BS.null chunk -> pure $ Right (Builder.toLazyByteString acc)
-        | otherwise -> loop (acc <> Builder.byteString chunk)
-
 generateSessionId :: Generator -> IO Topic
 generateSessionId randGen = go 0
  where
@@ -255,4 +235,13 @@ generateSessionId randGen = go 0
       case mkTopic sid of
         Just topic -> pure topic
         Nothing -> go (retries + 1)
-        
+
+tryParse :: Message a => ByteString -> Either RemoteClientError a
+tryParse msg =
+  case fromByteString msg of
+    Right x -> Right x
+    Left parseErr ->
+      case fromByteString @RemoteClientError msg of
+        Left _ -> Left (parseErrorToRCE parseErr) 
+        Right recvErr -> Left recvErr
+                          

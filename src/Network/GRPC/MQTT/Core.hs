@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
@@ -6,11 +7,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Core (
-  MQTTConnectionConfig (..),
+  MQTTGRPCConfig (..),
   connectMQTT,
   heartbeatPeriodSeconds,
-  setCallback,
-  setConnectionId,
+  toFilter,
+  defaultMGConfig,
 ) where
 
 import Relude
@@ -28,54 +29,94 @@ import Data.Conduit.Network.TLS (
   runTLSClient,
   tlsClientConfig,
  )
+import Network.Connection (TLSSettings (TLSSettingsSimple))
 import Network.MQTT.Client (
   MQTTClient,
   MQTTConduit,
   MQTTConfig (..),
-  MessageCallback,
+  MessageCallback (NoCallback),
   runMQTTConduit,
  )
+import Network.MQTT.Topic (Filter, Topic (unTopic), mkFilter)
+import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311))
+import Relude.Unsafe (fromJust)
 import Turtle (NominalDiffTime)
 
 {- |
-  Wrapper around 'MQTTConfig' indicating whether or not to use TLS for the
-  connection to the MQTT broker
+  Superset of 'MQTTConfig'
 -}
-data MQTTConnectionConfig
-  = Secured MQTTConfig
-  | Unsecured MQTTConfig
+data MQTTGRPCConfig = MQTTGRPCConfig
+  { -- | Whether or not to use TLS for the connection
+    useTLS :: Bool
+    -- | Maximum size for an MQTT message in bytes
+  , mqttMsgSizeLimit :: Int
+  
+  -- Copy of MQTTConfig
+  , _cleanSession :: Bool
+  , _lwt :: Maybe LastWill
+  , _msgCB :: MessageCallback
+  , _protocol :: ProtocolLevel
+  , _connProps :: [Property]
+  , _hostname :: String
+  , _port :: Int
+  , _connID :: String
+  , _username :: Maybe String
+  , _password :: Maybe String
+  , _connectTimeout :: Int
+  , _tlsSettings :: TLSSettings
+  }
 
--- | Utility for setting the callback within the 'MQTTConfig'
-setCallback :: MessageCallback -> MQTTConnectionConfig -> MQTTConnectionConfig
-setCallback cb (Secured cfg) = Secured cfg{_msgCB = cb}
-setCallback cb (Unsecured cfg) = Unsecured cfg{_msgCB = cb}
+defaultMGConfig :: MQTTGRPCConfig
+defaultMGConfig =
+  MQTTGRPCConfig
+    { useTLS = False
+    , mqttMsgSizeLimit = 128000
+    , _cleanSession = True
+    , _lwt = Nothing
+    , _msgCB = NoCallback
+    , _protocol = Protocol311
+    , _connProps = []
+    , _hostname = ""
+    , _port = 1883
+    , _connID = []
+    , _username = Nothing
+    , _password = Nothing
+    , _connectTimeout = 180000000
+    , _tlsSettings = TLSSettingsSimple False False False
+    }
 
--- | Utility for setting the connection ID within the 'MQTTConfig'
-setConnectionId :: String -> MQTTConnectionConfig -> MQTTConnectionConfig
-setConnectionId cid (Secured cfg) = Secured cfg{_connID = cid}
-setConnectionId cid (Unsecured cfg) = Unsecured cfg{_connID = cid}
+-- | Project 'MQTTConfig' from 'MQTTGRPCConfig'
+getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
+getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
-connectMQTT :: MonadIO m => MQTTConnectionConfig -> m MQTTClient
-connectMQTT = \case
-  Secured cfg@MQTTConfig{..} -> liftIO $ runMQTTConduit runTLS cfg
-   where
-    runTLS :: (MQTTConduit -> IO ()) -> IO ()
-    runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
+connectMQTT :: MonadIO m => MQTTGRPCConfig -> m MQTTClient
+connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
+  let runner = if useTLS then runTLS else runTCP
+  runMQTTConduit runner (getMQTTConfig cfg)
+ where
+  runTLS :: (MQTTConduit -> IO ()) -> IO ()
+  runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
 
-    tlsCfg :: TLSClientConfig
-    tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
-  Unsecured cfg@MQTTConfig{..} -> liftIO $ runMQTTConduit runTCP cfg
-   where
-    runTCP :: (MQTTConduit -> IO ()) -> IO ()
-    runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
+  tlsCfg :: TLSClientConfig
+  tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
 
-    tcpCfg :: ClientSettings
-    tcpCfg = clientSettings _port (encodeUtf8 _hostname)
+  runTCP :: (MQTTConduit -> IO ()) -> IO ()
+  runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
 
-toMQTTConduit :: AppData -> MQTTConduit
-toMQTTConduit ad = (appSource ad, appSink ad)
+  tcpCfg :: ClientSettings
+  tcpCfg = clientSettings _port (encodeUtf8 _hostname)
+
+  toMQTTConduit :: AppData -> MQTTConduit
+  toMQTTConduit ad = (appSource ad, appSink ad)
 
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
+
+{- | Topics are strictly a subset of 'Filter's so this conversion is always safe
+ | This is a bit of a hack, but there is a upstream PR to add this to the net-mqtt
+ | library: https://github.com/dustin/mqtt-hs/pull/22
+-}
+toFilter :: Topic -> Filter
+toFilter = fromJust . mkFilter . unTopic

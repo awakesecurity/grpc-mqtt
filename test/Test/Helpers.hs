@@ -9,11 +9,10 @@ module Test.Helpers where
 import Relude
 
 import Network.GRPC.MQTT (
-  MQTTConfig (_hostname, _port, _protocol, _tlsSettings),
   ProtocolLevel (Protocol311),
-  mqttConfig,
  )
-import Network.GRPC.MQTT.Core (MQTTConnectionConfig (Secured))
+import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..), defaultMGConfig)
+import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
 
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
@@ -23,7 +22,6 @@ import Data.X509.CertificateStore (
  )
 import Network.Connection (TLSSettings (TLSSettings))
 import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
-import Network.GRPC.MQTT.Logging (Logger, noLogging)
 import Network.TLS (
   ClientHooks (onCertificateRequest),
   ClientParams (clientHooks, clientShared, clientSupported),
@@ -54,10 +52,13 @@ import Turtle.Prelude (need)
 testLogger :: Logger
 testLogger = noLogging
 
-awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTConfig
+awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTGRPCConfig
 awsMqttConfig hostName cred certStore =
-  mqttConfig
-    { _protocol = Protocol311
+  defaultMGConfig
+    { useTLS = True
+    , mqttMsgSizeLimit = 128000
+    
+    , _protocol = Protocol311
     , _hostname = hostName
     , _port = 8883
     , _tlsSettings =
@@ -91,11 +92,11 @@ getCreds = do
       Nothing -> assertFailure "Failed to read cert store"
   return (cred, certStore)
 
-getTestConfig :: IO MQTTConnectionConfig
+getTestConfig :: IO MQTTGRPCConfig
 getTestConfig = do
   host <- getEnvVar "TEST_MQTT_HOSTNAME"
   (cred, certStore) <- getCreds
-  return $ Secured $ awsMqttConfig (toString host) cred certStore
+  return $ awsMqttConfig (toString host) cred certStore
 
 getEnvVar :: Text -> IO String
 getEnvVar varName =

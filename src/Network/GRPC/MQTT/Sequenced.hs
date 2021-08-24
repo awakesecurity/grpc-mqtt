@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -11,9 +10,15 @@ module Network.GRPC.MQTT.Sequenced where
 
 import Relude
 
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.SortedList as SL
-import Proto.Mqtt (SequencedResponse (..))
+import Network.GRPC.MQTT.Wrapping (unwrapPacket)
+import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
+import Network.MQTT.Topic (Topic (unTopic))
+import Proto.Mqtt (Packet (..), RemoteClientError)
 import Proto3.Suite (toLazyByteString)
+import UnliftIO.STM (TChan, readTChan)
 
 data SequenceIdx = Unsequenced | SequencedIdx Natural
   deriving stock (Eq, Ord)
@@ -43,25 +48,43 @@ instance (Sequenced a) => Sequenced (Either e a) where
   seqNum (Right a) = seqNum a
   seqPayload = fmap seqPayload
 
-instance Sequenced SequencedResponse where
-  type Payload SequencedResponse = ByteString
-  seqNum SequencedResponse{..} =
-    if sequencedResponseSequenceNum < 0
+instance Sequenced Packet where
+  type Payload Packet = ByteString
+  seqNum Packet{..} =
+    if packetSequenceNum < 0
       then Unsequenced
-      else SequencedIdx (fromIntegral sequencedResponseSequenceNum)
+      else SequencedIdx (fromIntegral packetSequenceNum)
 
-  seqPayload = sequencedResponsePayload
+  seqPayload = packetPayload
+
+mkReadResponse :: forall m. MonadIO m => TChan LByteString -> m (m (Either RemoteClientError LByteString))
+mkReadResponse chan = do
+  let read = unwrapPacket . toStrict <$> readTChan chan
+  readSeq <- mkSequencedRead read
+
+  let readPacket :: Builder.Builder -> m (Either RemoteClientError LByteString)
+      readPacket acc = do
+        rawPacket <- readSeq
+        case rawPacket of
+          Left err -> pure $ Left err
+          Right (Packet isLastPacket _ chunk) -> do
+            let builder = acc <> Builder.byteString chunk
+            if isLastPacket
+              then pure $ Right (Builder.toLazyByteString builder)
+              else readPacket builder
+
+  return $ readPacket mempty
 
 {- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
  read the objects in order even if they are received out of order
  NB: Objects with negative sequence numbers are always returned immediately
 -}
-mkSequencedRead :: forall m a. (MonadIO m, Sequenced a) => STM a -> m (m (Payload a))
+mkSequencedRead :: forall m a. (MonadIO m, Sequenced a) => STM a -> m (m a)
 mkSequencedRead read = do
   seqVar <- newTVarIO 0
   bufferVar <- newTVarIO $ SL.toSortedList @(SequencedWrap a) []
 
-  let orderedRead :: STM (Payload a)
+  let orderedRead :: STM a
       orderedRead = do
         curSeq <- readTVar seqVar
         buffer <- readTVar bufferVar
@@ -74,24 +97,38 @@ mkSequencedRead read = do
           _ -> coerce read
 
         case seqNum sa of
-          Unsequenced -> return $ seqPayload sa
+          Unsequenced -> return $ coerce sa
           SequencedIdx idx ->
             case idx `compare` curSeq of
               -- If sequence number is less than current, it must be a duplicate, so we discard it and read again
               LT -> orderedRead
-              EQ -> modifyTVar' seqVar (+ 1) $> seqPayload sa
+              EQ -> modifyTVar' seqVar (+ 1) $> coerce sa
               GT -> modifyTVar' bufferVar (SL.insert sa) >> orderedRead
 
   return $ atomically orderedRead
 
+mkPublish :: (Text -> IO ()) -> Topic -> MQTTClient -> Int64 -> IO (LByteString -> IO ())
+mkPublish log topic client msgLimit =
+  mkPacketizedPublish msgLimit $ \msg -> do
+    log $ "Publishing to topic: " <> unTopic topic <> " Raw message: " <> decodeUtf8 msg
+    publishq client topic msg False QoS1 []
+
 -- | Wraps a publish function to tag each response as a 'SequencedResponse' with an incrementing sequence number
-mkSequencedPublish :: (MonadIO m) => (LByteString -> m a) -> m (LByteString -> m a)
-mkSequencedPublish pub = do
+mkPacketizedPublish :: forall m. (MonadIO m) => Int64 -> (LByteString -> m ()) -> m (LByteString -> m ())
+mkPacketizedPublish msgLimit pub = do
   seqVar <- newTVarIO 0
-  let sequencedPublish msg = do
-        sr <- atomically $ do
+
+  let publishPacket :: LByteString -> m ()
+      publishPacket bs = do
+        let (chunk, rest) = LBS.splitAt msgLimit bs
+        let isLastPacket = LBS.null rest
+
+        packet <- atomically $ do
           curSeq <- readTVar seqVar
           modifyTVar' seqVar (+ 1)
-          return $ SequencedResponse (toStrict msg) curSeq
-        pub $ toLazyByteString sr
-  return sequencedPublish
+          return $ Packet isLastPacket curSeq (toStrict chunk)
+
+        pub $ toLazyByteString packet
+        unless isLastPacket $ publishPacket rest
+
+  return publishPacket

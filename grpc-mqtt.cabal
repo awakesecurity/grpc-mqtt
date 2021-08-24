@@ -61,7 +61,7 @@ common shared-settings
                     , deepseq
                     , grpc-haskell
                     , grpc-haskell-core
-                    , net-mqtt
+                    , net-mqtt >= 0.8
                     , proto3-suite
                     , proto3-wire
                     , relude
@@ -84,10 +84,11 @@ library
                       Network.GRPC.MQTT.Types
                       Network.GRPC.MQTT.Wrapping
   other-modules:      Proto.Mqtt
-  -- ghc-options:
+  ghc-options:        -O2
   hs-source-dirs:     src gen
   build-depends:      base64
                     , conduit-extra
+                    , connection
                     , mtl
                     , network-conduit-tls
                     , nonce

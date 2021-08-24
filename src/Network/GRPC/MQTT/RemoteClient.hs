@@ -10,10 +10,10 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
-  MQTTConnectionConfig,
+  MQTTGRPCConfig (_msgCB, mqttMsgSizeLimit),
   connectMQTT,
   heartbeatPeriodSeconds,
-  setCallback,
+  toFilter,
  )
 import Network.GRPC.MQTT.Logging (
   Logger,
@@ -22,10 +22,11 @@ import Network.GRPC.MQTT.Logging (
   logInfo,
   logWarn,
  )
-import Network.GRPC.MQTT.Sequenced (mkSequencedPublish)
+import Network.GRPC.MQTT.Sequenced (mkPublish)
 import Network.GRPC.MQTT.Types (
   ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
   MethodMap,
+  SessionId,
  )
 import Network.GRPC.MQTT.Wrapping (
   toMetadataMap,
@@ -40,7 +41,6 @@ import Control.Exception (bracket)
 import Control.Monad.Except (throwError)
 import Data.HashMap.Strict (lookup)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as T
 import Network.GRPC.HighLevel (GRPCIOError)
 import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client (
@@ -53,13 +53,17 @@ import Network.MQTT.Client (
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
-  Topic,
   normalDisconnect,
-  publishq,
   subOptions,
   subscribe,
   unsubscribe,
   waitForClient,
+ )
+import Network.MQTT.Topic (
+  Filter (unFilter),
+  Topic (unTopic),
+  mkTopic,
+  split,
  )
 import Proto.Mqtt (
   AuxControl (AuxControlAlive, AuxControlTerminate),
@@ -82,9 +86,6 @@ import UnliftIO.Async (
  )
 import UnliftIO.Exception (throwString, try, tryAny)
 
--- | Represents the session ID for a request
-type SessionId = Text
-
 -- | A shared map of all currently running sessions
 type SessionMap = TVar (Map SessionId Session)
 
@@ -100,7 +101,7 @@ data Session = Session
 runRemoteClient ::
   Logger ->
   -- | MQTT configuration for connecting to the MQTT broker
-  MQTTConnectionConfig ->
+  MQTTGRPCConfig ->
   -- | Base topic which should uniquely identify the device
   Topic ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
@@ -108,17 +109,17 @@ runRemoteClient ::
   IO ()
 runRemoteClient logger cfg baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
-  let gatewayConfig = cfg & setCallback (gatewayHandler currentSessions)
+  let gatewayConfig = cfg{_msgCB = gatewayHandler currentSessions}
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
     -- Subscribe to listen for all gRPC requests
-    let listeningTopic = baseTopic <> "/grpc/request/+/+"
-    (subResults, _) <- subscribe gatewayMQTTClient [(listeningTopic, subOptions{_subQoS = QoS1})] []
+    let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+"
+    (subResults, _) <- subscribe gatewayMQTTClient [(grpcRequestsFilter, subOptions{_subQoS = QoS1})] []
     case subResults of
       [Left subErr] ->
         logErr logger $
-          "Remote Client failed to subscribe to the topic: " <> listeningTopic <> "Reason: " <> show subErr
+          "Remote Client failed to subscribe to the topic: " <> unFilter grpcRequestsFilter <> "Reason: " <> show subErr
       _ -> do
         try (waitForClient gatewayMQTTClient) >>= \case
           Left (e :: MQTTException) ->
@@ -131,14 +132,15 @@ runRemoteClient logger cfg baseTopic methodMap = do
  where
   gatewayHandler :: SessionMap -> MessageCallback
   gatewayHandler currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
-    logInfo logger $ "Remote Client received request at topic: " <> topic
+    logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
 
-    result <- tryAny $ case T.splitOn "/" topic of
-      [_, _, "grpc", "request", service, method] ->
-        let grpcMethod = encodeUtf8 ("/" <> service <> "/" <> method)
-         in makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage
-      [_, _, "grpc", "session", sessionId, "control"] -> manageSession logger currentSessions sessionId mqttMessage
-      _ -> logErr logger $ "Failed to parse topic: " <> topic
+    result <- tryAny $ case split topic of
+      [_, _, "grpc", "request", service, method] -> do
+        let grpcMethod = encodeUtf8 ("/" <> unTopic service <> "/" <> unTopic method)
+        let maxMsgSize = fromIntegral $ mqttMsgSizeLimit cfg
+        makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage
+      [_, _, "grpc", "session", sessionId, "control"] -> manageSession logger currentSessions (unTopic sessionId) mqttMessage
+      _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
 
     -- Catch and print any synchronous exception. We don't want an exception
     -- from an individual callback thread to take down the entire MQTT client.
@@ -149,6 +151,8 @@ runRemoteClient logger cfg baseTopic methodMap = do
 makeGRPCRequest ::
   Logger ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
+  Int64 ->
+  -- | Maximum MQTT message size
   MethodMap ->
   -- | The map of the current sessions
   SessionMap ->
@@ -159,7 +163,7 @@ makeGRPCRequest ::
   -- | The raw MQTT message
   LByteString ->
   IO ()
-makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage = do
+makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage = do
   logInfo logger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
 
   (WrappedMQTTRequest lResponseTopic timeLimit reqMetadata payload) <-
@@ -167,63 +171,62 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
       Left err -> throwString $ "Failed to decode MQTT message: " <> show err
       Right x -> pure x
 
-  let responseTopic = toStrict lResponseTopic
+  responseTopic <-
+    case mkTopic (toStrict lResponseTopic) of
+      Nothing -> throwString $ "Invalid response topic: " <> toString lResponseTopic
+      Just topic -> pure topic
 
-  let logPrefix = case T.splitOn "/" responseTopic of
-        (_ : _ : _ : _ : sessionId : _) -> "[" <> sessionId <> "] "
+  let logPrefix = case split responseTopic of
+        (_ : _ : _ : _ : sessionId : _) -> "[" <> unTopic sessionId <> "] "
         _ -> "[??] "
-      tagSession msg = logPrefix <> msg
-
-  let publishResponse msg = do
-        logDebug logger . tagSession $
-          "Publishing response to topic: " <> responseTopic <> " Raw message: " <> decodeUtf8 msg
-        publishq client responseTopic msg False QoS1 []
+  let tagSession msg = logPrefix <> msg
 
   logDebug logger . tagSession $
     unlines
       [ "Wrapped request data: "
-      , "  Response Topic: " <> responseTopic
+      , "  Response Topic: " <> unTopic responseTopic
       , "  Timeout: " <> show timeLimit
-      , "  Metadata: " <> show reqMetadata
+      , "  Metadata: " <> show (toMetadataMap <$> reqMetadata)
       ]
 
-  publishResponseSequenced <- mkSequencedPublish publishResponse
+  publish <- mkPublish (logDebug logger . tagSession) responseTopic client maxMsgSize
 
   case lookup grpcMethod methodMap of
     Nothing -> do
       let errMsg = "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod
       logErr logger . tagSession $ toStrict errMsg
-      publishResponse $ wrapMQTTError errMsg
+      publish $ wrapMQTTError errMsg
     -- Run Unary Request
     Just (ClientUnaryHandler handler) -> do
       logDebug logger . tagSession $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
-      publishResponse $ wrapUnaryResponse response
+      publish $ wrapUnaryResponse response
+
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
       logDebug logger . tagSession $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod
       getSessionId currentSessions responseTopic >>= \case
         Left err -> do
           logErr logger . tagSession $ err
-          publishResponse . wrapMQTTError $ toLazy err
+          publish . wrapMQTTError $ toLazy err
         Right sessionId -> do
           bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
      where
-      controlTopic :: Topic
-      controlTopic = responseTopic <> "/control"
+      controlFilter :: Filter
+      controlFilter = toFilter responseTopic <> "control"
 
       runHandler :: IO ()
       runHandler = do
-        handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishResponseSequenced)
-          >>= publishResponseSequenced . wrapStreamResponse
+        handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publish)
+          >>= publish . wrapStreamResponse
 
       sessionInit :: Text -> IO Session
       sessionInit sessionId = do
-        (subResults, _) <- subscribe client [(controlTopic, subOptions{_subQoS = QoS1})] []
+        (subResults, _) <- subscribe client [(controlFilter, subOptions{_subQoS = QoS1})] []
         case subResults of
           [Left subErr] ->
             throwString $
-              "Failed to subscribe to the topic: " <> toString controlTopic <> "Reason: " <> show subErr
+              "Failed to subscribe to the topic: " <> show controlFilter <> "Reason: " <> show subErr
           _ -> do
             logInfo logger . tagSession $ "Begin new streaming session"
 
@@ -241,7 +244,7 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
         logInfo logger . tagSession $ "Cleanup streaming session"
         atomically $ modifyTVar' currentSessions (Map.delete sessionId)
         cancel $ handlerThread session
-        _ <- unsubscribe client [controlTopic] []
+        _ <- unsubscribe client [controlFilter] []
         pure ()
 
       waitWithHeartbeatMonitor :: Session -> IO ()
@@ -279,11 +282,11 @@ manageSession logger currentSessions sessionId mqttMessage = do
 {- | Parses the session ID out of the response topic and checks that
  the session ID is not already in use
 -}
-getSessionId :: SessionMap -> Topic -> IO (Either Text Text)
+getSessionId :: SessionMap -> Topic -> IO (Either Text SessionId)
 getSessionId sessions topic = runExceptT $ do
   sessionId <-
-    case T.splitOn "/" topic of
-      (_ : _ : _ : _ : sessionId : _) -> pure sessionId
+    case split topic of
+      (_ : _ : _ : _ : sessionId : _) -> pure $ unTopic sessionId
       _ -> throwError "Unable to read sessionId from topic"
 
   sessionExists <- Map.member sessionId <$> readTVarIO sessions
@@ -313,13 +316,13 @@ streamReader ::
   HL.MetadataMap ->
   IO (Either GRPCIOError (Maybe a)) ->
   IO ()
-streamReader publishResponse _cc initMetadata recv = do
-  publishResponse $ wrapStreamInitMetadata initMetadata
+streamReader publish _cc initMetadata recv = do
+  publish $ wrapStreamInitMetadata initMetadata
   readLoop
  where
   readLoop =
     recv >>= \case
-      Left err -> publishResponse $ wrapStreamResponse @a (ClientErrorResponse $ ClientIOError err)
+      Left err -> publish $ wrapStreamResponse @a (ClientErrorResponse $ ClientIOError err)
       Right chunk -> do
-        publishResponse $ wrapStreamChunk chunk
+        publish $ wrapStreamChunk chunk
         when (isJust chunk) readLoop

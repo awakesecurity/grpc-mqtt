@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -15,44 +14,14 @@ import Network.GRPC.MQTT.Types (
   ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
   MQTTResult (..),
  )
-import Network.MQTT.Topic (Topic)
+import Network.MQTT.Topic (Topic (unTopic))
 
 import Proto.Mqtt as Proto (
   List (List, listValue),
   MetadataMap (MetadataMap),
-  RCError (
-    RCErrorIOGRPCBadStatusCode,
-    RCErrorIOGRPCCallAlreadyAccepted,
-    RCErrorIOGRPCCallAlreadyFinished,
-    RCErrorIOGRPCCallAlreadyInvoked,
-    RCErrorIOGRPCCallBatchTooBig,
-    RCErrorIOGRPCCallCompletionQueueShutdown,
-    RCErrorIOGRPCCallError,
-    RCErrorIOGRPCCallInvalidFlags,
-    RCErrorIOGRPCCallInvalidMessage,
-    RCErrorIOGRPCCallInvalidMetadata,
-    RCErrorIOGRPCCallNotInvoked,
-    RCErrorIOGRPCCallNotOnClient,
-    RCErrorIOGRPCCallNotOnServer,
-    RCErrorIOGRPCCallNotServerCompletionQueue,
-    RCErrorIOGRPCCallOk,
-    RCErrorIOGRPCCallPayloadTypeMismatch,
-    RCErrorIOGRPCCallTooManyOperations,
-    RCErrorIOGRPCDecode,
-    RCErrorIOGRPCHandlerException,
-    RCErrorIOGRPCInternalUnexpectedRecv,
-    RCErrorIOGRPCShutdown,
-    RCErrorIOGRPCShutdownFailure,
-    RCErrorIOGRPCTimeout,
-    RCErrorMQTTFailure,
-    RCErrorNoParseBinary,
-    RCErrorNoParseEmbedded,
-    RCErrorNoParseWireType,
-    RCErrorUnknownError
-  ),
+  RCError (..),
   RemoteClientError (..),
   RemoteClientErrorExtra (..),
-  SequencedResponse,
   StreamResponse (
     StreamResponse,
     streamResponseDetails,
@@ -82,7 +51,7 @@ import Proto.Mqtt as Proto (
   WrappedUnaryResponseOrErr (
     WrappedUnaryResponseOrErrError,
     WrappedUnaryResponseOrErrResponse
-  ),
+  ), Packet
  )
 
 import Control.Exception (ErrorCall, try)
@@ -148,7 +117,7 @@ wrapRequest ::
 wrapRequest responseTopic timeout reqMetadata request =
   toLazyByteString $
     WrappedMQTTRequest
-      (toLazy responseTopic)
+      (toLazy (unTopic responseTopic))
       (fromIntegral timeout)
       (Just $ fromMetadataMap reqMetadata)
       (toBS request)
@@ -255,9 +224,9 @@ unwrapStreamChunk (Right msg) =
             Right rsp -> Right $ Just rsp
         Just (WrappedStreamChunkOrErrorError rcErr) -> Left $ toGRPCIOError rcErr
 
-unwrapSequencedResponse :: ByteString -> Either RemoteClientError SequencedResponse
-unwrapSequencedResponse bs =
-  case fromByteString @SequencedResponse bs of
+unwrapPacket :: ByteString -> Either RemoteClientError Packet
+unwrapPacket bs =
+  case fromByteString @Packet bs of
     Left parseErr -> do
       case fromByteString @RemoteClientError bs of
         Right rce -> Left rce

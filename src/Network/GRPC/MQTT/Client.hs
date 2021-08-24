@@ -21,13 +21,13 @@ import Proto.Mqtt (
  )
 
 import Network.GRPC.MQTT.Core (
-  MQTTConnectionConfig,
+  MQTTGRPCConfig(_msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
-  setCallback,
+  toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkSequencedRead)
+import Network.GRPC.MQTT.Sequenced (mkReadResponse)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
   MQTTResult (GRPCResult, MQTTError),
@@ -36,14 +36,13 @@ import Network.GRPC.MQTT.Wrapping (
   fromRemoteClientError,
   parseErrorToRCE,
   toMetadataMap,
-  unwrapSequencedResponse,
   unwrapStreamChunk,
   unwrapStreamResponse,
   unwrapUnaryResponse,
   wrapRequest,
  )
 
-import Control.Exception (bracket)
+import Control.Exception (bracket, throw)
 import Crypto.Nonce (Generator, new, nonce128urlT)
 import Network.GRPC.HighLevel (
   GRPCIOError (GRPCIOTimeout),
@@ -54,20 +53,19 @@ import Network.GRPC.HighLevel.Client (
   ClientResult (ClientErrorResponse),
   TimeoutSeconds,
  )
-import Network.GRPC.HighLevel.Generated as HL (
-  MetadataMap,
- )
+import qualified Network.GRPC.HighLevel.Generated as HL
 import Network.MQTT.Client (
   MQTTClient,
+  MQTTException (MQTTException),
   MessageCallback (SimpleCallback),
   QoS (QoS1),
   SubOptions (_subQoS),
-  Topic,
   normalDisconnect,
   publishq,
   subOptions,
   subscribe,
  )
+import Network.MQTT.Topic (Topic (unTopic), mkTopic)
 import Proto3.Suite (
   Enumerated (Enumerated),
   Message,
@@ -77,11 +75,10 @@ import Proto3.Suite (
 import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
-import UnliftIO.Exception (onException)
+import UnliftIO.Exception (onException, throwString)
 import UnliftIO.STM (
   TChan,
   newTChanIO,
-  readTChan,
   writeTChan,
  )
 import UnliftIO.Timeout (timeout)
@@ -101,7 +98,7 @@ data MQTTGRPCClient = MQTTGRPCClient
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
  Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 -}
-withMQTTGRPCClient :: Logger -> MQTTConnectionConfig -> (MQTTGRPCClient -> IO a) -> IO a
+withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
   bracket
     (connectMQTTGRPC logger cfg)
@@ -121,20 +118,24 @@ mqttRequest ::
 mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
 
-  sessionID <- nonce128urlT rng
-  let responseTopic = baseTopic <> "/grpc/session/" <> sessionID
-  let requestTopic = baseTopic <> "/grpc/request" <> decodeUtf8 method
-  let controlTopic = responseTopic <> "/control"
+  sessionId <- generateSessionId rng
+  let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
+  let controlTopic = responseTopic <> "control"
+
+  requestTopic <-
+    case mkTopic ("grpc/request" <> decodeUtf8 method) of
+      Nothing -> throwString $ "gRPC method forms invalid topic: " <> decodeUtf8 method
+      Just t -> pure $ baseTopic <> t
 
   let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
       publishRequest req timeLimit reqMetadata = do
-        logDebug mqttLogger $ "Publishing message to topic: " <> responseTopic
+        logDebug mqttLogger $ "Publishing message to topic: " <> unTopic responseTopic
         let wrappedReq = wrapRequest responseTopic timeLimit reqMetadata req
         publishq mqttClient requestTopic wrappedReq False QoS1 []
 
   let publishControlMsg :: AuxControl -> IO ()
       publishControlMsg ctrl = do
-        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> responseTopic
+        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic responseTopic
         publishq mqttClient controlTopic ctrlMessage False QoS1 []
        where
         ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
@@ -144,11 +145,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         logErr mqttLogger "Exception while waiting for response"
         publishControlMsg AuxControlTerminate
 
+  -- Build function to read response chunks in order
+  readResponse <- mkReadResponse responseChan
+
   -- Subscribe to response topic
-  (subResults, _) <- subscribe mqttClient [(responseTopic, subOptions{_subQoS = QoS1})] []
+  (subResults, _) <- subscribe mqttClient [(toFilter responseTopic, subOptions{_subQoS = QoS1})] []
   case subResults of
     [Left subErr] -> do
-      let errMsg = "Failed to subscribe to the topic: " <> responseTopic <> "Reason: " <> show subErr
+      let errMsg = "Failed to subscribe to the topic: " <> unTopic responseTopic <> "Reason: " <> show subErr
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
     _ -> do
@@ -159,7 +163,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           grpcTimeout timeLimit $ do
             publishRequest req timeLimit reqMetadata
             sendTerminateOnException $
-              unwrapUnaryResponse <$> atomically (readTChan responseChan)
+              either fromRemoteClientError unwrapUnaryResponse <$> readResponse
 
         -- Server Streaming Requests
         MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
@@ -173,14 +177,11 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                     (const action)
 
             withMQTTHeartbeat . sendTerminateOnException $ do
-              let readUnwrapped = unwrapSequencedResponse . toStrict <$> readTChan responseChan
-              orderedRead <- mkSequencedRead readUnwrapped
-
               let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
                   readInitMetadata = do
-                    rawInitMD <- orderedRead
-                    let parsedMD = first parseErrorToRCE . fromByteString =<< rawInitMD
-                    return $ fmap toMetadataMap parsedMD
+                    rsp <- readResponse
+                    return $
+                      fmap toMetadataMap . tryParse . toStrict =<< rsp
 
               -- Wait for initial metadata
               readInitMetadata >>= \case
@@ -189,29 +190,29 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                   pure $ fromRemoteClientError err
                 Right metadata -> do
                   -- Adapter to recieve stream from MQTT
-                  let mqttSRecv = unwrapStreamChunk <$> orderedRead
+                  let mqttSRecv = unwrapStreamChunk . fmap toStrict <$> readResponse
 
                   -- Run user-provided stream handler
                   streamHandler metadata mqttSRecv
 
                   -- Return final result
-                  unwrapStreamResponse <$> atomically (readTChan responseChan)
+                  either fromRemoteClientError unwrapStreamResponse <$> readResponse
 
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => Logger -> MQTTConnectionConfig -> m MQTTGRPCClient
+connectMQTTGRPC :: (MonadIO m) => Logger -> MQTTGRPCConfig -> m MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   resultChan <- newTChanIO
 
   let clientMQTTHandler :: MessageCallback
       clientMQTTHandler =
         SimpleCallback $ \_client topic mqttMessage _props -> do
-          logDebug logger $ "clientMQTTHandler received message on topic: " <> topic
+          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic <> " Raw: " <> decodeUtf8 mqttMessage
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
-    <$> connectMQTT (cfg & setCallback clientMQTTHandler)
+    <$> connectMQTT cfg{_msgCB = clientMQTTHandler}
     <*> pure resultChan
     <*> new
     <*> pure logger
@@ -221,3 +222,18 @@ grpcTimeout :: (MonadUnliftIO m) => TimeoutSeconds -> m (MQTTResult streamType r
 grpcTimeout timeLimit action = fromMaybe timeoutError <$> timeout (timeLimit * 1000000) action
  where
   timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
+
+generateSessionId :: Generator -> IO Topic
+generateSessionId randGen =
+  mkTopic <$> nonce128urlT randGen >>= \case
+    Just topic -> pure topic
+    Nothing -> throw $ MQTTException "Failed to generate a valid session ID. (This should be impossible)"
+
+tryParse :: Message a => ByteString -> Either RemoteClientError a
+tryParse msg =
+  case fromByteString msg of
+    Right x -> Right x
+    Left parseErr ->
+      case fromByteString @RemoteClientError msg of
+        Left _ -> Left (parseErrorToRCE parseErr)
+        Right recvErr -> Left recvErr

@@ -47,7 +47,7 @@ import Network.GRPC.MQTT.Client (
   withMQTTGRPCClient,
  )
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (_connID, _msgCB),
+  MQTTGRPCConfig (_connID, _msgCB, mqttMsgSizeLimit),
   connectMQTT,
   toFilter,
  )
@@ -150,6 +150,7 @@ allTests =
       , ("Sequenced", testSequenced)
       , ("Missing Client Error", missingClientError)
       , ("Malformed Topic", malformedMessage)
+      , ("Packetized", packetizedMesssages)
       ]
 
 persistentMQTT :: Assertion
@@ -266,6 +267,22 @@ basicServerStreaming = do
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
         testHelloCall awsConfig{_connID = testClientId <> "SS"}
+
+packetizedMesssages :: Assertion
+packetizedMesssages = do
+  awsConfig <- getTestConfig
+
+  -- Start gRPC Server
+  withAsync runAddHelloServer $ \_grpcServerThread ->
+    -- Get gRPC Client
+    withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
+      methodMap <- addHelloRemoteClientMethodMap grpcClient
+
+      -- Start serverside MQTT adaptor
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorPacketized", mqttMsgSizeLimit = 10} testBaseTopic methodMap) $ \_adaptorThread -> do
+        sleep 1
+        testAddCall awsConfig{_connID = testClientId <> "Packetized"}
+        testHelloCall awsConfig{_connID = testClientId <> "Packetized"}
 
 missingClientError :: Assertion
 missingClientError = do

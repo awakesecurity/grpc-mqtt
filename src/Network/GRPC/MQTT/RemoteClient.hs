@@ -10,7 +10,7 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (_msgCB),
+  MQTTGRPCConfig (_msgCB, mqttMsgSizeLimit),
   connectMQTT,
   heartbeatPeriodSeconds,
   toFilter,
@@ -135,9 +135,10 @@ runRemoteClient logger cfg baseTopic methodMap = do
     logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
 
     result <- tryAny $ case split topic of
-      [_, _, "grpc", "request", service, method] ->
+      [_, _, "grpc", "request", service, method] -> do
         let grpcMethod = encodeUtf8 ("/" <> unTopic service <> "/" <> unTopic method)
-         in makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage
+        let maxMsgSize = fromIntegral $ mqttMsgSizeLimit cfg
+        makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage
       [_, _, "grpc", "session", sessionId, "control"] -> manageSession logger currentSessions (unTopic sessionId) mqttMessage
       _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
 
@@ -150,6 +151,8 @@ runRemoteClient logger cfg baseTopic methodMap = do
 makeGRPCRequest ::
   Logger ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
+  Int64 ->
+  -- | Maximum MQTT message size
   MethodMap ->
   -- | The map of the current sessions
   SessionMap ->
@@ -160,7 +163,7 @@ makeGRPCRequest ::
   -- | The raw MQTT message
   LByteString ->
   IO ()
-makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage = do
+makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage = do
   logInfo logger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
 
   (WrappedMQTTRequest lResponseTopic timeLimit reqMetadata payload) <-
@@ -186,8 +189,7 @@ makeGRPCRequest logger methodMap currentSessions client grpcMethod mqttMessage =
       , "  Metadata: " <> show (toMetadataMap <$> reqMetadata)
       ]
 
-  let msgSizeLimit = 128000
-  publish <- mkPublish (logDebug logger . tagSession) responseTopic client msgSizeLimit
+  publish <- mkPublish (logDebug logger . tagSession) responseTopic client maxMsgSize
 
   case lookup grpcMethod methodMap of
     Nothing -> do

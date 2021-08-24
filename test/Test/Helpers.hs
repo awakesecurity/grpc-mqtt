@@ -23,7 +23,7 @@ import Data.X509.CertificateStore (
  )
 import Network.Connection (TLSSettings (TLSSettings))
 import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
-import Network.GRPC.MQTT.Logging (Logger(..), Verbosity (Debug))
+import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
 import Network.TLS (
   ClientHooks (onCertificateRequest),
   ClientParams (clientHooks, clientShared, clientSupported),
@@ -52,7 +52,7 @@ import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
 
 testLogger :: Logger
-testLogger = Logger print Debug
+testLogger = noLogging
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTConfig
 awsMqttConfig hostName cred certStore =

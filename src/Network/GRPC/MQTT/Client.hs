@@ -224,16 +224,10 @@ grpcTimeout timeLimit action = fromMaybe timeoutError <$> timeout (timeLimit * 1
   timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
 
 generateSessionId :: Generator -> IO Topic
-generateSessionId randGen = go 0
- where
-  go :: Int -> IO Topic
-  go retries
-    | retries >= 5 = throw $ MQTTException "Failed to generate a valid session ID"
-    | otherwise = do
-      sid <- nonce128urlT randGen
-      case mkTopic sid of
-        Just topic -> pure topic
-        Nothing -> go (retries + 1)
+generateSessionId randGen =
+  mkTopic <$> nonce128urlT randGen >>= \case
+    Just topic -> pure topic
+    Nothing -> throw $ MQTTException "Failed to generate a valid session ID. (This should be impossible)"
 
 tryParse :: Message a => ByteString -> Either RemoteClientError a
 tryParse msg =

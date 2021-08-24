@@ -46,7 +46,9 @@ import Turtle (NominalDiffTime)
   Superset of 'MQTTConfig'
 -}
 data MQTTGRPCConfig = MQTTGRPCConfig
-  { useTLS :: Bool
+  { -- | Whether or not to use TLS for the connection
+    useTLS :: Bool
+    -- | Maximum size for an MQTT message in bytes
   , mqttMsgSizeLimit :: Int
   
   -- Copy of MQTTConfig

@@ -21,10 +21,9 @@ import Proto.Mqtt (
  )
 
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig,
+  MQTTGRPCConfig(_msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
-  setCallback,
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
@@ -213,7 +212,7 @@ connectMQTTGRPC logger cfg = do
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient
-    <$> connectMQTT (cfg & setCallback clientMQTTHandler)
+    <$> connectMQTT cfg{_msgCB = clientMQTTHandler}
     <*> pure resultChan
     <*> new
     <*> pure logger
@@ -242,6 +241,5 @@ tryParse msg =
     Right x -> Right x
     Left parseErr ->
       case fromByteString @RemoteClientError msg of
-        Left _ -> Left (parseErrorToRCE parseErr) 
+        Left _ -> Left (parseErrorToRCE parseErr)
         Right recvErr -> Left recvErr
-                          

@@ -47,10 +47,8 @@ import Network.GRPC.MQTT.Client (
   withMQTTGRPCClient,
  )
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig,
+  MQTTGRPCConfig (_connID, _msgCB),
   connectMQTT,
-  setCallback,
-  setConnectionId,
   toFilter,
  )
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
@@ -164,9 +162,9 @@ persistentMQTT = do
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
       -- Start serverside MQTT adaptor
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptor") testBaseTopic methodMap) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        withMQTTGRPCClient testLogger (awsConfig & setConnectionId testClientId) $ \client -> do
+        withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
           let AddHello mqttAdd mqttHelloSS = addHelloMqttClient client testBaseTopic
 
           mqttAdd (MQTTNormalRequest (TwoInts 4 6) 2 []) >>= \case
@@ -201,9 +199,9 @@ streamingTermination = do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
 
       -- Start serverside MQTT adaptor
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptor") testBaseTopic methodMap) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        withMQTTGRPCClient testLogger (awsConfig & setConnectionId testClientId) $ \client -> do
+        withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
           let AddHello _ mqttHelloSS = addHelloMqttClient client testBaseTopic
           let testInput = SSRqt "Alice" 1
               request = MQTTReaderRequest testInput 20 [] (streamTester (assertContains "Alice" . ssrpyGreeting))
@@ -216,7 +214,7 @@ testTimeout :: Assertion
 testTimeout = do
   awsConfig <- getTestConfig
 
-  withMQTTGRPCClient testLogger (awsConfig & setConnectionId testClientId) $ \client -> do
+  withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
     let AddHello mqttAdd mqttHelloSS = addHelloMqttClient client testBaseTopic
 
     addResponse <- timeit 3 $ mqttAdd (MQTTNormalRequest (TwoInts 9 16) 2 [])
@@ -240,10 +238,10 @@ basicUnary = do
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
       -- Start serverside MQTT adaptor
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptorBU") testBaseTopic methodMap) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorBU"} testBaseTopic methodMap) $ \_adaptorThread -> do
         --Delay to allow remote client to start receiving MQTT messages
         sleep 1
-        withMQTTGRPCClient testLogger (awsConfig & setConnectionId (testClientId <> "BU")) $ \client -> do
+        withMQTTGRPCClient testLogger awsConfig{_connID = testClientId <> "BU"} $ \client -> do
           let AddHello mqttAdd _ = addHelloMqttClient client testBaseTopic
           let testInput = TwoInts 4 6
               expectedResult = OneInt 10
@@ -265,9 +263,9 @@ basicServerStreaming = do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
 
       -- Start serverside MQTT adaptor
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptorSS") testBaseTopic methodMap) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        testHelloCall (awsConfig & setConnectionId (testClientId <> "SS"))
+        testHelloCall awsConfig{_connID = testClientId <> "SS"}
 
 missingClientError :: Assertion
 missingClientError = do
@@ -278,9 +276,9 @@ missingClientError = do
     -- Get gRPC Client
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \_grpcClient -> do
       -- Start serverside MQTT adaptor
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptorSS") testBaseTopic []) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic []) $ \_adaptorThread -> do
         sleep 1
-        withMQTTGRPCClient testLogger (awsConfig & setConnectionId (testClientId <> "SS")) $ \client -> do
+        withMQTTGRPCClient testLogger awsConfig{_connID = testClientId <> "SS"} $ \client -> do
           let AddHello _ mqttHelloSS = addHelloMqttClient client testBaseTopic
               testInput = SSRqt "Alice" 2
               request = MQTTReaderRequest testInput 5 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
@@ -305,15 +303,15 @@ twoServers = do
           methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2
           let methodMap = methodMapAH <> methodMapMG
           -- Start serverside MQTT adaptor
-          withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "testMachineSSAdaptorTS") testBaseTopic methodMap) $ \_adaptorThread -> do
+          withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorTS"} testBaseTopic methodMap) $ \_adaptorThread -> do
             sleep 1
             -- Server 1
-            testAddCall (awsConfig & setConnectionId "testclientTS1")
-            testHelloCall (awsConfig & setConnectionId "testclientTS2")
+            testAddCall awsConfig{_connID = "testclientTS1"}
+            testHelloCall awsConfig{_connID = "testclientTS2"}
 
             -- Server 2
-            testMultCall (awsConfig & setConnectionId "testclientTS3")
-            testGoodbyeCall (awsConfig & setConnectionId "testclientTS4")
+            testMultCall awsConfig{_connID = "testclientTS3"}
+            testGoodbyeCall awsConfig{_connID = "testclientTS4"}
 
 testAddCall :: MQTTGRPCConfig -> Assertion
 testAddCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
@@ -363,15 +361,16 @@ testGoodbyeCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
 
 mqttLatency :: Assertion
 mqttLatency = do
-  let testTopic = "testMachine/messages"
+  let testTopic = "testMachine" <> "messages"
   let subOpts = subOptions{_subQoS = QoS1}
 
   cfg <- getTestConfig
   done <- newEmptyMVar
   let awsConfig =
         cfg
-          & setCallback (SimpleCallback $ \_ _ _ _ -> getCurrentTime >>= putMVar done)
-          & setConnectionId "latencyTester"
+          { _msgCB = SimpleCallback $ \_ _ _ _ -> getCurrentTime >>= putMVar done
+          , _connID = "latencyTester"
+          }
 
   mc <- timeit 1 $ connectMQTT awsConfig
 
@@ -396,9 +395,9 @@ malformedMessage = do
     withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient -> do
       methodMap <- addHelloRemoteClientMethodMap grpcClient
       -- Start serverside MQTT adapter
-      withAsync (runRemoteClient testLogger (awsConfig & setConnectionId "errorTesterRC") testBaseTopic methodMap) $ \_adaptorThread -> do
+      withAsync (runRemoteClient testLogger awsConfig{_connID = "errorTesterRC"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        withMQTTGRPCClient testLogger (awsConfig & setConnectionId (testClientId <> "errorTester")) $ \client -> do
+        withMQTTGRPCClient testLogger awsConfig{_connID = testClientId <> "errorTester"} $ \client -> do
           -- Publish message for non-existent service
           publishq (mqttClient client) (testBaseTopic <> "grpc" <> "request" <> "bad" <> "service") "blah" False QoS1 []
           sleep 1

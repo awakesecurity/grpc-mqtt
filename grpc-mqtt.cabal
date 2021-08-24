@@ -88,6 +88,7 @@ library
   hs-source-dirs:     src gen
   build-depends:      base64
                     , conduit-extra
+                    , connection
                     , mtl
                     , network-conduit-tls
                     , nonce

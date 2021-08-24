@@ -10,10 +10,9 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig,
+  MQTTGRPCConfig (_msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
-  setCallback,
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (
@@ -110,7 +109,7 @@ runRemoteClient ::
   IO ()
 runRemoteClient logger cfg baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
-  let gatewayConfig = cfg & setCallback (gatewayHandler currentSessions)
+  let gatewayConfig = cfg{_msgCB = gatewayHandler currentSessions}
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 

@@ -11,48 +11,12 @@ module Network.GRPC.MQTT.Wrapping where
 import Relude
 
 import Network.GRPC.MQTT.Types (
-  ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
+  ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
   MQTTResult (..),
  )
 import Network.MQTT.Topic (Topic (unTopic))
 
-import Proto.Mqtt as Proto (
-  List (List, listValue),
-  MetadataMap (MetadataMap),
-  RCError (..),
-  RemoteClientError (..),
-  RemoteClientErrorExtra (..),
-  StreamResponse (
-    StreamResponse,
-    streamResponseDetails,
-    streamResponseMetamap,
-    streamResponseResponseCode
-  ),
-  UnaryResponse (
-    UnaryResponse,
-    unaryResponseBody,
-    unaryResponseDetails,
-    unaryResponseInitMetamap,
-    unaryResponseResponseCode,
-    unaryResponseTrailMetamap
-  ),
-  WrappedMQTTRequest (WrappedMQTTRequest),
-  WrappedStreamChunk (WrappedStreamChunk),
-  WrappedStreamChunkOrError (
-    WrappedStreamChunkOrErrorError,
-    WrappedStreamChunkOrErrorValue
-  ),
-  WrappedStreamResponse (WrappedStreamResponse),
-  WrappedStreamResponseOrError (
-    WrappedStreamResponseOrErrorError,
-    WrappedStreamResponseOrErrorResponse
-  ),
-  WrappedUnaryResponse (WrappedUnaryResponse),
-  WrappedUnaryResponseOrErr (
-    WrappedUnaryResponseOrErrError,
-    WrappedUnaryResponseOrErrResponse
-  ), Packet
- )
+import Proto.Mqtt as Proto
 
 import Control.Exception (ErrorCall, try)
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
@@ -67,13 +31,14 @@ import Network.GRPC.HighLevel as HL (
  )
 import Network.GRPC.HighLevel.Client (
   ClientError (..),
-  ClientRequest (ClientNormalRequest, ClientReaderRequest),
+  ClientRequest (ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
   ClientResult (
     ClientErrorResponse,
     ClientNormalResponse,
-    ClientReaderResponse
+    ClientReaderResponse,
+    ClientWriterResponse
   ),
-  GRPCMethodType (Normal, ServerStreaming),
+  GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
  )
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.Unsafe (CallError (..))
@@ -84,6 +49,7 @@ import Proto3.Suite (
   toLazyByteString,
  )
 import Proto3.Wire.Decode (ParseError (..))
+import qualified Data.ByteString as BS
 
 -- Client Wrappers
 wrapUnaryClientHandler ::
@@ -105,6 +71,14 @@ wrapServerStreamingClientHandler handler =
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)
+
+wrapClientStreamingClientHandler ::
+  (Message request, Message response) =>
+  (ClientRequest 'ClientStreaming request response -> IO (ClientResult 'ClientStreaming response)) ->
+  ClientHandler
+wrapClientStreamingClientHandler handler =
+  ClientClientStreamHandler $ \timeout metadata send -> do
+    handler (ClientWriterRequest timeout metadata send)
 
 -- Requests
 wrapRequest ::
@@ -163,6 +137,52 @@ unwrapUnaryResponse wrappedMessage = either id id parsedResult
           (maybe mempty toMetadataMap unaryResponseTrailMetamap)
           statusCode
           (toStatusDetails unaryResponseDetails)
+
+-- Client Streaming Wrappers
+wrapClientStreamResponse :: (Message response) => ClientResult 'ClientStreaming response -> LByteString
+wrapClientStreamResponse res =
+  toLazyByteString . WrappedClientStreamResponse . Just $
+    case res of
+      ClientWriterResponse rspBody initMD trailMD rspCode details ->
+        WrappedClientStreamResponseOrErrorResponse $
+          ClientStreamResponse
+            (maybe mempty toBS rspBody)
+            (Just $ fromMetadataMap initMD)
+            (Just $ fromMetadataMap trailMD)
+            (fromStatusCode rspCode)
+            (fromStatusDetails details)
+      ClientErrorResponse err ->
+        WrappedClientStreamResponseOrErrorError $ toRemoteClientError err
+
+unwrapClientStreamResponse :: forall response . (Message response) => LByteString -> MQTTResult 'ClientStreaming response
+unwrapClientStreamResponse wrappedMessage = either id id parsedResult
+ where
+  parsedResult :: Either (MQTTResult 'ClientStreaming response) (MQTTResult 'ClientStreaming response)
+  parsedResult = do
+    WrappedClientStreamResponse mResponse <- parseWithClientError (toStrict wrappedMessage)
+    ClientStreamResponse{..} <- case mResponse of
+      Nothing -> Left $ MQTTError "Empty response"
+      Just (WrappedClientStreamResponseOrErrorError err) -> Left $ fromRemoteClientError err
+      Just (WrappedClientStreamResponseOrErrorResponse resp) -> Right resp
+
+    statusCode <- case toStatusCode clientStreamResponseResponseCode of
+      Nothing -> Left $ MQTTError ("Invalid reponse code: " <> show clientStreamResponseResponseCode)
+      Just sc -> Right sc
+
+    response <-
+      if BS.null clientStreamResponseBody
+        then Right Nothing
+        else Just <$> parseWithClientError clientStreamResponseBody
+
+    return $
+      GRPCResult $
+        ClientWriterResponse
+          response
+          (maybe mempty toMetadataMap clientStreamResponseInitMetamap)
+          (maybe mempty toMetadataMap clientStreamResponseTrailMetamap)
+          statusCode
+          (toStatusDetails clientStreamResponseDetails)
+
 
 -- Streaming Wrappers
 wrapStreamInitMetadata :: HL.MetadataMap -> LByteString

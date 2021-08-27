@@ -18,10 +18,10 @@ import Relude
 import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client (
   ClientResult,
-  GRPCMethodType (Normal, ServerStreaming),
+  GRPCMethodType (Normal, ServerStreaming, ClientStreaming),
   MetadataMap,
   StreamRecv,
-  TimeoutSeconds,
+  TimeoutSeconds, StreamSend
  )
 import Network.GRPC.LowLevel (ClientCall)
 import Proto3.Suite (Message)
@@ -29,9 +29,10 @@ import Proto3.Suite (Message)
 -- | Represents the session ID for a request
 type SessionId = Text
 
--- | Analogs of 'GRPCRequest' with the unused fields removed
+-- | Analogs of 'ClientRequest' from grpc-haskell with the unused fields removed
 data MQTTRequest (streamType :: GRPCMethodType) request response where
   MQTTNormalRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> MQTTRequest 'Normal request response
+  MQTTWriterRequest :: TimeoutSeconds -> HL.MetadataMap -> (StreamSend request -> IO ()) -> MQTTRequest 'ClientStreaming request response
   MQTTReaderRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> (HL.MetadataMap -> StreamRecv response -> IO ()) -> MQTTRequest 'ServerStreaming request response
 
 {- | The result of a gRPC request that makes a distinction between
@@ -49,6 +50,10 @@ data ClientHandler where
   ClientUnaryHandler ::
     (Message response) =>
     (ByteString -> TimeoutSeconds -> MetadataMap -> IO (ClientResult 'Normal response)) ->
+    ClientHandler
+  ClientClientStreamHandler ::
+    (Message request, Message response) =>
+    (TimeoutSeconds -> MetadataMap -> (StreamSend request -> IO ()) -> IO (ClientResult 'ClientStreaming response)) ->
     ClientHandler
   ClientServerStreamHandler ::
     (Message response) =>

@@ -12,7 +12,7 @@ import Network.GRPC.MQTT (
   ProtocolLevel (Protocol311),
  )
 import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..), defaultMGConfig)
-import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
+import Network.GRPC.MQTT.Logging (Logger (..), Verbosity (Debug))
 
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
@@ -50,7 +50,7 @@ import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
 
 testLogger :: Logger
-testLogger = noLogging
+testLogger = Logger print Debug
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTGRPCConfig
 awsMqttConfig hostName cred certStore =

@@ -10,7 +10,7 @@ module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 import Relude
 
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (_msgCB, mqttMsgSizeLimit),
+  MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
   toFilter,
@@ -24,12 +24,14 @@ import Network.GRPC.MQTT.Logging (
  )
 import Network.GRPC.MQTT.Sequenced (mkPublish)
 import Network.GRPC.MQTT.Types (
-  ClientHandler (ClientServerStreamHandler, ClientUnaryHandler),
+  ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
   MethodMap,
   SessionId,
  )
 import Network.GRPC.MQTT.Wrapping (
   toMetadataMap,
+  unwrapStreamChunk,
+  wrapClientStreamResponse,
   wrapMQTTError,
   wrapStreamChunk,
   wrapStreamInitMetadata,
@@ -41,7 +43,7 @@ import Control.Exception (bracket)
 import Control.Monad.Except (throwError)
 import Data.HashMap.Strict (lookup)
 import qualified Data.Map.Strict as Map
-import Network.GRPC.HighLevel (GRPCIOError)
+import Network.GRPC.HighLevel (GRPCIOError, StreamSend)
 import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client (
   ClientError (ClientIOError),
@@ -76,7 +78,7 @@ import Proto3.Suite (
   fromByteString,
  )
 import Turtle (NominalDiffTime)
-import UnliftIO (timeout)
+import UnliftIO (TChan, newTChanIO, readTChan, timeout, writeTChan)
 import UnliftIO.Async (
   Async,
   async,
@@ -109,7 +111,8 @@ runRemoteClient ::
   IO ()
 runRemoteClient logger cfg baseTopic methodMap = do
   currentSessions <- newTVarIO mempty
-  let gatewayConfig = cfg{_msgCB = gatewayHandler currentSessions}
+  bsGlobalChan <- newTChanIO
+  let gatewayConfig = cfg{_msgCB = gatewayHandler bsGlobalChan currentSessions}
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
@@ -130,16 +133,17 @@ runRemoteClient logger cfg baseTopic methodMap = do
               logger
               "MQTT client connection terminated normally"
  where
-  gatewayHandler :: SessionMap -> MessageCallback
-  gatewayHandler currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
+  gatewayHandler :: TChan LByteString -> SessionMap -> MessageCallback
+  gatewayHandler bsGlobalChan currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
     logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
 
     result <- tryAny $ case split topic of
       [_, _, "grpc", "request", service, method] -> do
         let grpcMethod = encodeUtf8 ("/" <> unTopic service <> "/" <> unTopic method)
         let maxMsgSize = fromIntegral $ mqttMsgSizeLimit cfg
-        makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage
+        makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage
       [_, _, "grpc", "session", sessionId, "control"] -> manageSession logger currentSessions (unTopic sessionId) mqttMessage
+      [_, _, "grpc", "session", _sessionId, "stream"] -> atomically $ writeTChan bsGlobalChan mqttMessage
       _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
 
     -- Catch and print any synchronous exception. We don't want an exception
@@ -149,6 +153,7 @@ runRemoteClient logger cfg baseTopic methodMap = do
 
 -- | Perform the local gRPC call and publish the response
 makeGRPCRequest ::
+  TChan LByteString ->
   Logger ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   Int64 ->
@@ -163,7 +168,7 @@ makeGRPCRequest ::
   -- | The raw MQTT message
   LByteString ->
   IO ()
-makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage = do
+makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client grpcMethod mqttMessage = do
   logInfo logger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
 
   (WrappedMQTTRequest lResponseTopic timeLimit reqMetadata payload) <-
@@ -202,9 +207,23 @@ makeGRPCRequest logger maxMsgSize methodMap currentSessions client grpcMethod mq
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
       publish $ wrapUnaryResponse response
 
+    -- Run Client Streaming Request
+    Just (ClientClientStreamHandler handler) -> do
+      logDebug logger . tagSession $ "Found reader streaming client handler for: " <> decodeUtf8 grpcMethod
+      let streamTopic = toFilter $ responseTopic <> "stream"
+      let readChan :: (Message request) => IO (Maybe request)
+          readChan = do
+            r <- atomically (readTChan bsGlobalChan)
+            case unwrapStreamChunk (Right (toStrict r)) of
+              Left err -> print err >> pure Nothing
+              Right x -> pure x
+
+      response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSend client streamTopic readChan)
+      publish $ wrapClientStreamResponse response
+
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
-      logDebug logger . tagSession $ "Found streaming client handler for: " <> decodeUtf8 grpcMethod
+      logDebug logger . tagSession $ "Found writer streaming client handler for: " <> decodeUtf8 grpcMethod
       getSessionId currentSessions responseTopic >>= \case
         Left err -> do
           logErr logger . tagSession $ err
@@ -326,3 +345,21 @@ streamReader publish _cc initMetadata recv = do
       Right chunk -> do
         publish $ wrapStreamChunk chunk
         when (isJust chunk) readLoop
+
+-- StreamSend request ~ (request -> IO (Either GRPCIOError ()))
+streamSend :: forall request. MQTTClient -> Filter -> IO (Maybe request) -> StreamSend request -> IO ()
+streamSend client streamTopic readChunk send = do
+  (subResults, _) <- subscribe client [(streamTopic, subOptions{_subQoS = QoS1})] []
+  case subResults of
+    [Left subErr] ->
+      throwString $
+        "Failed to subscribe to the topic: " <> show streamTopic <> "Reason: " <> show subErr
+    _ -> loop
+      where
+        loop =
+          readChunk >>= \case
+            Nothing -> pure ()
+            Just chunk -> do
+              _ <- send chunk
+              loop
+      

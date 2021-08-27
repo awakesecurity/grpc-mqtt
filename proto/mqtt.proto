@@ -62,6 +62,21 @@ message WrappedStreamChunk {
   }
 }
 
+message WrappedClientStreamResponse {
+  oneof or_error {
+    ClientStreamResponse response = 1;
+    RemoteClientError error = 2;
+  }
+}
+
+message ClientStreamResponse {
+  bytes body = 1;
+  MetadataMap init_metamap = 2;
+  MetadataMap trail_metamap = 3;
+  int32 response_code = 4;
+  string details = 5;
+}
+
 message WrappedStreamResponse {
   oneof or_error {
     StreamResponse response = 1;

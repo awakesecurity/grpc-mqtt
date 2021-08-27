@@ -21,7 +21,7 @@ import Proto.Mqtt (
  )
 
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig(_msgCB),
+  MQTTGRPCConfig (_msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
   toFilter,
@@ -29,17 +29,19 @@ import Network.GRPC.MQTT.Core (
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkReadResponse)
 import Network.GRPC.MQTT.Types (
-  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
+  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
   MQTTResult (GRPCResult, MQTTError),
  )
 import Network.GRPC.MQTT.Wrapping (
   fromRemoteClientError,
   parseErrorToRCE,
   toMetadataMap,
+  unwrapClientStreamResponse,
   unwrapStreamChunk,
   unwrapStreamResponse,
   unwrapUnaryResponse,
   wrapRequest,
+  wrapStreamChunk,
  )
 
 import Control.Exception (bracket, throw)
@@ -68,7 +70,9 @@ import Network.MQTT.Client (
 import Network.MQTT.Topic (Topic (unTopic), mkTopic)
 import Proto3.Suite (
   Enumerated (Enumerated),
+  HasDefault,
   Message,
+  def,
   fromByteString,
   toLazyByteString,
  )
@@ -109,7 +113,7 @@ withMQTTGRPCClient logger cfg =
 -}
 mqttRequest ::
   forall request response streamtype.
-  (Message request, Message response) =>
+  (Message request, Message response, HasDefault request) =>
   MQTTGRPCClient ->
   Topic ->
   MethodName ->
@@ -129,7 +133,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
   let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
       publishRequest req timeLimit reqMetadata = do
-        logDebug mqttLogger $ "Publishing message to topic: " <> unTopic responseTopic
+        logDebug mqttLogger $ "Publishing message to topic: " <> unTopic requestTopic
         let wrappedReq = wrapRequest responseTopic timeLimit reqMetadata req
         publishq mqttClient requestTopic wrappedReq False QoS1 []
 
@@ -164,6 +168,26 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
             publishRequest req timeLimit reqMetadata
             sendTerminateOnException $
               either fromRemoteClientError unwrapUnaryResponse <$> readResponse
+
+        -- Client Streaming Requests
+        MQTTWriterRequest timeLimit initMetadata streamHandler ->
+          grpcTimeout timeLimit $ do
+            -- send initMetadata
+            publishRequest def timeLimit initMetadata
+
+            sleep 2
+
+            -- do client streaming
+            let publishStream :: Maybe request -> IO (Either GRPCIOError ())
+                publishStream req = do
+                  let streamTopic = responseTopic <> "stream"
+                  logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic streamTopic
+                  let wrappedReq = wrapStreamChunk req
+                  publishq mqttClient streamTopic wrappedReq False QoS1 []
+                  return $ Right ()
+            streamHandler (publishStream . Just)
+            _ <- publishStream Nothing
+            either fromRemoteClientError unwrapClientStreamResponse <$> readResponse
 
         -- Server Streaming Requests
         MQTTReaderRequest req timeLimit reqMetadata streamHandler ->

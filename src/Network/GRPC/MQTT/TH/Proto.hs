@@ -1,9 +1,8 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -12,7 +11,11 @@ module Network.GRPC.MQTT.TH.Proto where
 
 import Relude hiding (FilePath)
 
-import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
+import Network.GRPC.MQTT.Wrapping (
+  wrapClientStreamingClientHandler,
+  wrapServerStreamingClientHandler,
+  wrapUnaryClientHandler,
+ )
 
 import Language.Haskell.TH (Name, Q, mkName)
 import Proto3.Suite.DotProto.AST (
@@ -68,7 +71,8 @@ forEachService protoFilepath action =
                         case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
                           (NonStreaming, Streaming) -> pure 'wrapServerStreamingClientHandler
                           (NonStreaming, NonStreaming) -> pure 'wrapUnaryClientHandler
-                          _ -> _unimplementedError "Client streaming not supported"
+                          (Streaming, NonStreaming) -> pure 'wrapClientStreamingClientHandler
+                          _ -> _unimplementedError "Bidirectional streaming not supported"
                       clientFun <- prefixedFieldName serviceName nm
                       return [(endpointPrefix <> nm, streamingWrapper, mkName clientFun)]
                     _ -> invalidMethodNameError rpcMethodName

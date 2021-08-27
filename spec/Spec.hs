@@ -141,7 +141,7 @@ except name (k, v) = HashMap.insert k v <$> plain name
 specProp :: (?constants :: Constants) => Invariant SpecGRPCMQTT Bool
 specProp = do
   let Constants {..} = ?constants
-  msgOrder /\ liveness
+  liveness
   where
     -- TODO: quotient msgId = msgId'
     doesDecrement :: Maybe Message -> Maybe Message -> Bool
@@ -165,15 +165,25 @@ specProp = do
       let Constants {..} = ?constants
       messages  <- Set.fromList <$> plain #messages
       messages' <- Set.fromList <$> prime #messages
-      case Set.toList (messages' `Set.difference` messages) of
-        [msg] -> do
+      let newMsg = messages' `Set.difference` messages
+      if null newMsg
+        then return False
+        else do
           processes <- plain #processes
-          let p = flip any processes \(Process maybeMsg) -> case maybeMsg of
-                Nothing -> False
-                Just msg' -> do
-                  trace (show msg') (msgId msg == msgId msg')
-          return p
-        _ -> return False
+          and <$> forM (Set.toList newMsg) \msg ->
+            or <$> forM processes \process -> case channel process of
+              Nothing -> return False
+              Just msg' -> return (msgId msg == msgId msg')
+
+      -- case Set.toList (messages' `Set.difference` messages) of
+      --   [msg] -> do
+      --     processes <- plain #processes
+      --     let p = flip any processes \(Process maybeMsg) -> case maybeMsg of
+      --           Nothing -> False
+      --           Just msg' -> do
+      --             trace (show msg') (msgId msg == msgId msg')
+      --     return p
+      --   _ -> return True
 
 
       -- -- [x, y, z]
@@ -181,11 +191,6 @@ specProp = do
       -- if null newMsg
       --   then return True
       --   else eventually do
-      --     processes <- plain #processes
-      --     and <$> forM (Set.toList newMsg) \msg ->
-      --       or <$> forM processes \process -> case channel process of
-      --         Nothing -> return False
-      --         Just msg' -> return (msgId msg == msgId msg')
 
 
 

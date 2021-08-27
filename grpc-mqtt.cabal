@@ -15,7 +15,6 @@ common shared-settings
   default-language:   Haskell2010 
   ghc-options:        -Wall
                       -Wcompat
-                      -Werror
                       -Widentities
                       -Wincomplete-record-updates
                       -Wincomplete-uni-patterns
@@ -122,5 +121,6 @@ test-suite grpc-mqtt-spec
   main-is:            Spec.hs
   build-depends:
       grpc-mqtt
+    , hashable
     , spectacle == 0.1.0
     , unordered-containers

@@ -1,9 +1,9 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.GRPC.MQTT.Core (
@@ -12,10 +12,12 @@ module Network.GRPC.MQTT.Core (
   heartbeatPeriodSeconds,
   toFilter,
   defaultMGConfig,
+  subscribeOrThrow,
 ) where
 
 import Relude
 
+import Control.Exception (throw)
 import Data.Conduit.Network (
   AppData,
   ClientSettings,
@@ -34,10 +36,15 @@ import Network.MQTT.Client (
   MQTTClient,
   MQTTConduit,
   MQTTConfig (..),
+  MQTTException (MQTTException),
   MessageCallback (NoCallback),
+  QoS (QoS1),
+  SubOptions (_subQoS),
   runMQTTConduit,
+  subOptions,
+  subscribe,
  )
-import Network.MQTT.Topic (Filter, Topic (unTopic), mkFilter)
+import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic), mkFilter)
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311))
 import Relude.Unsafe (fromJust)
 import Turtle (NominalDiffTime)
@@ -48,11 +55,10 @@ import Turtle (NominalDiffTime)
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
-    -- | Maximum size for an MQTT message in bytes
-  , mqttMsgSizeLimit :: Int
-  
-  -- Copy of MQTTConfig
-  , _cleanSession :: Bool
+  , -- | Maximum size for an MQTT message in bytes
+    mqttMsgSizeLimit :: Int
+  , -- Copy of MQTTConfig
+    _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback
   , _protocol :: ProtocolLevel
@@ -120,3 +126,11 @@ heartbeatPeriodSeconds = 10
 -}
 toFilter :: Topic -> Filter
 toFilter = fromJust . mkFilter . unTopic
+
+subscribeOrThrow :: MQTTClient -> Filter -> IO ()
+subscribeOrThrow client topic =
+  subscribe client [(topic, subOptions{_subQoS = QoS1})] [] >>= \case
+    ([Left subErr], _) ->
+      throw . MQTTException $
+        "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
+    _ -> pure ()

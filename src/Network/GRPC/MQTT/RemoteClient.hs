@@ -13,6 +13,7 @@ import Network.GRPC.MQTT.Core (
   MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
+  subscribeOrThrow,
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (
@@ -51,21 +52,15 @@ import Network.GRPC.HighLevel.Client (
  )
 import Network.MQTT.Client (
   MQTTClient,
-  MQTTException,
   MessageCallback (SimpleCallback),
-  QoS (QoS1),
-  SubOptions (_subQoS),
   normalDisconnect,
-  subOptions,
-  subscribe,
   unsubscribe,
   waitForClient,
  )
 import Network.MQTT.Topic (
-  Filter (unFilter),
   Topic (unTopic),
   mkTopic,
-  split,
+  split, Filter
  )
 import Proto.Mqtt (
   AuxControl (AuxControlAlive, AuxControlTerminate),
@@ -86,7 +81,8 @@ import UnliftIO.Async (
   waitEither,
   withAsync,
  )
-import UnliftIO.Exception (throwString, try, tryAny)
+import UnliftIO.Exception (handle, throwString, tryAny)
+import Network.GRPC.MQTT (MQTTException)
 
 -- | A shared map of all currently running sessions
 type SessionMap = TVar (Map SessionId Session)
@@ -116,22 +112,18 @@ runRemoteClient logger cfg baseTopic methodMap = do
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
-    -- Subscribe to listen for all gRPC requests
-    let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+"
-    (subResults, _) <- subscribe gatewayMQTTClient [(grpcRequestsFilter, subOptions{_subQoS = QoS1})] []
-    case subResults of
-      [Left subErr] ->
-        logErr logger $
-          "Remote Client failed to subscribe to the topic: " <> unFilter grpcRequestsFilter <> "Reason: " <> show subErr
-      _ -> do
-        try (waitForClient gatewayMQTTClient) >>= \case
-          Left (e :: MQTTException) ->
-            logErr logger $
-              "MQTT client connection terminated with exception: " <> toText (displayException e)
-          Right () ->
-            logInfo
-              logger
-              "MQTT client connection terminated normally"
+    let logMQTTException :: MQTTException -> IO ()
+        logMQTTException e =
+          logErr logger $
+            "MQTT client connection terminated with exception: " <> toText (displayException e)
+
+    handle logMQTTException $ do
+      let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+"
+      subscribeOrThrow gatewayMQTTClient grpcRequestsFilter
+
+      waitForClient gatewayMQTTClient
+
+      logInfo logger "MQTT client connection terminated normally"
  where
   gatewayHandler :: TChan LByteString -> SessionMap -> MessageCallback
   gatewayHandler bsGlobalChan currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
@@ -203,13 +195,11 @@ makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client 
       publish $ wrapMQTTError errMsg
     -- Run Unary Request
     Just (ClientUnaryHandler handler) -> do
-      logDebug logger . tagSession $ "Found unary client handler for: " <> decodeUtf8 grpcMethod
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
       publish $ wrapUnaryResponse response
 
     -- Run Client Streaming Request
     Just (ClientClientStreamHandler handler) -> do
-      logDebug logger . tagSession $ "Found reader streaming client handler for: " <> decodeUtf8 grpcMethod
       let streamTopic = toFilter $ responseTopic <> "stream"
       let readChan :: (Message request) => IO (Maybe request)
           readChan = do
@@ -223,7 +213,6 @@ makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client 
 
     -- Run Server Streaming Request
     Just (ClientServerStreamHandler handler) -> do
-      logDebug logger . tagSession $ "Found writer streaming client handler for: " <> decodeUtf8 grpcMethod
       getSessionId currentSessions responseTopic >>= \case
         Left err -> do
           logErr logger . tagSession $ err
@@ -231,6 +220,21 @@ makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client 
         Right sessionId -> do
           bracket (sessionInit sessionId) (sessionCleanup sessionId) waitWithHeartbeatMonitor
      where
+      sessionInit :: Text -> IO Session
+      sessionInit sessionId = do
+        subscribeOrThrow client controlFilter
+
+        logInfo logger . tagSession $ "Begin new streaming session"
+
+        newSession <-
+          Session
+            <$> async runHandler
+            <*> newTMVarIO ()
+
+        atomically $ modifyTVar' currentSessions (Map.insert sessionId newSession)
+
+        return newSession
+
       controlFilter :: Filter
       controlFilter = toFilter responseTopic <> "control"
 
@@ -238,25 +242,6 @@ makeGRPCRequest bsGlobalChan logger maxMsgSize methodMap currentSessions client 
       runHandler = do
         handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publish)
           >>= publish . wrapStreamResponse
-
-      sessionInit :: Text -> IO Session
-      sessionInit sessionId = do
-        (subResults, _) <- subscribe client [(controlFilter, subOptions{_subQoS = QoS1})] []
-        case subResults of
-          [Left subErr] ->
-            throwString $
-              "Failed to subscribe to the topic: " <> show controlFilter <> "Reason: " <> show subErr
-          _ -> do
-            logInfo logger . tagSession $ "Begin new streaming session"
-
-            newSession <-
-              Session
-                <$> async runHandler
-                <*> newTMVarIO ()
-
-            atomically $ modifyTVar' currentSessions (Map.insert sessionId newSession)
-
-            return newSession
 
       sessionCleanup :: Text -> Session -> IO ()
       sessionCleanup sessionId session = do
@@ -349,17 +334,9 @@ streamReader publish _cc initMetadata recv = do
 -- StreamSend request ~ (request -> IO (Either GRPCIOError ()))
 streamSend :: forall request. MQTTClient -> Filter -> IO (Maybe request) -> StreamSend request -> IO ()
 streamSend client streamTopic readChunk send = do
-  (subResults, _) <- subscribe client [(streamTopic, subOptions{_subQoS = QoS1})] []
-  case subResults of
-    [Left subErr] ->
-      throwString $
-        "Failed to subscribe to the topic: " <> show streamTopic <> "Reason: " <> show subErr
-    _ -> loop
-      where
-        loop =
-          readChunk >>= \case
-            Nothing -> pure ()
-            Just chunk -> do
-              _ <- send chunk
-              loop
-      
+  subscribeOrThrow client streamTopic
+  loop
+ where
+  loop = whenJustM readChunk $ \chunk -> do
+    _ <- send chunk
+    loop

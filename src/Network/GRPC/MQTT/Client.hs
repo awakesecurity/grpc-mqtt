@@ -24,6 +24,7 @@ import Network.GRPC.MQTT.Core (
   MQTTGRPCConfig (_msgCB),
   connectMQTT,
   heartbeatPeriodSeconds,
+  subscribeOrThrow,
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
@@ -61,11 +62,8 @@ import Network.MQTT.Client (
   MQTTException (MQTTException),
   MessageCallback (SimpleCallback),
   QoS (QoS1),
-  SubOptions (_subQoS),
   normalDisconnect,
   publishq,
-  subOptions,
-  subscribe,
  )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic)
 import Proto3.Suite (
@@ -79,7 +77,7 @@ import Proto3.Suite (
 import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
-import UnliftIO.Exception (onException, throwString)
+import UnliftIO.Exception (handle, onException, throwString)
 import UnliftIO.STM (
   TChan,
   newTChanIO,
@@ -152,75 +150,76 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   -- Build function to read response chunks in order
   readResponse <- mkReadResponse responseChan
 
+  let handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
+      handleMQTTException e = do
+        let errMsg = toText $ displayException e
+        logErr mqttLogger errMsg
+        return $ MQTTError errMsg
+
   -- Subscribe to response topic
-  (subResults, _) <- subscribe mqttClient [(toFilter responseTopic, subOptions{_subQoS = QoS1})] []
-  case subResults of
-    [Left subErr] -> do
-      let errMsg = "Failed to subscribe to the topic: " <> unTopic responseTopic <> "Reason: " <> show subErr
-      logErr mqttLogger errMsg
-      return $ MQTTError errMsg
-    _ -> do
-      -- Process request
-      case request of
-        -- Unary Requests
-        MQTTNormalRequest req timeLimit reqMetadata ->
-          grpcTimeout timeLimit $ do
-            publishRequest req timeLimit reqMetadata
-            sendTerminateOnException $
-              either fromRemoteClientError unwrapUnaryResponse <$> readResponse
+  handle handleMQTTException $ do
+    subscribeOrThrow mqttClient (toFilter responseTopic)
+    -- Process request
+    case request of
+      -- Unary Requests
+      MQTTNormalRequest req timeLimit reqMetadata ->
+        grpcTimeout timeLimit $ do
+          publishRequest req timeLimit reqMetadata
+          sendTerminateOnException $
+            either fromRemoteClientError unwrapUnaryResponse <$> readResponse
 
-        -- Client Streaming Requests
-        MQTTWriterRequest timeLimit initMetadata streamHandler ->
-          grpcTimeout timeLimit $ do
-            -- send initMetadata
-            publishRequest def timeLimit initMetadata
+      -- Client Streaming Requests
+      MQTTWriterRequest timeLimit initMetadata streamHandler ->
+        grpcTimeout timeLimit $ do
+          -- send initMetadata
+          publishRequest def timeLimit initMetadata
 
-            sleep 2
+          sleep 2
 
-            -- do client streaming
-            let publishStream :: Maybe request -> IO (Either GRPCIOError ())
-                publishStream req = do
-                  let streamTopic = responseTopic <> "stream"
-                  logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic streamTopic
-                  let wrappedReq = wrapStreamChunk req
-                  publishq mqttClient streamTopic wrappedReq False QoS1 []
-                  return $ Right ()
-            streamHandler (publishStream . Just)
-            _ <- publishStream Nothing
-            either fromRemoteClientError unwrapClientStreamResponse <$> readResponse
+          -- do client streaming
+          let publishStream :: Maybe request -> IO (Either GRPCIOError ())
+              publishStream req = do
+                let streamTopic = responseTopic <> "stream"
+                logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic streamTopic
+                let wrappedReq = wrapStreamChunk req
+                publishq mqttClient streamTopic wrappedReq False QoS1 []
+                return $ Right ()
+          streamHandler (publishStream . Just)
+          _ <- publishStream Nothing
+          either fromRemoteClientError unwrapClientStreamResponse <$> readResponse
 
-        -- Server Streaming Requests
-        MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
-          grpcTimeout timeLimit $ do
-            publishRequest req timeLimit reqMetadata
+      -- Server Streaming Requests
+      MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
+        grpcTimeout timeLimit $ do
+          publishRequest req timeLimit reqMetadata
 
-            let withMQTTHeartbeat :: IO a -> IO a
-                withMQTTHeartbeat action =
-                  withAsync
-                    (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
-                    (const action)
+          let withMQTTHeartbeat :: IO a -> IO a
+              withMQTTHeartbeat action =
+                withAsync
+                  (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
+                  (const action)
 
-            withMQTTHeartbeat . sendTerminateOnException $ do
-              let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
-                  readInitMetadata = do
-                    rsp <- readResponse
-                    return $
-                      fmap toMetadataMap . tryParse . toStrict =<< rsp
+          withMQTTHeartbeat . sendTerminateOnException $ do
+            let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
+                readInitMetadata = do
+                  rsp <- readResponse
+                  return $
+                    fmap toMetadataMap . tryParse . toStrict =<< rsp
 
-              -- Wait for initial metadata
-              readInitMetadata >>= \case
-                Left err -> do
-                  logErr mqttLogger $ "Failed to read initial metadata: " <> show err
-                  pure $ fromRemoteClientError err
-                Right metadata -> do
-                  -- Adapter to recieve stream from MQTT
-                  let mqttSRecv = unwrapStreamChunk . fmap toStrict <$> readResponse
+            -- Wait for initial metadata
+            readInitMetadata >>= \case
+              Left err -> do
+                logErr mqttLogger $ "Failed to read initial metadata: " <> show err
+                pure $ fromRemoteClientError err
+              Right metadata -> do
+                -- Adapter to recieve stream from MQTT
+                let mqttSRecv = unwrapStreamChunk . fmap toStrict <$> readResponse
 
-                  -- Run user-provided stream handler
-                  streamHandler metadata mqttSRecv
+                -- Run user-provided stream handler
+                streamHandler metadata mqttSRecv
 
-                  -- Return final result
-                  either fromRemoteClientError unwrapStreamResponse <$> readResponse
+                -- Return final result
+                either fromRemoteClientError unwrapStreamResponse <$> readResponse
 
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'

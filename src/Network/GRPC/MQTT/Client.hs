@@ -28,7 +28,7 @@ import Network.GRPC.MQTT.Core (
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkReadResponse)
+import Network.GRPC.MQTT.Sequenced (mkPublish, mkReadResponse)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
   MQTTResult (GRPCResult, MQTTError),
@@ -61,9 +61,7 @@ import Network.MQTT.Client (
   MQTTClient,
   MQTTException (MQTTException),
   MessageCallback (SimpleCallback),
-  QoS (QoS1),
   normalDisconnect,
-  publishq,
  )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic)
 import Proto3.Suite (
@@ -123,22 +121,25 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   sessionId <- generateSessionId rng
   let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
   let controlTopic = responseTopic <> "control"
+  let baseRequestTopic = baseTopic <> "grpc" <> "request" <> sessionId
 
   requestTopic <-
-    case mkTopic ("grpc/request" <> decodeUtf8 method) of
+    case mkTopic (unTopic baseRequestTopic <> decodeUtf8 method) of
       Nothing -> throwString $ "gRPC method forms invalid topic: " <> decodeUtf8 method
-      Just t -> pure $ baseTopic <> t
+      Just t -> pure t
 
+  publishReq <- mkPublish (logDebug mqttLogger) requestTopic mqttClient 128000
   let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
       publishRequest req timeLimit reqMetadata = do
         logDebug mqttLogger $ "Publishing message to topic: " <> unTopic requestTopic
         let wrappedReq = wrapRequest responseTopic timeLimit reqMetadata req
-        publishq mqttClient requestTopic wrappedReq False QoS1 []
+        publishReq wrappedReq
 
+  publishCtrl <- mkPublish (logDebug mqttLogger) controlTopic mqttClient 128000
   let publishControlMsg :: AuxControl -> IO ()
       publishControlMsg ctrl = do
-        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic responseTopic
-        publishq mqttClient controlTopic ctrlMessage False QoS1 []
+        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
+        publishCtrl ctrlMessage
        where
         ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
 
@@ -158,7 +159,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
   -- Subscribe to response topic
   handle handleMQTTException $ do
-    subscribeOrThrow mqttClient (toFilter responseTopic)
+    subscribeOrThrow mqttClient [toFilter responseTopic]
     -- Process request
     case request of
       -- Unary Requests
@@ -174,15 +175,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           -- send initMetadata
           publishRequest def timeLimit initMetadata
 
-          sleep 2
-
           -- do client streaming
           let publishStream :: Maybe request -> IO (Either GRPCIOError ())
               publishStream req = do
-                let streamTopic = responseTopic <> "stream"
-                logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic streamTopic
+                logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
                 let wrappedReq = wrapStreamChunk req
-                publishq mqttClient streamTopic wrappedReq False QoS1 []
+                publishReq wrappedReq
                 return $ Right ()
           streamHandler (publishStream . Just)
           _ <- publishStream Nothing

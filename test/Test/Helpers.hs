@@ -12,7 +12,7 @@ import Network.GRPC.MQTT (
   ProtocolLevel (Protocol311),
  )
 import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..), defaultMGConfig)
-import Network.GRPC.MQTT.Logging (Logger (..), Verbosity (Debug))
+import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
 
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
@@ -50,14 +50,13 @@ import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
 
 testLogger :: Logger
-testLogger = Logger print Debug
+testLogger = noLogging
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTGRPCConfig
 awsMqttConfig hostName cred certStore =
   defaultMGConfig
     { useTLS = True
     , mqttMsgSizeLimit = 128000
-    
     , _protocol = Protocol311
     , _hostname = hostName
     , _port = 8883

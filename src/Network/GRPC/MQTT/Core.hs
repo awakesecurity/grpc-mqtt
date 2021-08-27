@@ -31,6 +31,7 @@ import Data.Conduit.Network.TLS (
   runTLSClient,
   tlsClientConfig,
  )
+import qualified Data.List as L
 import Network.Connection (TLSSettings (TLSSettingsSimple))
 import Network.MQTT.Client (
   MQTTClient,
@@ -45,7 +46,7 @@ import Network.MQTT.Client (
   subscribe,
  )
 import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic), mkFilter)
-import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311))
+import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Relude.Unsafe (fromJust)
 import Turtle (NominalDiffTime)
 
@@ -127,10 +128,15 @@ heartbeatPeriodSeconds = 10
 toFilter :: Topic -> Filter
 toFilter = fromJust . mkFilter . unTopic
 
-subscribeOrThrow :: MQTTClient -> Filter -> IO ()
-subscribeOrThrow client topic =
-  subscribe client [(topic, subOptions{_subQoS = QoS1})] [] >>= \case
-    ([Left subErr], _) ->
-      throw . MQTTException $
-        "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
-    _ -> pure ()
+subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
+subscribeOrThrow client topics = do
+  let subTopics = zip topics (repeat subOptions{_subQoS = QoS1})
+  (subResults, _) <- subscribe client subTopics []
+  let taggedResults = zipWith (\t -> first (t,)) topics subResults
+  let subFailures = lefts taggedResults
+  unless (null subFailures) $ do
+    let err = L.unlines $ fmap errMsg subFailures
+    throw $ MQTTException err
+ where
+  errMsg :: (Filter, SubErr) -> String
+  errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr

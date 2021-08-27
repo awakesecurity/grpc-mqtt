@@ -47,7 +47,7 @@ import Network.GRPC.MQTT.Client (
   withMQTTGRPCClient,
  )
 import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (_connID, _msgCB, mqttMsgSizeLimit),
+  MQTTGRPCConfig (mqttMsgSizeLimit, _connID, _msgCB),
   connectMQTT,
   toFilter,
  )
@@ -72,7 +72,8 @@ import Network.GRPC.HighLevel.Client (
   ClientError (ClientIOError),
   ClientResult (..),
   Port,
-  StatusCode (StatusOk), StreamSend
+  StatusCode (StatusOk),
+  StreamSend,
  )
 import Network.GRPC.HighLevel.Generated (
   GRPCIOError (GRPCIOTimeout),
@@ -141,18 +142,17 @@ allTests :: TestTree
 allTests =
   testGroup "All Tests" $
     notParallel
-      [
-      --   ("Latency", mqttLatency)
-      -- , ("Basic Unary", basicUnary)
-      -- , ("Basic Server Streaming", basicServerStreaming)
-      ("Basic Client Streaming", basicClientStreaming)
-      -- , ("Two Servers", twoServers)
-      -- , ("Timeout", testTimeout)
-      -- , ("Persistent", persistentMQTT)
-      -- , ("Sequenced", testSequenced)
-      -- , ("Missing Client Error", missingClientError)
-      -- , ("Malformed Topic", malformedMessage)
-      -- , ("Packetized", packetizedMesssages)
+      [ ("Latency", mqttLatency)
+      , ("Basic Unary", basicUnary)
+      , ("Basic Server Streaming", basicServerStreaming)
+      , ("Basic Client Streaming", basicClientStreaming)
+      , ("Two Servers", twoServers)
+      , ("Timeout", testTimeout)
+      , ("Persistent", persistentMQTT)
+      , ("Sequenced", testSequenced)
+      , ("Missing Client Error", missingClientError)
+      , ("Malformed Topic", malformedMessage)
+      , ("Packetized", packetizedMesssages)
       ]
 
 persistentMQTT :: Assertion
@@ -285,7 +285,6 @@ basicClientStreaming = do
         sleep 1
         testSumCall awsConfig{_connID = testClientId <> "CS"}
 
-
 packetizedMesssages :: Assertion
 packetizedMesssages = do
   awsConfig <- getTestConfig
@@ -384,10 +383,7 @@ testSumCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
 clientStreamTester :: StreamSend OneInt -> IO ()
 clientStreamTester send = do
   eithers <- forM @[] [OneInt 1, OneInt 2, OneInt 3] $ \int -> do
-    putStrLn $ "clientStreamTester: " <> show int
-    x <- send int
-    print x
-    pure x
+    send int
   case sequence eithers of
     Left err -> assertFailure $ "Error while client streaming: " ++ show err
     Right _ -> pure ()

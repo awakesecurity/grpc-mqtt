@@ -89,7 +89,6 @@ runningSumHandler (ServerReaderRequest _metadata recv) = loop 0
  where
   loop !i = do
     msg <- recv
-    putStrLn $ "runningSumHandler: " <> show msg
     case msg of
       Left err ->
         return
@@ -101,7 +100,6 @@ runningSumHandler (ServerReaderRequest _metadata recv) = loop 0
           )
       Right (Just (OneInt x)) -> loop (i + x)
       Right Nothing -> do
-        putStrLn "runningSumHandler returning response"
         return
           ( ServerReaderResponse
               (Just (OneInt i))

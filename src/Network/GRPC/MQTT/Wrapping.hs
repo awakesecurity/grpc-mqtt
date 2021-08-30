@@ -14,11 +14,36 @@ import Network.GRPC.MQTT.Types (
   ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
   MQTTResult (..),
  )
-import Network.MQTT.Topic (Topic (unTopic))
 
-import Proto.Mqtt as Proto
+import Proto.Mqtt as Proto (
+  ClientStreamResponse (..),
+  List (List, listValue),
+  MetadataMap (MetadataMap),
+  Packet,
+  RCError (..),
+  RemoteClientError (..),
+  RemoteClientErrorExtra (..),
+  StreamResponse (..),
+  UnaryResponse (..),
+  WrappedClientStreamResponse (WrappedClientStreamResponse),
+  WrappedClientStreamResponseOrError (..),
+  WrappedMQTTRequest (WrappedMQTTRequest),
+  WrappedStreamChunk (WrappedStreamChunk),
+  WrappedStreamChunkOrError (
+    WrappedStreamChunkOrErrorError,
+    WrappedStreamChunkOrErrorValue
+  ),
+  WrappedStreamResponse (WrappedStreamResponse),
+  WrappedStreamResponseOrError (
+    WrappedStreamResponseOrErrorError,
+    WrappedStreamResponseOrErrorResponse
+  ),
+  WrappedUnaryResponse (..),
+  WrappedUnaryResponseOrErr (..),
+ )
 
 import Control.Exception (ErrorCall, try)
+import qualified Data.ByteString as BS
 import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import qualified Data.Map as M
 import qualified Data.Vector as V
@@ -49,7 +74,6 @@ import Proto3.Suite (
   toLazyByteString,
  )
 import Proto3.Wire.Decode (ParseError (..))
-import qualified Data.ByteString as BS
 
 -- Client Wrappers
 wrapUnaryClientHandler ::
@@ -83,15 +107,13 @@ wrapClientStreamingClientHandler handler =
 -- Requests
 wrapRequest ::
   (Message request) =>
-  Topic ->
   Int ->
   HL.MetadataMap ->
   request ->
   LByteString
-wrapRequest responseTopic timeout reqMetadata request =
+wrapRequest timeout reqMetadata request =
   toLazyByteString $
     WrappedMQTTRequest
-      (toLazy (unTopic responseTopic))
       (fromIntegral timeout)
       (Just $ fromMetadataMap reqMetadata)
       (toBS request)
@@ -154,7 +176,7 @@ wrapClientStreamResponse res =
       ClientErrorResponse err ->
         WrappedClientStreamResponseOrErrorError $ toRemoteClientError err
 
-unwrapClientStreamResponse :: forall response . (Message response) => LByteString -> MQTTResult 'ClientStreaming response
+unwrapClientStreamResponse :: forall response. (Message response) => LByteString -> MQTTResult 'ClientStreaming response
 unwrapClientStreamResponse wrappedMessage = either id id parsedResult
  where
   parsedResult :: Either (MQTTResult 'ClientStreaming response) (MQTTResult 'ClientStreaming response)
@@ -182,7 +204,6 @@ unwrapClientStreamResponse wrappedMessage = either id id parsedResult
           (maybe mempty toMetadataMap clientStreamResponseTrailMetamap)
           statusCode
           (toStatusDetails clientStreamResponseDetails)
-
 
 -- Streaming Wrappers
 wrapStreamInitMetadata :: HL.MetadataMap -> LByteString

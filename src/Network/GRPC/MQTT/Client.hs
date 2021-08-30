@@ -28,7 +28,7 @@ import Network.GRPC.MQTT.Core (
   toFilter,
  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkPublish, mkReadResponse)
+import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
 import Network.GRPC.MQTT.Types (
   MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
   MQTTResult (GRPCResult, MQTTError),
@@ -128,14 +128,22 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       Nothing -> throwString $ "gRPC method forms invalid topic: " <> decodeUtf8 method
       Just t -> pure t
 
-  publishReq <- mkPublish (logDebug mqttLogger) requestTopic mqttClient 128000
+  publishReq <- mkPacketizedPublish  mqttClient 128000 requestTopic
   let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
       publishRequest req timeLimit reqMetadata = do
         logDebug mqttLogger $ "Publishing message to topic: " <> unTopic requestTopic
-        let wrappedReq = wrapRequest responseTopic timeLimit reqMetadata req
+        let wrappedReq = wrapRequest timeLimit reqMetadata req
         publishReq wrappedReq
 
-  publishCtrl <- mkPublish (logDebug mqttLogger) controlTopic mqttClient 128000
+  let publishStream :: request -> IO (Either GRPCIOError ())
+      publishStream req = do
+        logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
+        let wrappedReq = wrapStreamChunk (Just req)
+        publishReq wrappedReq
+        -- TODO: Fix this. Send errors won't be propegated to client's send handler
+        return $ Right ()
+
+  publishCtrl <- mkPacketizedPublish mqttClient 128000 controlTopic
   let publishControlMsg :: AuxControl -> IO ()
       publishControlMsg ctrl = do
         logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
@@ -149,13 +157,20 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         publishControlMsg AuxControlTerminate
 
   -- Build function to read response chunks in order
-  readResponse <- mkReadResponse responseChan
+  readResponse <- mkPacketizedRead responseChan
 
   let handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
       handleMQTTException e = do
         let errMsg = toText $ displayException e
         logErr mqttLogger errMsg
         return $ MQTTError errMsg
+
+  let withMQTTHeartbeat :: IO a -> IO a
+      withMQTTHeartbeat action =
+        withAsync
+          (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
+          (const action)
+
 
   -- Subscribe to response topic
   handle handleMQTTException $ do
@@ -166,7 +181,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       MQTTNormalRequest req timeLimit reqMetadata ->
         grpcTimeout timeLimit $ do
           publishRequest req timeLimit reqMetadata
-          sendTerminateOnException $
+          withMQTTHeartbeat . sendTerminateOnException $
             either fromRemoteClientError unwrapUnaryResponse <$> readResponse
 
       -- Client Streaming Requests
@@ -174,28 +189,17 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         grpcTimeout timeLimit $ do
           -- send initMetadata
           publishRequest def timeLimit initMetadata
-
-          -- do client streaming
-          let publishStream :: Maybe request -> IO (Either GRPCIOError ())
-              publishStream req = do
-                logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-                let wrappedReq = wrapStreamChunk req
-                publishReq wrappedReq
-                return $ Right ()
-          streamHandler (publishStream . Just)
-          _ <- publishStream Nothing
-          either fromRemoteClientError unwrapClientStreamResponse <$> readResponse
+          withMQTTHeartbeat . sendTerminateOnException $ do
+            -- do client streaming
+            streamHandler publishStream
+            
+            publishReq $ wrapStreamChunk @request Nothing
+            either fromRemoteClientError unwrapClientStreamResponse <$> readResponse
 
       -- Server Streaming Requests
       MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
         grpcTimeout timeLimit $ do
           publishRequest req timeLimit reqMetadata
-
-          let withMQTTHeartbeat :: IO a -> IO a
-              withMQTTHeartbeat action =
-                withAsync
-                  (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
-                  (const action)
 
           withMQTTHeartbeat . sendTerminateOnException $ do
             let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
@@ -203,7 +207,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
                   rsp <- readResponse
                   return $
                     fmap toMetadataMap . tryParse . toStrict =<< rsp
-
             -- Wait for initial metadata
             readInitMetadata >>= \case
               Left err -> do

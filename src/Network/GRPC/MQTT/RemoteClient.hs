@@ -23,7 +23,7 @@ import Network.GRPC.MQTT.Logging (
   logInfo,
   logWarn,
  )
-import Network.GRPC.MQTT.Sequenced (mkPublish, mkReadResponse)
+import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
 import Network.GRPC.MQTT.Types (
   ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
   MethodMap,
@@ -104,7 +104,7 @@ runRemoteClient logger cfg baseTopic methodMap = do
   bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
-    handle logMQTTException $ do
+    handle (logException "MQTT client connection") $ do
       let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+" <> "+"
       let controlFilter = toFilter baseTopic <> "grpc" <> "session" <> "+" <> "control"
       subscribeOrThrow gatewayMQTTClient [grpcRequestsFilter, controlFilter]
@@ -113,54 +113,75 @@ runRemoteClient logger cfg baseTopic methodMap = do
 
       logInfo logger "MQTT client connection terminated normally"
  where
-  logMQTTException :: MQTTException -> IO ()
-  logMQTTException e =
-    logErr logger $
-      "MQTT client connection terminated with exception: " <> toText (displayException e)
-
   gatewayHandler :: SessionMap -> MessageCallback
   gatewayHandler currentSessions = SimpleCallback $ \client topic mqttMessage _props -> do
     logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
 
     -- Catch and log any synchronous exception. We don't want an exception
     -- from an individual callback thread to take down the entire MQTT client.
-    handleAny logException $ do
+    handleAny (logException "gatewayHandler") $ do
+      let getSession :: SessionId -> IO (Maybe Session)
+          getSession sessionId = Map.lookup sessionId <$> readTVarIO currentSessions
       case stripPrefix (split baseTopic) (split topic) of
         Nothing -> bug $ MQTTException "Base topic mismatch"
         Just ["grpc", "request", sessionId, service, method] -> do
-          sessions <- readTVarIO currentSessions
           session <-
-            Map.lookup (unTopic sessionId) sessions `whenNothing` do
-              reqChan <- newTChanIO
-              heartbeatVar <- newTMVarIO ()
-
-              sessionThread <- async $ do
+            getSession (unTopic sessionId) >>= \case
+              Just s -> pure s
+              Nothing -> do
                 let grpcMethod = encodeUtf8 ("/" <> unTopic service <> "/" <> unTopic method)
                 let maxMsgSize = fromIntegral $ mqttMsgSizeLimit cfg
-                let heartbeatMon = watchdog (heartbeatPeriodSeconds + 1) heartbeatVar >> logWarn logger "watchdog timed out"
-
-                race_
-                  heartbeatMon
-                  (sessionHandler reqChan logger maxMsgSize methodMap client grpcMethod sessionId baseTopic)
-                  `finally` atomically (modifyTVar' currentSessions (Map.delete (unTopic sessionId)))
-
-              let newSession = Session sessionThread heartbeatVar reqChan
-              atomically $ modifyTVar' currentSessions (Map.insert (unTopic sessionId) newSession)
-
-              return newSession
+                createNewSession logger currentSessions maxMsgSize methodMap client baseTopic sessionId grpcMethod
           atomically $ writeTChan (requestChan session) mqttMessage
-        Just ["grpc", "session", sessionId, "control"] -> manageSession logger currentSessions (unTopic sessionId) mqttMessage
+        Just ["grpc", "session", sessionId, "control"] -> do
+          getSession (unTopic sessionId) >>= \case
+            Nothing -> logInfo logger "Received control message for non-existant session"
+            Just session -> controlMsgHandler logger (unTopic sessionId) session mqttMessage
         _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
 
-  logException :: SomeException -> IO ()
-  logException e =
+  logException :: Text -> SomeException -> IO ()
+  logException name e =
     logErr logger $
-      "gatewayHandler terminated with exception: " <> toText (displayException e)
+      name <> " terminated with exception: " <> toText (displayException e)
+
+createNewSession ::
+  Logger ->
+  SessionMap ->
+  Int64 ->
+  MethodMap ->
+  MQTTClient ->
+  Topic ->
+  Topic ->
+  ByteString ->
+  IO Session
+createNewSession logger currentSessions maxMsgSize methodMap client baseTopic sessionId grpcMethod = do
+  reqChan <- newTChanIO
+  heartbeatVar <- newTMVarIO ()
+
+  let sessionHandler :: IO ()
+      sessionHandler =
+        requestHandlerWithWatchdog
+          `finally` atomically (modifyTVar' currentSessions (Map.delete (unTopic sessionId)))
+       where        
+        requestHandlerWithWatchdog =
+          race_
+            heartbeatMon
+            (requestHandler logger reqChan maxMsgSize methodMap client grpcMethod sessionId baseTopic)
+        heartbeatMon = do
+          watchdog (heartbeatPeriodSeconds + 1) heartbeatVar
+          logWarn logger "watchdog timed out"
+
+  sessionThread <- async sessionHandler
+
+  let newSession = Session sessionThread heartbeatVar reqChan
+  atomically $ modifyTVar' currentSessions (Map.insert (unTopic sessionId) newSession)
+
+  return newSession
 
 -- | Perform the local gRPC call and publish the response
-sessionHandler ::
-  TChan LByteString ->
+requestHandler ::
   Logger ->
+  TChan LByteString ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   Int64 ->
   -- | Maximum MQTT message size
@@ -172,22 +193,21 @@ sessionHandler ::
   Topic ->
   Topic ->
   IO ()
-sessionHandler reqChan logger maxMsgSize methodMap client grpcMethod sessionId baseTopic = do
-  logInfo logger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
+requestHandler logger reqChan maxMsgSize methodMap client grpcMethod sessionId baseTopic = do
+  let tagSession msg = "[" <> unTopic sessionId <> "]" <> msg
+  logInfo logger . tagSession $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
 
-  read <- mkReadResponse reqChan
+  readRequest <- mkPacketizedRead reqChan
   let readUnsafe = do
-        read >>= \case
+        readRequest >>= \case
           Left _ -> throwString "Read failed"
           Right m -> pure m
   mqttMessage <- readUnsafe
 
-  (WrappedMQTTRequest _responseTopic timeLimit reqMetadata payload) <-
+  (WrappedMQTTRequest timeLimit reqMetadata payload) <-
     case fromByteString (toStrict mqttMessage) of
       Left err -> throwString $ "Failed to decode MQTT message: " <> show err
       Right x -> pure x
-
-  let tagSession msg = "[" <> unTopic sessionId <> "]" <> msg
 
   logDebug logger . tagSession $
     unlines
@@ -197,7 +217,7 @@ sessionHandler reqChan logger maxMsgSize methodMap client grpcMethod sessionId b
       ]
 
   let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
-  publish <- mkPublish (logDebug logger . tagSession) responseTopic client maxMsgSize
+  publish <- mkPacketizedPublish client maxMsgSize responseTopic
 
   case lookup grpcMethod methodMap of
     Nothing -> do
@@ -213,7 +233,7 @@ sessionHandler reqChan logger maxMsgSize methodMap client grpcMethod sessionId b
     Just (ClientClientStreamHandler handler) -> do
       let readChan :: (Message request) => IO (Maybe request)
           readChan = do
-            r <- read
+            r <- readRequest
             case unwrapStreamChunk (toStrict <$> r) of
               Left _ -> pure Nothing
               Right x -> pure x
@@ -225,28 +245,6 @@ sessionHandler reqChan logger maxMsgSize methodMap client grpcMethod sessionId b
     Just (ClientServerStreamHandler handler) -> do
       response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publish)
       publish $ wrapStreamResponse response
-
--- | Handles AuxControl signals from the "/control" topic
-manageSession :: Logger -> SessionMap -> SessionId -> LByteString -> IO ()
-manageSession logger currentSessions sessionId mqttMessage = do
-  let tagSession msg = "[" <> sessionId <> "] " <> msg
-  case fromByteString (toStrict mqttMessage) of
-    Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
-      logInfo logger . tagSession $ "Received terminate message"
-      mSession <- atomically $ do
-        mSession <- Map.lookup sessionId <$> readTVar currentSessions
-        modifyTVar' currentSessions (Map.delete sessionId)
-        return mSession
-      whenJust mSession (cancel . handlerThread)
-    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
-      logDebug logger . tagSession $ "Received heartbeat message"
-      whenJustM
-        (Map.lookup sessionId <$> readTVarIO currentSessions)
-        (\Session{..} -> void . atomically $ tryPutTMVar sessionHeartbeat ())
-    Right ctrl ->
-      logWarn logger . tagSession $ "Received unknown control message: " <> show ctrl
-    Left err ->
-      logErr logger . tagSession $ "Failed to parse control message: " <> show err
 
 {- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
  Intended to be used with 'race'
@@ -287,3 +285,19 @@ streamSend readChunk send = loop
   loop = whenJustM readChunk $ \chunk -> do
     _ <- send chunk
     loop
+
+-- | Handles AuxControl signals from the "/control" topic
+controlMsgHandler :: Logger -> SessionId -> Session -> LByteString -> IO ()
+controlMsgHandler logger sessionId session mqttMessage = do
+  let tagSession msg = "[" <> sessionId <> "] " <> msg
+  case fromByteString (toStrict mqttMessage) of
+    Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
+      logInfo logger . tagSession $ "Received terminate message"
+      cancel $ handlerThread session
+    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
+      logDebug logger . tagSession $ "Received heartbeat message"
+      void . atomically $ tryPutTMVar (sessionHeartbeat session) ()
+    Right ctrl ->
+      logWarn logger . tagSession $ "Received unknown control message: " <> show ctrl
+    Left err ->
+      logErr logger . tagSession $ "Failed to parse control message: " <> show err

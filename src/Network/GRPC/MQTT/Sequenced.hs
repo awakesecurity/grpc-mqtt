@@ -15,7 +15,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.SortedList as SL
 import Network.GRPC.MQTT.Wrapping (unwrapPacket)
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
-import Network.MQTT.Topic (Topic (unTopic))
+import Network.MQTT.Topic (Topic)
 import Proto.Mqtt (Packet (..), RemoteClientError)
 import Proto3.Suite (toLazyByteString)
 import UnliftIO.STM (TChan, readTChan)
@@ -57,23 +57,22 @@ instance Sequenced Packet where
 
   seqPayload = packetPayload
 
-mkReadResponse :: forall m. MonadIO m => TChan LByteString -> m (m (Either RemoteClientError LByteString))
-mkReadResponse chan = do
+mkPacketizedRead :: forall m. MonadIO m => TChan LByteString -> m (m (Either RemoteClientError LByteString))
+mkPacketizedRead chan = do
   let read = unwrapPacket . toStrict <$> readTChan chan
   readSeq <- mkSequencedRead read
 
-  let readPacket :: Builder.Builder -> m (Either RemoteClientError LByteString)
-      readPacket acc = do
-        rawPacket <- readSeq
-        case rawPacket of
+  let readMessage :: Builder.Builder -> m (Either RemoteClientError LByteString)
+      readMessage acc =
+        readSeq >>= \case
           Left err -> pure $ Left err
           Right (Packet isLastPacket _ chunk) -> do
             let builder = acc <> Builder.byteString chunk
             if isLastPacket
               then pure $ Right (Builder.toLazyByteString builder)
-              else readPacket builder
+              else readMessage builder
 
-  return $ readPacket mempty
+  return $ readMessage mempty
 
 {- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
  read the objects in order even if they are received out of order
@@ -107,28 +106,22 @@ mkSequencedRead read = do
 
   return $ atomically orderedRead
 
-mkPublish :: (Text -> IO ()) -> Topic -> MQTTClient -> Int64 -> IO (LByteString -> IO ())
-mkPublish log topic client msgLimit =
-  mkPacketizedPublish msgLimit $ \msg -> do
-    log $ "Publishing to topic: " <> unTopic topic <> " Raw message: " <> decodeUtf8 msg
-    publishq client topic msg False QoS1 []
-
--- | Wraps a publish function to tag each response as a 'SequencedResponse' with an incrementing sequence number
-mkPacketizedPublish :: forall m. (MonadIO m) => Int64 -> (LByteString -> m ()) -> m (LByteString -> m ())
-mkPacketizedPublish msgLimit pub = do
+mkPacketizedPublish :: MQTTClient -> Int64 -> Topic -> IO (LByteString -> IO ())
+mkPacketizedPublish client msgLimit topic = do
   seqVar <- newTVarIO 0
 
-  let publishPacket :: LByteString -> m ()
-      publishPacket bs = do
+  let packetizedPublish :: LByteString -> IO ()
+      packetizedPublish bs = do
         let (chunk, rest) = LBS.splitAt msgLimit bs
         let isLastPacket = LBS.null rest
 
-        packet <- atomically $ do
+        rawPacket <- atomically $ do
           curSeq <- readTVar seqVar
           modifyTVar' seqVar (+ 1)
-          return $ Packet isLastPacket curSeq (toStrict chunk)
+          return $ toLazyByteString $ Packet isLastPacket curSeq (toStrict chunk)
 
-        pub $ toLazyByteString packet
-        unless isLastPacket $ publishPacket rest
+        publishq client topic rawPacket False QoS1 []
+        
+        unless isLastPacket $ packetizedPublish rest
 
-  return publishPacket
+  return packetizedPublish

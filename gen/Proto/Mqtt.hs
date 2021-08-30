@@ -1312,9 +1312,8 @@ instance HsJSONPB.ToSchema StreamResponse where
                                                          streamResponseResponseCode),
                                                         ("details", streamResponseDetails)]}})
  
-data WrappedMQTTRequest = WrappedMQTTRequest{wrappedMQTTRequestResponseTopic
-                                             :: Hs.Text,
-                                             wrappedMQTTRequestTimeout :: Hs.Int64,
+data WrappedMQTTRequest = WrappedMQTTRequest{wrappedMQTTRequestTimeout
+                                             :: Hs.Int64,
                                              wrappedMQTTRequestMetamap ::
                                              Hs.Maybe Proto.Mqtt.MetadataMap,
                                              wrappedMQTTRequestPayload :: Hs.ByteString}
@@ -1327,77 +1326,63 @@ instance HsProtobuf.HasDefault WrappedMQTTRequest
  
 instance HsProtobuf.Message WrappedMQTTRequest where
         encodeMessage _
-          WrappedMQTTRequest{wrappedMQTTRequestResponseTopic =
-                               wrappedMQTTRequestResponseTopic,
-                             wrappedMQTTRequestTimeout = wrappedMQTTRequestTimeout,
+          WrappedMQTTRequest{wrappedMQTTRequestTimeout =
+                               wrappedMQTTRequestTimeout,
                              wrappedMQTTRequestMetamap = wrappedMQTTRequestMetamap,
                              wrappedMQTTRequestPayload = wrappedMQTTRequestPayload}
           = (Hs.mconcat
                [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   wrappedMQTTRequestResponseTopic),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
                    wrappedMQTTRequestTimeout),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
                    (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
                       @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
                       wrappedMQTTRequestMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
                    wrappedMQTTRequestPayload)])
         decodeMessage _
           = (Hs.pure WrappedMQTTRequest) <*>
               (HsProtobuf.at HsProtobuf.decodeMessageField
                  (HsProtobuf.FieldNumber 1))
               <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 2))
-              <*>
               (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
                  @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
                  (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 3)))
+                    (HsProtobuf.FieldNumber 2)))
               <*>
               (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 4))
+                 (HsProtobuf.FieldNumber 3))
         dotProto _
           = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim HsProtobuf.String)
-                (HsProtobuf.Single "response_topic")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
                 (HsProtobuf.Prim HsProtobuf.Int64)
                 (HsProtobuf.Single "timeout")
                 []
                 ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
                 (HsProtobuf.Prim
                    (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
                 (HsProtobuf.Single "metamap")
                 []
                 ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 4)
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
                 (HsProtobuf.Prim HsProtobuf.Bytes)
                 (HsProtobuf.Single "payload")
                 []
                 "")]
  
 instance HsJSONPB.ToJSONPB WrappedMQTTRequest where
-        toJSONPB (WrappedMQTTRequest f1 f2 f3 f4)
+        toJSONPB (WrappedMQTTRequest f1 f2 f3)
           = (HsJSONPB.object
-               ["response_topic" .= f1, "timeout" .= f2, "metamap" .= f3,
-                "payload" .= f4])
-        toEncodingPB (WrappedMQTTRequest f1 f2 f3 f4)
+               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
+        toEncodingPB (WrappedMQTTRequest f1 f2 f3)
           = (HsJSONPB.pairs
-               ["response_topic" .= f1, "timeout" .= f2, "metamap" .= f3,
-                "payload" .= f4])
+               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
  
 instance HsJSONPB.FromJSONPB WrappedMQTTRequest where
         parseJSONPB
           = (HsJSONPB.withObject "WrappedMQTTRequest"
                (\ obj ->
-                  (Hs.pure WrappedMQTTRequest) <*> obj .: "response_topic" <*>
-                    obj .: "timeout"
-                    <*> obj .: "metamap"
+                  (Hs.pure WrappedMQTTRequest) <*> obj .: "timeout" <*>
+                    obj .: "metamap"
                     <*> obj .: "payload"))
  
 instance HsJSONPB.ToJSON WrappedMQTTRequest where
@@ -1409,18 +1394,14 @@ instance HsJSONPB.FromJSON WrappedMQTTRequest where
  
 instance HsJSONPB.ToSchema WrappedMQTTRequest where
         declareNamedSchema _
-          = do let declare_response_topic = HsJSONPB.declareSchemaRef
-               wrappedMQTTRequestResponseTopic <- declare_response_topic
-                                                    Proxy.Proxy
-               let declare_timeout = HsJSONPB.declareSchemaRef
+          = do let declare_timeout = HsJSONPB.declareSchemaRef
                wrappedMQTTRequestTimeout <- declare_timeout Proxy.Proxy
                let declare_metamap = HsJSONPB.declareSchemaRef
                wrappedMQTTRequestMetamap <- declare_metamap Proxy.Proxy
                let declare_payload = HsJSONPB.declareSchemaRef
                wrappedMQTTRequestPayload <- declare_payload Proxy.Proxy
                let _ = Hs.pure WrappedMQTTRequest <*>
-                         HsJSONPB.asProxy declare_response_topic
-                         <*> HsJSONPB.asProxy declare_timeout
+                         HsJSONPB.asProxy declare_timeout
                          <*> HsJSONPB.asProxy declare_metamap
                          <*> HsJSONPB.asProxy declare_payload
                Hs.return
@@ -1432,9 +1413,7 @@ instance HsJSONPB.ToSchema WrappedMQTTRequest where
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("response_topic",
-                                                         wrappedMQTTRequestResponseTopic),
-                                                        ("timeout", wrappedMQTTRequestTimeout),
+                                                       [("timeout", wrappedMQTTRequestTimeout),
                                                         ("metamap", wrappedMQTTRequestMetamap),
                                                         ("payload", wrappedMQTTRequestPayload)]}})
  

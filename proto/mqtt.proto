@@ -91,10 +91,9 @@ message StreamResponse {
 }
 
 message WrappedMQTTRequest {
-  string response_topic = 1;
-  int64 timeout = 2;
-  MetadataMap metamap = 3;
-  bytes payload = 4;
+  int64 timeout = 1;
+  MetadataMap metamap = 2;
+  bytes payload = 3;
 }
 
 message WrappedUnaryResponse {

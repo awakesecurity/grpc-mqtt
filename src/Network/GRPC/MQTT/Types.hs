@@ -1,28 +1,30 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Network.GRPC.MQTT.Types (
-  MQTTResult (..),
-  MethodMap,
-  ClientHandler (..),
-  MQTTRequest (..),
-SessionId) where
+module Network.GRPC.MQTT.Types
+  ( MQTTResult (..),
+    MethodMap,
+    ClientHandler (..),
+    MQTTRequest (..),
+    SessionId,
+  )
+where
 
 import Relude
 
 import qualified Network.GRPC.HighLevel as HL
-import Network.GRPC.HighLevel.Client (
-  ClientResult,
-  GRPCMethodType (Normal, ServerStreaming, ClientStreaming),
-  MetadataMap,
-  StreamRecv,
-  TimeoutSeconds, StreamSend
- )
+import Network.GRPC.HighLevel.Client
+  ( ClientResult,
+    GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
+    MetadataMap,
+    StreamRecv,
+    StreamSend,
+    TimeoutSeconds,
+  )
 import Network.GRPC.LowLevel (ClientCall)
 import Proto3.Suite (Message)
 

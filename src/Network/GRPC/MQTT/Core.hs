@@ -6,45 +6,46 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (..),
-  connectMQTT,
-  heartbeatPeriodSeconds,
-  toFilter,
-  defaultMGConfig,
-  subscribeOrThrow,
-) where
+module Network.GRPC.MQTT.Core
+  ( MQTTGRPCConfig (..),
+    connectMQTT,
+    heartbeatPeriodSeconds,
+    toFilter,
+    defaultMGConfig,
+    subscribeOrThrow,
+  )
+where
 
 import Relude
 
 import Control.Exception (throw)
-import Data.Conduit.Network (
-  AppData,
-  ClientSettings,
-  appSink,
-  appSource,
-  clientSettings,
-  runTCPClient,
- )
-import Data.Conduit.Network.TLS (
-  TLSClientConfig (tlsClientTLSSettings),
-  runTLSClient,
-  tlsClientConfig,
- )
+import Data.Conduit.Network
+  ( AppData,
+    ClientSettings,
+    appSink,
+    appSource,
+    clientSettings,
+    runTCPClient,
+  )
+import Data.Conduit.Network.TLS
+  ( TLSClientConfig (tlsClientTLSSettings),
+    runTLSClient,
+    tlsClientConfig,
+  )
 import qualified Data.List as L
 import Network.Connection (TLSSettings (TLSSettingsSimple))
-import Network.MQTT.Client (
-  MQTTClient,
-  MQTTConduit,
-  MQTTConfig (..),
-  MQTTException (MQTTException),
-  MessageCallback (NoCallback),
-  QoS (QoS1),
-  SubOptions (_subQoS),
-  runMQTTConduit,
-  subOptions,
-  subscribe,
- )
+import Network.MQTT.Client
+  ( MQTTClient,
+    MQTTConduit,
+    MQTTConfig (..),
+    MQTTException (MQTTException),
+    MessageCallback (NoCallback),
+    QoS (QoS1),
+    SubOptions (_subQoS),
+    runMQTTConduit,
+    subOptions,
+    subscribe,
+  )
 import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic), mkFilter)
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Relude.Unsafe (fromJust)
@@ -58,8 +59,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
     useTLS :: Bool
   , -- | Maximum size for an MQTT message in bytes
     mqttMsgSizeLimit :: Int
-  , -- Copy of MQTTConfig
-    _cleanSession :: Bool
+  , _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback
   , _protocol :: ProtocolLevel
@@ -101,21 +101,21 @@ connectMQTT :: MonadIO m => MQTTGRPCConfig -> m MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
   let runner = if useTLS then runTLS else runTCP
   runMQTTConduit runner (getMQTTConfig cfg)
- where
-  runTLS :: (MQTTConduit -> IO ()) -> IO ()
-  runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
+  where
+    runTLS :: (MQTTConduit -> IO ()) -> IO ()
+    runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
 
-  tlsCfg :: TLSClientConfig
-  tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
+    tlsCfg :: TLSClientConfig
+    tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
 
-  runTCP :: (MQTTConduit -> IO ()) -> IO ()
-  runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
+    runTCP :: (MQTTConduit -> IO ()) -> IO ()
+    runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
 
-  tcpCfg :: ClientSettings
-  tcpCfg = clientSettings _port (encodeUtf8 _hostname)
+    tcpCfg :: ClientSettings
+    tcpCfg = clientSettings _port (encodeUtf8 _hostname)
 
-  toMQTTConduit :: AppData -> MQTTConduit
-  toMQTTConduit ad = (appSource ad, appSink ad)
+    toMQTTConduit :: AppData -> MQTTConduit
+    toMQTTConduit ad = (appSource ad, appSink ad)
 
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime
@@ -137,6 +137,6 @@ subscribeOrThrow client topics = do
   unless (null subFailures) $ do
     let err = L.unlines $ fmap errMsg subFailures
     throw $ MQTTException err
- where
-  errMsg :: (Filter, SubErr) -> String
-  errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
+  where
+    errMsg :: (Filter, SubErr) -> String
+    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr

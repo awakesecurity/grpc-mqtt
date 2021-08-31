@@ -89,6 +89,7 @@ library
   build-depends:      base64
                     , conduit-extra
                     , connection
+                    , mtl
                     , network-conduit-tls
                     , nonce
                     , sorted-list

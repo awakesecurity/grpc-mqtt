@@ -57,20 +57,18 @@ instance Sequenced Packet where
 
   seqPayload = packetPayload
 
-mkPacketizedRead :: forall m. MonadIO m => TChan LByteString -> m (m (Either RemoteClientError LByteString))
+mkPacketizedRead :: forall m. (MonadIO m) => TChan LByteString -> m (ExceptT RemoteClientError m LByteString)
 mkPacketizedRead chan = do
   let read = unwrapPacket . toStrict <$> readTChan chan
   readSeq <- mkSequencedRead read
 
-  let readMessage :: Builder.Builder -> m (Either RemoteClientError LByteString)
-      readMessage acc =
-        readSeq >>= \case
-          Left err -> pure $ Left err
-          Right (Packet isLastPacket _ chunk) -> do
-            let builder = acc <> Builder.byteString chunk
-            if isLastPacket
-              then pure $ Right (Builder.toLazyByteString builder)
-              else readMessage builder
+  let readMessage :: Builder.Builder -> ExceptT RemoteClientError m LByteString
+      readMessage acc = do
+        (Packet isLastPacket _ chunk) <- ExceptT readSeq
+        let builder = acc <> Builder.byteString chunk
+        if isLastPacket
+          then pure $ Builder.toLazyByteString builder
+          else readMessage builder
 
   return $ readMessage mempty
 
@@ -106,11 +104,11 @@ mkSequencedRead read = do
 
   return $ atomically orderedRead
 
-mkPacketizedPublish :: MQTTClient -> Int64 -> Topic -> IO (LByteString -> IO ())
+mkPacketizedPublish :: forall m n. (MonadIO m, MonadIO n) => MQTTClient -> Int64 -> Topic -> m (LByteString -> n ())
 mkPacketizedPublish client msgLimit topic = do
   seqVar <- newTVarIO 0
 
-  let packetizedPublish :: LByteString -> IO ()
+  let packetizedPublish :: LByteString -> n ()
       packetizedPublish bs = do
         let (chunk, rest) = LBS.splitAt msgLimit bs
         let isLastPacket = LBS.null rest
@@ -120,8 +118,8 @@ mkPacketizedPublish client msgLimit topic = do
           modifyTVar' seqVar (+ 1)
           return $ toLazyByteString $ Packet isLastPacket curSeq (toStrict chunk)
 
-        publishq client topic rawPacket False QoS1 []
-        
+        liftIO $ publishq client topic rawPacket False QoS1 []
+
         unless isLastPacket $ packetizedPublish rest
 
   return packetizedPublish

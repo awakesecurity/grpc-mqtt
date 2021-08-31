@@ -16,11 +16,16 @@ let
   proto-files = ../../proto;
 
 in {
+  all-cabal-hashes = pkgsOld.fetchurl {
+    url = "https://github.com/commercialhaskell/all-cabal-hashes/archive/946958a82b6c589393f3ba9234345ac3f2d3d512.tar.gz";
+    sha256 = "00d296y7lxsfplbrhcyr7wp8cymh7zhf0q59ia1kxrly40v47fkr";
+  };
+
   haskellPackages = pkgsOld.haskell.packages."${compiler}".override (old: {
     overrides = pkgsNew.lib.composeExtensions
       (old.overrides or (_: _: { }))
       (haskellPackagesNew: haskellPackagesOld: {
-        net-mqtt = haskellPackagesNew.callHackage "net-mqtt" "0.8.0.2";
+        net-mqtt = haskellPackagesNew.callHackage "net-mqtt" "0.8.1.0" {};
 
         range-set-list =
           pkgsNew.haskell.lib.overrideCabal

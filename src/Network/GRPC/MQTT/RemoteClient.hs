@@ -14,7 +14,6 @@ import Network.GRPC.MQTT.Core
     connectMQTT,
     heartbeatPeriodSeconds,
     subscribeOrThrow,
-    toFilter,
   )
 import Network.GRPC.MQTT.Logging
   ( Logger (log),
@@ -25,7 +24,7 @@ import Network.GRPC.MQTT.Logging
   )
 import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
 import Network.GRPC.MQTT.Types
-  ( ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+  ( ClientHandler (..),
     MethodMap,
     SessionId,
   )
@@ -42,7 +41,7 @@ import Network.GRPC.MQTT.Wrapping
   )
 
 import Control.Exception (bracket)
-import Control.Monad.Except
+import Control.Monad.Except (MonadError (throwError), withExceptT)
 import Data.HashMap.Strict (lookup)
 import Data.List (stripPrefix)
 import qualified Data.Map.Strict as Map
@@ -62,6 +61,7 @@ import Network.MQTT.Client
 import Network.MQTT.Topic
   ( Topic (unTopic),
     split,
+    toFilter,
   )
 import Proto.Mqtt
   ( AuxControl (AuxControlAlive, AuxControlTerminate),
@@ -89,9 +89,11 @@ data Session = Session
     handlerThread :: Async ()
   , -- | Variable that must be touched at 'heartbeatPeriod' rate or the session will be terminated
     sessionHeartbeat :: TMVar ()
-  , requestChan :: TChan LByteString
+  , -- | Channel for passing MQTT messages to handler thread
+    requestChan :: TChan LByteString
   }
 
+-- | Parameters for creating a new 'Session'
 data SessionArgs = SessionArgs
   { sessionLogger :: Logger
   , sessionMap :: SessionMap
@@ -169,6 +171,13 @@ runRemoteClient logger cfg baseTopic methodMap = do
       logErr logger $
         name <> " terminated with exception: " <> toText (displayException e)
 
+{- | Creates a new 'Session'
+ Spawns a thread to handle a request with a watchdog timer to
+ monitor the heartbeat signal.
+
+ The new 'Session' is inserted into the global 'SessionMap' and
+ is removed by the handler thread upon completion.
+-}
 createNewSession :: SessionArgs -> IO Session
 createNewSession args@SessionArgs{..} = do
   reqChan <- newTChanIO
@@ -212,7 +221,8 @@ requestHandler SessionArgs{..} reqChan = do
     readRequest <- liftIO $ mkPacketizedRead reqChan
     mqttMessage <- readRequest
 
-    (WrappedMQTTRequest timeLimit reqMetadata payload) <- withExceptT parseErrorToRCE $ hoistEither (fromByteString (toStrict mqttMessage))
+    (WrappedMQTTRequest timeLimit reqMetadata payload) <-
+      withExceptT parseErrorToRCE $ hoistEither (fromByteString (toStrict mqttMessage))
 
     logDebug sessionLogger $
       unlines
@@ -283,6 +293,7 @@ streamReader publish _cc initMetadata recv = do
           publish $ wrapStreamChunk chunk
           when (isJust chunk) readLoop
 
+-- | Reads chunks from MQTT and send them on to the gRPC stream
 streamSend :: forall request. MaybeT IO request -> StreamSend request -> IO ()
 streamSend readChunk send = void $ runMaybeT loop
   where

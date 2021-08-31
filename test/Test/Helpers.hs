@@ -8,44 +8,44 @@ module Test.Helpers where
 
 import Relude
 
-import Network.GRPC.MQTT (
-  ProtocolLevel (Protocol311),
- )
+import Network.GRPC.MQTT
+  ( ProtocolLevel (Protocol311),
+  )
 import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..), defaultMGConfig)
 import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
 
 import Data.Default (Default (def))
 import qualified Data.Text.Lazy as TL
-import Data.X509.CertificateStore (
-  CertificateStore,
-  readCertificateStore,
- )
+import Data.X509.CertificateStore
+  ( CertificateStore,
+    readCertificateStore,
+  )
 import Network.Connection (TLSSettings (TLSSettings))
 import Network.GRPC.HighLevel.Client (MetadataMap, StreamRecv)
-import Network.TLS (
-  ClientHooks (onCertificateRequest),
-  ClientParams (clientHooks, clientShared, clientSupported),
-  Credential,
-  Credentials (Credentials),
-  HostName,
-  Shared (sharedCAStore, sharedCredentials),
-  Supported (supportedCiphers),
-  credentialLoadX509,
-  defaultParamsClient,
- )
+import Network.TLS
+  ( ClientHooks (onCertificateRequest),
+    ClientParams (clientHooks, clientShared, clientSupported),
+    Credential,
+    Credentials (Credentials),
+    HostName,
+    Shared (sharedCAStore, sharedCredentials),
+    Supported (supportedCiphers),
+    credentialLoadX509,
+    defaultParamsClient,
+  )
 import Network.TLS.Extra.Cipher (ciphersuite_default)
-import Test.Tasty (
-  DependencyType (AllFinish),
-  TestName,
-  TestTree,
-  after,
- )
-import Test.Tasty.HUnit (
-  Assertion,
-  assertBool,
-  assertFailure,
-  testCase,
- )
+import Test.Tasty
+  ( DependencyType (AllFinish),
+    TestName,
+    TestTree,
+    after,
+  )
+import Test.Tasty.HUnit
+  ( Assertion,
+    assertBool,
+    assertFailure,
+    testCase,
+  )
 import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
 
@@ -115,16 +115,16 @@ timeit limit action = do
 
 streamTester :: (response -> Assertion) -> MetadataMap -> StreamRecv response -> IO ()
 streamTester assertProp _mm sr = loop
- where
-  loop =
-    sr >>= \case
-      Left err -> assertFailure (show err)
-      Right Nothing -> pure ()
-      Right (Just rsp) -> assertProp rsp >> loop
+  where
+    loop =
+      sr >>= \case
+        Left err -> assertFailure (show err)
+        Right Nothing -> pure ()
+        Right (Just rsp) -> assertProp rsp >> loop
 
 notParallel :: [(TestName, Assertion)] -> [TestTree]
 notParallel = foldr f []
- where
-  f :: (TestName, Assertion) -> [TestTree] -> [TestTree]
-  f (name, t) [] = [testCase name t]
-  f (name, t) (lt : rest) = testCase name t : after AllFinish name lt : rest
+  where
+    f :: (TestName, Assertion) -> [TestTree] -> [TestTree]
+    f (name, t) [] = [testCase name t]
+    f (name, t) (lt : rest) = testCase name t : after AllFinish name lt : rest

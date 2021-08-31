@@ -27,7 +27,6 @@ import Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
     subscribeOrThrow,
-    toFilter,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
@@ -66,7 +65,7 @@ import Network.MQTT.Client
     MessageCallback (SimpleCallback),
     normalDisconnect,
   )
-import Network.MQTT.Topic (Topic (unTopic), mkTopic)
+import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
 import Proto3.Suite
   ( Enumerated (Enumerated),
     HasDefault,
@@ -95,7 +94,8 @@ data MQTTGRPCClient = MQTTGRPCClient
     rng :: Generator
   , -- | Logging
     mqttLogger :: Logger
-  , msgSizeLimit :: Int64
+  , -- | Maximum size for an MQTT message in bytes
+    msgSizeLimit :: Int64
   }
 
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
@@ -208,9 +208,15 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
 
+{- | Helper function to run an 'ExceptT RemoteClientError' action and convert any failure
+ to an 'MQTTResult'
+-}
 exceptToResult :: (Functor m) => ExceptT RemoteClientError m (MQTTResult streamtype response) -> m (MQTTResult streamtype response)
 exceptToResult = fmap (either fromRemoteClientError id) . runExceptT
 
+{- | Manages the control signals (Heartbeat and Terminate) asynchronously while
+ the provided action performs a request
+-}
 withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
 withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnException
   where
@@ -250,6 +256,7 @@ grpcTimeout timeLimit action = fromMaybe timeoutError <$> timeout (timeLimit * 1
   where
     timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
 
+-- | Generate a new random 'SessionId' and parse it into a 'Topic'
 generateSessionId :: Generator -> IO Topic
 generateSessionId randGen =
   mkTopic <$> nonce128urlT randGen >>= \case

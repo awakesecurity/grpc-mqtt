@@ -61,7 +61,7 @@ common shared-settings
                     , deepseq
                     , grpc-haskell
                     , grpc-haskell-core
-                    , net-mqtt >= 0.8
+                    , net-mqtt >= 0.8.1
                     , proto3-suite
                     , proto3-wire
                     , relude

@@ -10,7 +10,6 @@ module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
     heartbeatPeriodSeconds,
-    toFilter,
     defaultMGConfig,
     subscribeOrThrow,
   )
@@ -46,9 +45,8 @@ import Network.MQTT.Client
     subOptions,
     subscribe,
   )
-import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic), mkFilter)
+import Network.MQTT.Topic (Filter(unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
-import Relude.Unsafe (fromJust)
 import Turtle (NominalDiffTime)
 
 {- |
@@ -120,13 +118,6 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
-
-{- | Topics are strictly a subset of 'Filter's so this conversion is always safe
- | This is a bit of a hack, but there is a upstream PR to add this to the net-mqtt
- | library: https://github.com/dustin/mqtt-hs/pull/22
--}
-toFilter :: Topic -> Filter
-toFilter = fromJust . mkFilter . unTopic
 
 subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
 subscribeOrThrow client topics = do

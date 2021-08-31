@@ -9,94 +9,96 @@ module Main where
 
 import Relude
 
-import Test.GRPCServers (
-  addHelloHandlers,
-  addHelloService,
-  infiniteHelloSSHandler,
-  multGoodbyeService,
- )
-import Test.Helpers (
-  assertContains,
-  getTestConfig,
-  notParallel,
-  streamTester,
-  testLogger,
-  timeit,
- )
-import Test.ProtoClients (
-  addHelloMqttClient,
-  multGoodbyeMqttClient,
- )
-import Test.ProtoRemoteClients (
-  addHelloRemoteClientMethodMap,
-  multGoodbyeRemoteClientMethodMap,
- )
+import Test.GRPCServers
+  ( addHelloHandlers,
+    addHelloService,
+    infiniteHelloSSHandler,
+    multGoodbyeService,
+  )
+import Test.Helpers
+  ( assertContains,
+    getTestConfig,
+    notParallel,
+    streamTester,
+    testLogger,
+    timeit,
+  )
+import Test.ProtoClients
+  ( addHelloMqttClient,
+    multGoodbyeMqttClient,
+  )
+import Test.ProtoRemoteClients
+  ( addHelloRemoteClientMethodMap,
+    multGoodbyeRemoteClientMethodMap,
+  )
 
-import Network.GRPC.MQTT (
-  MessageCallback (SimpleCallback),
-  QoS (QoS1),
-  SubOptions (_subQoS),
-  Topic,
-  normalDisconnect,
-  publishq,
-  subOptions,
-  subscribe,
- )
-import Network.GRPC.MQTT.Client (
-  MQTTGRPCClient (mqttClient),
-  withMQTTGRPCClient,
- )
-import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (mqttMsgSizeLimit, _connID, _msgCB),
-  connectMQTT,
-  toFilter,
- )
+import Network.GRPC.MQTT
+  ( Topic,
+  )
+import Network.GRPC.MQTT.Client
+  ( MQTTGRPCClient (mqttClient),
+    withMQTTGRPCClient,
+  )
+import Network.GRPC.MQTT.Core
+  ( MQTTGRPCConfig (mqttMsgSizeLimit, _connID, _msgCB),
+    connectMQTT,
+  )
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
-import Network.GRPC.MQTT.Sequenced (
-  SequenceIdx (SequencedIdx),
-  Sequenced (..),
-  mkSequencedRead,
- )
-import Network.GRPC.MQTT.Types (
-  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
-  MQTTResult (GRPCResult, MQTTError),
- )
+import Network.GRPC.MQTT.Sequenced
+  ( SequenceIdx (SequencedIdx),
+    Sequenced (..),
+    mkSequencedRead,
+  )
+import Network.GRPC.MQTT.Types
+  ( MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+    MQTTResult (GRPCResult, MQTTError),
+  )
 
-import Data.Time.Clock (
-  diffUTCTime,
-  getCurrentTime,
-  nominalDiffTimeToSeconds,
- )
-import Network.GRPC.HighLevel.Client (
-  ClientConfig (..),
-  ClientError (ClientIOError),
-  ClientResult (..),
-  Port,
-  StatusCode (StatusOk),
-  StreamSend,
- )
-import Network.GRPC.HighLevel.Generated (
-  GRPCIOError (GRPCIOTimeout),
-  ServiceOptions (serverPort),
-  defaultServiceOptions,
-  withGRPCClient,
- )
-import Proto.Test (
-  AddHello (AddHello, addHelloHelloSS),
-  MultGoodbye (MultGoodbye),
-  OneInt (OneInt),
-  SSRpy (ssrpyGreeting),
-  SSRqt (SSRqt),
-  TwoInts (TwoInts),
-  addHelloServer,
- )
+import Data.Time.Clock
+  ( diffUTCTime,
+    getCurrentTime,
+    nominalDiffTimeToSeconds,
+  )
+import Network.GRPC.HighLevel.Client
+  ( ClientConfig (..),
+    ClientError (ClientIOError),
+    ClientResult (..),
+    Port,
+    StatusCode (StatusOk),
+    StreamSend,
+  )
+import Network.GRPC.HighLevel.Generated
+  ( GRPCIOError (GRPCIOTimeout),
+    ServiceOptions (serverPort),
+    defaultServiceOptions,
+    withGRPCClient,
+  )
+import Network.MQTT.Client
+  ( MessageCallback (SimpleCallback),
+    QoS (QoS1),
+    SubOptions (_subQoS),
+    normalDisconnect,
+    publishq,
+    subOptions,
+    subscribe,
+  )
+import Network.MQTT.Topic (toFilter)
+import Proto.Test
+  ( AddHello (AddHello, addHelloHelloSS),
+    MultGoodbye (MultGoodbye),
+    OneInt (OneInt),
+    SSRpy (ssrpyGreeting),
+    SSRqt (SSRqt),
+    TwoInts (TwoInts),
+    addHelloServer,
+  )
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (
-  Assertion,
-  assertBool,
-  assertFailure,
-  (@?=),
- )
+import Test.Tasty.HUnit
+  ( Assertion,
+    assertBool,
+    assertFailure,
+    (@?=),
+  )
 import Turtle (sleep)
 import UnliftIO.Async (concurrently_, withAsync)
 import UnliftIO.STM (newTChanIO, readTChan, writeTChan)

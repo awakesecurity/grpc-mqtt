@@ -95,7 +95,7 @@ getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
-connectMQTT :: MonadIO m => MQTTGRPCConfig -> m MQTTClient
+connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
   let runner = if useTLS then runTLS else runTCP
   runMQTTConduit runner (getMQTTConfig cfg)

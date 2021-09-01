@@ -57,12 +57,12 @@ instance Sequenced Packet where
 
   seqPayload = packetPayload
 
-mkPacketizedRead :: forall m. (MonadIO m) => TChan LByteString -> m (ExceptT RemoteClientError m LByteString)
+mkPacketizedRead :: forall io . (MonadIO io) => TChan LByteString -> io (ExceptT RemoteClientError io LByteString)
 mkPacketizedRead chan = do
   let read = unwrapPacket . toStrict <$> readTChan chan
   readSeq <- mkSequencedRead read
 
-  let readMessage :: Builder.Builder -> ExceptT RemoteClientError m LByteString
+  let readMessage :: Builder.Builder -> ExceptT RemoteClientError io LByteString
       readMessage acc = do
         (Packet isLastPacket _ chunk) <- ExceptT readSeq
         let builder = acc <> Builder.byteString chunk
@@ -76,7 +76,7 @@ mkPacketizedRead chan = do
  read the objects in order even if they are received out of order
  NB: Objects with negative sequence numbers are always returned immediately
 -}
-mkSequencedRead :: forall m a. (MonadIO m, Sequenced a) => STM a -> m (m a)
+mkSequencedRead :: forall io a. (MonadIO io, Sequenced a) => STM a -> io (io a)
 mkSequencedRead read = do
   seqVar <- newTVarIO 0
   bufferVar <- newTVarIO $ SL.toSortedList @(SequencedWrap a) []
@@ -104,11 +104,11 @@ mkSequencedRead read = do
 
   return $ atomically orderedRead
 
-mkPacketizedPublish :: forall m n. (MonadIO m, MonadIO n) => MQTTClient -> Int64 -> Topic -> m (LByteString -> n ())
+mkPacketizedPublish :: forall io io'. (MonadIO io, MonadIO io') => MQTTClient -> Int64 -> Topic -> io (LByteString -> io' ())
 mkPacketizedPublish client msgLimit topic = do
   seqVar <- newTVarIO 0
 
-  let packetizedPublish :: LByteString -> n ()
+  let packetizedPublish :: LByteString -> io' ()
       packetizedPublish bs = do
         let (chunk, rest) = LBS.splitAt msgLimit bs
         let isLastPacket = LBS.null rest

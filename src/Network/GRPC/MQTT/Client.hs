@@ -233,7 +233,7 @@ withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnExcept
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => Logger -> MQTTGRPCConfig -> m MQTTGRPCClient
+connectMQTTGRPC :: (MonadIO io) => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   resultChan <- newTChanIO
 

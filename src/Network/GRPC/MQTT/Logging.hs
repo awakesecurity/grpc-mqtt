@@ -23,14 +23,14 @@ data Verbosity
 noLogging :: Logger
 noLogging = Logger (\_ -> pure ()) Silent
 
-logErr :: Logger -> Text -> IO ()
+logErr :: (MonadIO io) => Logger -> Text -> io ()
 logErr = logVerbosity Error
-logWarn :: Logger -> Text -> IO ()
+logWarn :: (MonadIO io) => Logger -> Text -> io ()
 logWarn = logVerbosity Warn
-logInfo :: Logger -> Text -> IO ()
+logInfo :: (MonadIO io) => Logger -> Text -> io ()
 logInfo = logVerbosity Info
-logDebug :: Logger -> Text -> IO ()
+logDebug :: (MonadIO io) => Logger -> Text -> io ()
 logDebug = logVerbosity Debug
 
-logVerbosity :: Verbosity -> Logger -> Text -> IO ()
-logVerbosity v logger msg = when (verbosity logger >= v) $ log logger msg
+logVerbosity :: (MonadIO io) => Verbosity -> Logger -> Text -> io ()
+logVerbosity v logger msg = when (verbosity logger >= v) $ liftIO (log logger msg)

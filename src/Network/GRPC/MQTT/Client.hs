@@ -5,82 +5,83 @@
 -}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.Client (
-  MQTTGRPCClient (..),
-  mqttRequest,
-  withMQTTGRPCClient,
-  connectMQTTGRPC,
-) where
+module Network.GRPC.MQTT.Client
+  ( MQTTGRPCClient (..),
+    mqttRequest,
+    withMQTTGRPCClient,
+    connectMQTTGRPC,
+  )
+where
 
 import Relude
 
-import Proto.Mqtt (
-  AuxControl (AuxControlAlive, AuxControlTerminate),
-  AuxControlMessage (AuxControlMessage),
-  RemoteClientError,
- )
+import Proto.Mqtt
+  ( AuxControl (AuxControlAlive, AuxControlTerminate),
+    AuxControlMessage (AuxControlMessage),
+    RemoteClientError,
+  )
 
-import Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig(_msgCB),
-  connectMQTT,
-  heartbeatPeriodSeconds,
-  toFilter,
- )
+import Network.GRPC.MQTT.Core
+  ( MQTTGRPCConfig (_msgCB),
+    connectMQTT,
+    heartbeatPeriodSeconds,
+    mqttMsgSizeLimit,
+    subscribeOrThrow,
+  )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkReadResponse)
-import Network.GRPC.MQTT.Types (
-  MQTTRequest (MQTTNormalRequest, MQTTReaderRequest),
-  MQTTResult (GRPCResult, MQTTError),
- )
-import Network.GRPC.MQTT.Wrapping (
-  fromRemoteClientError,
-  parseErrorToRCE,
-  toMetadataMap,
-  unwrapStreamChunk,
-  unwrapStreamResponse,
-  unwrapUnaryResponse,
-  wrapRequest,
- )
+import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
+import Network.GRPC.MQTT.Types
+  ( MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+    MQTTResult (GRPCResult, MQTTError),
+  )
+import Network.GRPC.MQTT.Wrapping
+  ( fromRemoteClientError,
+    toGRPCIOError,
+    unwrapClientStreamResponse,
+    unwrapMetadataMap,
+    unwrapStreamChunk,
+    unwrapStreamResponse,
+    unwrapUnaryResponse,
+    wrapRequest,
+    wrapStreamChunk,
+  )
 
 import Control.Exception (bracket, throw)
+import Control.Monad.Except (withExceptT)
 import Crypto.Nonce (Generator, new, nonce128urlT)
-import Network.GRPC.HighLevel (
-  GRPCIOError (GRPCIOTimeout),
-  MethodName (MethodName),
- )
-import Network.GRPC.HighLevel.Client (
-  ClientError (ClientIOError),
-  ClientResult (ClientErrorResponse),
-  TimeoutSeconds,
- )
+import Network.GRPC.HighLevel
+  ( GRPCIOError (GRPCIOTimeout),
+    MethodName (MethodName),
+  )
+import Network.GRPC.HighLevel.Client
+  ( ClientError (ClientIOError),
+    ClientResult (ClientErrorResponse),
+    TimeoutSeconds,
+  )
 import qualified Network.GRPC.HighLevel.Generated as HL
-import Network.MQTT.Client (
-  MQTTClient,
-  MQTTException (MQTTException),
-  MessageCallback (SimpleCallback),
-  QoS (QoS1),
-  SubOptions (_subQoS),
-  normalDisconnect,
-  publishq,
-  subOptions,
-  subscribe,
- )
-import Network.MQTT.Topic (Topic (unTopic), mkTopic)
-import Proto3.Suite (
-  Enumerated (Enumerated),
-  Message,
-  fromByteString,
-  toLazyByteString,
- )
+import Network.MQTT.Client
+  ( MQTTClient,
+    MQTTException (MQTTException),
+    MessageCallback (SimpleCallback),
+    normalDisconnect,
+  )
+import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
+import Proto3.Suite
+  ( Enumerated (Enumerated),
+    HasDefault,
+    Message,
+    def,
+    toLazyByteString,
+  )
 import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
-import UnliftIO.Exception (onException, throwString)
-import UnliftIO.STM (
-  TChan,
-  newTChanIO,
-  writeTChan,
- )
+import UnliftIO.Exception (handle, onException)
+import UnliftIO.STM
+  ( TChan,
+    newTChanIO,
+    writeTChan,
+  )
 import UnliftIO.Timeout (timeout)
 
 -- | Client for making gRPC calls over MQTT
@@ -93,6 +94,8 @@ data MQTTGRPCClient = MQTTGRPCClient
     rng :: Generator
   , -- | Logging
     mqttLogger :: Logger
+  , -- | Maximum size for an MQTT message in bytes
+    msgSizeLimit :: Int64
   }
 
 {- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
@@ -109,7 +112,7 @@ withMQTTGRPCClient logger cfg =
 -}
 mqttRequest ::
   forall request response streamtype.
-  (Message request, Message response) =>
+  (Message request, Message response, HasDefault request) =>
   MQTTGRPCClient ->
   Topic ->
   MethodName ->
@@ -118,90 +121,119 @@ mqttRequest ::
 mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
 
-  sessionId <- generateSessionId rng
-  let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
-  let controlTopic = responseTopic <> "control"
+  handle handleMQTTException $ do
+    sessionId <- generateSessionId rng
+    let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
+    let controlTopic = responseTopic <> "control"
+    let baseRequestTopic = baseTopic <> "grpc" <> "request" <> sessionId
 
-  requestTopic <-
-    case mkTopic ("grpc/request" <> decodeUtf8 method) of
-      Nothing -> throwString $ "gRPC method forms invalid topic: " <> decodeUtf8 method
-      Just t -> pure $ baseTopic <> t
+    requestTopic <-
+      mkTopic (unTopic baseRequestTopic <> decodeUtf8 method)
+        `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
 
-  let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
-      publishRequest req timeLimit reqMetadata = do
-        logDebug mqttLogger $ "Publishing message to topic: " <> unTopic responseTopic
-        let wrappedReq = wrapRequest responseTopic timeLimit reqMetadata req
-        publishq mqttClient requestTopic wrappedReq False QoS1 []
+    publishReq <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
+    let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
+        publishRequest req timeLimit reqMetadata = do
+          logDebug mqttLogger $ "Publishing message to topic: " <> unTopic requestTopic
+          let wrappedReq = wrapRequest timeLimit reqMetadata req
+          publishReq wrappedReq
 
-  let publishControlMsg :: AuxControl -> IO ()
-      publishControlMsg ctrl = do
-        logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic responseTopic
-        publishq mqttClient controlTopic ctrlMessage False QoS1 []
-       where
-        ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
+    publishCtrl <- mkPacketizedPublish mqttClient msgSizeLimit controlTopic
+    let publishControlMsg :: AuxControl -> IO ()
+        publishControlMsg ctrl = do
+          let ctrlMessage = toLazyByteString $ AuxControlMessage (Enumerated (Right ctrl))
+          logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
+          publishCtrl ctrlMessage
 
-  let sendTerminateOnException :: IO a -> IO a
-      sendTerminateOnException action = onException action $ do
-        logErr mqttLogger "Exception while waiting for response"
-        publishControlMsg AuxControlTerminate
+    readResponse <- mkPacketizedRead responseChan
 
-  -- Build function to read response chunks in order
-  readResponse <- mkReadResponse responseChan
+    -- Subscribe to response topic
+    subscribeOrThrow mqttClient [toFilter responseTopic]
 
-  -- Subscribe to response topic
-  (subResults, _) <- subscribe mqttClient [(toFilter responseTopic, subOptions{_subQoS = QoS1})] []
-  case subResults of
-    [Left subErr] -> do
-      let errMsg = "Failed to subscribe to the topic: " <> unTopic responseTopic <> "Reason: " <> show subErr
+    -- Process request
+    case request of
+      -- Unary Requests
+      MQTTNormalRequest req timeLimit reqMetadata ->
+        grpcTimeout timeLimit $ do
+          publishRequest req timeLimit reqMetadata
+          withControlSignals publishControlMsg . exceptToResult $
+            unwrapUnaryResponse <$> readResponse
+
+      -- Client Streaming Requests
+      MQTTWriterRequest timeLimit initMetadata streamHandler -> do
+        let publishStream :: request -> IO (Either GRPCIOError ())
+            publishStream req = do
+              logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
+              let wrappedReq = wrapStreamChunk (Just req)
+              publishReq wrappedReq
+              -- TODO: Fix this. Send errors won't be propagated to client's send handler
+              return $ Right ()
+
+        grpcTimeout timeLimit $ do
+          -- send initMetadata
+          publishRequest def timeLimit initMetadata
+          withControlSignals publishControlMsg . exceptToResult $ do
+            liftIO $ do
+              -- do client streaming
+              streamHandler publishStream
+              -- Publish 'Nothing' to denote end of stream
+              publishReq $ wrapStreamChunk @request Nothing
+
+            unwrapClientStreamResponse <$> readResponse
+
+      -- Server Streaming Requests
+      MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
+        grpcTimeout timeLimit $ do
+          publishRequest req timeLimit reqMetadata
+
+          withControlSignals publishControlMsg . exceptToResult $ do
+            -- Wait for initial metadata
+            rawInitMetadata <- readResponse
+            metadata <- hoistEither $ unwrapMetadataMap rawInitMetadata
+
+            let mqttSRecv :: IO (Either GRPCIOError (Maybe response))
+                mqttSRecv = runExceptT $ do
+                  rsp <- withExceptT toGRPCIOError readResponse
+                  hoistEither $ unwrapStreamChunk rsp
+
+            -- Run user-provided stream handler
+            liftIO $ streamHandler metadata mqttSRecv
+
+            -- Return final result
+            unwrapStreamResponse <$> readResponse
+  where
+    handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
+    handleMQTTException e = do
+      let errMsg = toText $ displayException e
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
-    _ -> do
-      -- Process request
-      case request of
-        -- Unary Requests
-        MQTTNormalRequest req timeLimit reqMetadata ->
-          grpcTimeout timeLimit $ do
-            publishRequest req timeLimit reqMetadata
-            sendTerminateOnException $
-              either fromRemoteClientError unwrapUnaryResponse <$> readResponse
 
-        -- Server Streaming Requests
-        MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
-          grpcTimeout timeLimit $ do
-            publishRequest req timeLimit reqMetadata
+{- | Helper function to run an 'ExceptT RemoteClientError' action and convert any failure
+ to an 'MQTTResult'
+-}
+exceptToResult :: (Functor m) => ExceptT RemoteClientError m (MQTTResult streamtype response) -> m (MQTTResult streamtype response)
+exceptToResult = fmap (either fromRemoteClientError id) . runExceptT
 
-            let withMQTTHeartbeat :: IO a -> IO a
-                withMQTTHeartbeat action =
-                  withAsync
-                    (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
-                    (const action)
+{- | Manages the control signals (Heartbeat and Terminate) asynchronously while
+ the provided action performs a request
+-}
+withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
+withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnException
+  where
+    withMQTTHeartbeat :: IO a -> IO a
+    withMQTTHeartbeat action =
+      withAsync
+        (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
+        (const action)
 
-            withMQTTHeartbeat . sendTerminateOnException $ do
-              let readInitMetadata :: IO (Either RemoteClientError HL.MetadataMap)
-                  readInitMetadata = do
-                    rsp <- readResponse
-                    return $
-                      fmap toMetadataMap . tryParse . toStrict =<< rsp
-
-              -- Wait for initial metadata
-              readInitMetadata >>= \case
-                Left err -> do
-                  logErr mqttLogger $ "Failed to read initial metadata: " <> show err
-                  pure $ fromRemoteClientError err
-                Right metadata -> do
-                  -- Adapter to recieve stream from MQTT
-                  let mqttSRecv = unwrapStreamChunk . fmap toStrict <$> readResponse
-
-                  -- Run user-provided stream handler
-                  streamHandler metadata mqttSRecv
-
-                  -- Return final result
-                  either fromRemoteClientError unwrapStreamResponse <$> readResponse
+    sendTerminateOnException :: IO a -> IO a
+    sendTerminateOnException action =
+      action `onException` publishControlMsg AuxControlTerminate
 
 {- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
  NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 -}
-connectMQTTGRPC :: (MonadIO m) => Logger -> MQTTGRPCConfig -> m MQTTGRPCClient
+connectMQTTGRPC :: (MonadIO io) => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   resultChan <- newTChanIO
 
@@ -216,24 +248,17 @@ connectMQTTGRPC logger cfg = do
     <*> pure resultChan
     <*> new
     <*> pure logger
+    <*> pure (fromIntegral (mqttMsgSizeLimit cfg))
 
 -- | Returns a 'GRPCIOTimeout' error if the supplied function takes longer than the given timeout.
 grpcTimeout :: (MonadUnliftIO m) => TimeoutSeconds -> m (MQTTResult streamType response) -> m (MQTTResult streamType response)
 grpcTimeout timeLimit action = fromMaybe timeoutError <$> timeout (timeLimit * 1000000) action
- where
-  timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
+  where
+    timeoutError = GRPCResult $ ClientErrorResponse (ClientIOError GRPCIOTimeout)
 
+-- | Generate a new random 'SessionId' and parse it into a 'Topic'
 generateSessionId :: Generator -> IO Topic
 generateSessionId randGen =
   mkTopic <$> nonce128urlT randGen >>= \case
     Just topic -> pure topic
     Nothing -> throw $ MQTTException "Failed to generate a valid session ID. (This should be impossible)"
-
-tryParse :: Message a => ByteString -> Either RemoteClientError a
-tryParse msg =
-  case fromByteString msg of
-    Right x -> Right x
-    Left parseErr ->
-      case fromByteString @RemoteClientError msg of
-        Left _ -> Left (parseErrorToRCE parseErr)
-        Right recvErr -> Left recvErr

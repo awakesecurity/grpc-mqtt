@@ -1,45 +1,52 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.Core (
-  MQTTGRPCConfig (..),
-  connectMQTT,
-  heartbeatPeriodSeconds,
-  toFilter,
-  defaultMGConfig,
-) where
+module Network.GRPC.MQTT.Core
+  ( MQTTGRPCConfig (..),
+    connectMQTT,
+    heartbeatPeriodSeconds,
+    defaultMGConfig,
+    subscribeOrThrow,
+  )
+where
 
 import Relude
 
-import Data.Conduit.Network (
-  AppData,
-  ClientSettings,
-  appSink,
-  appSource,
-  clientSettings,
-  runTCPClient,
- )
-import Data.Conduit.Network.TLS (
-  TLSClientConfig (tlsClientTLSSettings),
-  runTLSClient,
-  tlsClientConfig,
- )
+import Control.Exception (throw)
+import Data.Conduit.Network
+  ( AppData,
+    ClientSettings,
+    appSink,
+    appSource,
+    clientSettings,
+    runTCPClient,
+  )
+import Data.Conduit.Network.TLS
+  ( TLSClientConfig (tlsClientTLSSettings),
+    runTLSClient,
+    tlsClientConfig,
+  )
+import qualified Data.List as L
 import Network.Connection (TLSSettings (TLSSettingsSimple))
-import Network.MQTT.Client (
-  MQTTClient,
-  MQTTConduit,
-  MQTTConfig (..),
-  MessageCallback (NoCallback),
-  runMQTTConduit,
- )
-import Network.MQTT.Topic (Filter, Topic (unTopic), mkFilter)
-import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311))
-import Relude.Unsafe (fromJust)
+import Network.MQTT.Client
+  ( MQTTClient,
+    MQTTConduit,
+    MQTTConfig (..),
+    MQTTException (MQTTException),
+    MessageCallback (NoCallback),
+    QoS (QoS1),
+    SubOptions (_subQoS),
+    runMQTTConduit,
+    subOptions,
+    subscribe,
+  )
+import Network.MQTT.Topic (Filter(unFilter))
+import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Turtle (NominalDiffTime)
 
 {- |
@@ -48,10 +55,8 @@ import Turtle (NominalDiffTime)
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
-    -- | Maximum size for an MQTT message in bytes
-  , mqttMsgSizeLimit :: Int
-  
-  -- Copy of MQTTConfig
+  , -- | Maximum size for an MQTT message in bytes
+    mqttMsgSizeLimit :: Int
   , _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback
@@ -90,33 +95,39 @@ getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
-connectMQTT :: MonadIO m => MQTTGRPCConfig -> m MQTTClient
+connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
   let runner = if useTLS then runTLS else runTCP
   runMQTTConduit runner (getMQTTConfig cfg)
- where
-  runTLS :: (MQTTConduit -> IO ()) -> IO ()
-  runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
+  where
+    runTLS :: (MQTTConduit -> IO ()) -> IO ()
+    runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
 
-  tlsCfg :: TLSClientConfig
-  tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
+    tlsCfg :: TLSClientConfig
+    tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
 
-  runTCP :: (MQTTConduit -> IO ()) -> IO ()
-  runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
+    runTCP :: (MQTTConduit -> IO ()) -> IO ()
+    runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
 
-  tcpCfg :: ClientSettings
-  tcpCfg = clientSettings _port (encodeUtf8 _hostname)
+    tcpCfg :: ClientSettings
+    tcpCfg = clientSettings _port (encodeUtf8 _hostname)
 
-  toMQTTConduit :: AppData -> MQTTConduit
-  toMQTTConduit ad = (appSource ad, appSink ad)
+    toMQTTConduit :: AppData -> MQTTConduit
+    toMQTTConduit ad = (appSource ad, appSink ad)
 
 -- | Period for heartbeat messages
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 
-{- | Topics are strictly a subset of 'Filter's so this conversion is always safe
- | This is a bit of a hack, but there is a upstream PR to add this to the net-mqtt
- | library: https://github.com/dustin/mqtt-hs/pull/22
--}
-toFilter :: Topic -> Filter
-toFilter = fromJust . mkFilter . unTopic
+subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
+subscribeOrThrow client topics = do
+  let subTopics = zip topics (repeat subOptions{_subQoS = QoS1})
+  (subResults, _) <- subscribe client subTopics []
+  let taggedResults = zipWith (\t -> first (t,)) topics subResults
+  let subFailures = lefts taggedResults
+  unless (null subFailures) $ do
+    let err = L.unlines $ fmap errMsg subFailures
+    throw $ MQTTException err
+  where
+    errMsg :: (Filter, SubErr) -> String
+    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr

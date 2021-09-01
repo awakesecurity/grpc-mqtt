@@ -1,35 +1,35 @@
-{- 
+{-
   Copyright (c) 2021 Arista Networks, Inc.
   Use of this source code is governed by the Apache License 2.0
   that can be found in the COPYING file.
 -}
-
 {-# LANGUAGE OverloadedLists #-}
 
 module Test.GRPCServers where
 
 import Relude
 
-import Proto.Test (
-  AddHello (..),
-  MultGoodbye (..),
-  OneInt (OneInt),
-  SSRpy (SSRpy),
-  SSRqt (SSRqt),
-  TwoInts (TwoInts),
-  addHelloServer,
-  multGoodbyeServer,
- )
+import Proto.Test
+  ( AddHello (..),
+    MultGoodbye (..),
+    OneInt (OneInt),
+    SSRpy (SSRpy),
+    SSRqt (SSRqt),
+    TwoInts (TwoInts),
+    addHelloServer,
+    multGoodbyeServer,
+  )
 
-import Network.GRPC.HighLevel (
-  ServiceOptions,
-  StatusCode (StatusOk),
- )
-import Network.GRPC.HighLevel.Generated (
-  GRPCMethodType (Normal, ServerStreaming),
-  ServerRequest (ServerNormalRequest, ServerWriterRequest),
-  ServerResponse (ServerNormalResponse, ServerWriterResponse),
- )
+import Network.GRPC.HighLevel
+  ( ServiceOptions,
+    StatusCode (StatusOk),
+  )
+import Network.GRPC.HighLevel.Generated
+  ( GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
+    ServerRequest (ServerNormalRequest, ServerReaderRequest, ServerWriterRequest),
+    ServerResponse (ServerNormalResponse, ServerReaderResponse, ServerWriterResponse),
+    StatusCode (StatusUnknown),
+  )
 import Turtle (sleep)
 
 addHelloService :: ServiceOptions -> IO ()
@@ -40,6 +40,7 @@ addHelloHandlers =
   AddHello
     { addHelloAdd = addHandler
     , addHelloHelloSS = helloSSHandler
+    , addHelloRunningSum = runningSumHandler
     }
 
 addHandler ::
@@ -65,9 +66,9 @@ helloSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) = d
     sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_helloSS")] StatusOk "Stream is done"
- where
-  greeting :: Int -> SSRpy
-  greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
+  where
+    greeting :: Int -> SSRpy
+    greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
 
 infiniteHelloSSHandler :: ServerRequest 'ServerStreaming SSRqt SSRpy -> IO (ServerResponse 'ServerStreaming SSRpy)
 infiniteHelloSSHandler (ServerWriterRequest _metadata (SSRqt name _) ssend) = do
@@ -79,9 +80,33 @@ infiniteHelloSSHandler (ServerWriterRequest _metadata (SSRqt name _) ssend) = do
     sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_infiniteHelloSS")] StatusOk "Stream is done"
- where
-  greeting :: Int -> SSRpy
-  greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
+  where
+    greeting :: Int -> SSRpy
+    greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
+
+runningSumHandler :: ServerRequest 'ClientStreaming OneInt OneInt -> IO (ServerResponse 'ClientStreaming OneInt)
+runningSumHandler (ServerReaderRequest _metadata recv) = loop 0
+  where
+    loop !i = do
+      msg <- recv
+      case msg of
+        Left err ->
+          return
+            ( ServerReaderResponse
+                Nothing
+                []
+                StatusUnknown
+                (fromString (show err))
+            )
+        Right (Just (OneInt x)) -> loop (i + x)
+        Right Nothing -> do
+          return
+            ( ServerReaderResponse
+                (Just (OneInt i))
+                []
+                StatusOk
+                ""
+            )
 
 multGoodbyeService :: ServiceOptions -> IO ()
 multGoodbyeService = multGoodbyeServer multGoodbyeHandlers
@@ -91,6 +116,7 @@ multGoodbyeHandlers =
   MultGoodbye
     { multGoodbyeMult = multHandler
     , multGoodbyeGoodbyeSS = goodbyeSSHandler
+    , multGoodbyeRunningProd = runningProdHandler
     }
 
 multHandler :: ServerRequest 'Normal TwoInts OneInt -> IO (ServerResponse 'Normal OneInt)
@@ -114,5 +140,29 @@ goodbyeSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) =
     sleep 0.1
 
   return $ ServerWriterResponse [("metadata_field", "metadata_value")] StatusOk "Stream is done"
- where
-  sendoff i = SSRpy $ "Good Bye, " <> name <> " - " <> show i
+  where
+    sendoff i = SSRpy $ "Good Bye, " <> name <> " - " <> show i
+
+runningProdHandler :: ServerRequest 'ClientStreaming OneInt OneInt -> IO (ServerResponse 'ClientStreaming OneInt)
+runningProdHandler (ServerReaderRequest _metadata recv) = loop 0
+  where
+    loop !i = do
+      msg <- recv
+      case msg of
+        Left err ->
+          return
+            ( ServerReaderResponse
+                Nothing
+                []
+                StatusUnknown
+                (fromString (show err))
+            )
+        Right (Just (OneInt x)) -> loop (i * x)
+        Right Nothing ->
+          return
+            ( ServerReaderResponse
+                (Just (OneInt i))
+                []
+                StatusOk
+                ""
+            )

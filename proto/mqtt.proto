@@ -62,6 +62,21 @@ message WrappedStreamChunk {
   }
 }
 
+message WrappedClientStreamResponse {
+  oneof or_error {
+    ClientStreamResponse response = 1;
+    RemoteClientError error = 2;
+  }
+}
+
+message ClientStreamResponse {
+  bytes body = 1;
+  MetadataMap init_metamap = 2;
+  MetadataMap trail_metamap = 3;
+  int32 response_code = 4;
+  string details = 5;
+}
+
 message WrappedStreamResponse {
   oneof or_error {
     StreamResponse response = 1;
@@ -76,10 +91,9 @@ message StreamResponse {
 }
 
 message WrappedMQTTRequest {
-  string response_topic = 1;
-  int64 timeout = 2;
-  MetadataMap metamap = 3;
-  bytes payload = 4;
+  int64 timeout = 1;
+  MetadataMap metamap = 2;
+  bytes payload = 3;
 }
 
 message WrappedUnaryResponse {

@@ -7,6 +7,9 @@ service AddHello {
 
   /* Server Streaming Service */
   rpc HelloSS(SSRqt) returns (stream SSRpy) {}
+
+  /* Client Streaming Service */
+  rpc RunningSum (stream OneInt) returns (OneInt) {}
 }
 
 service MultGoodbye {
@@ -15,6 +18,9 @@ service MultGoodbye {
 
   /* Server Streaming Service */
   rpc GoodbyeSS(SSRqt) returns (stream SSRpy) {}
+
+  /* Client Streaming Service */
+  rpc RunningProd (stream OneInt) returns (OneInt) {}
 }
 
 message TwoInts {

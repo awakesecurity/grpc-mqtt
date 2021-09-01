@@ -49,7 +49,13 @@ data AddHello request response = AddHello{addHelloAdd ::
                                             Proto.Test.SSRpy
                                             ->
                                             Hs.IO
-                                              (response 'HsGRPC.ServerStreaming Proto.Test.SSRpy)}
+                                              (response 'HsGRPC.ServerStreaming Proto.Test.SSRpy),
+                                          addHelloRunningSum ::
+                                          request 'HsGRPC.ClientStreaming Proto.Test.OneInt
+                                            Proto.Test.OneInt
+                                            ->
+                                            Hs.IO
+                                              (response 'HsGRPC.ClientStreaming Proto.Test.OneInt)}
                                deriving Hs.Generic
  
 addHelloServer ::
@@ -57,7 +63,8 @@ addHelloServer ::
                    HsGRPC.ServiceOptions -> Hs.IO ()
 addHelloServer
   AddHello{addHelloAdd = addHelloAdd,
-           addHelloHelloSS = addHelloHelloSS}
+           addHelloHelloSS = addHelloHelloSS,
+           addHelloRunningSum = addHelloRunningSum}
   (ServiceOptions serverHost serverPort useCompression
      userAgentPrefix userAgentSuffix initialMetadata sslConfig logger
      serverMaxReceiveMessageLength)
@@ -65,7 +72,11 @@ addHelloServer
        HsGRPC.defaultOptions{HsGRPC.optNormalHandlers =
                                [(HsGRPC.UnaryHandler (HsGRPC.MethodName "/test.AddHello/Add")
                                    (HsGRPC.convertGeneratedServerHandler addHelloAdd))],
-                             HsGRPC.optClientStreamHandlers = [],
+                             HsGRPC.optClientStreamHandlers =
+                               [(HsGRPC.ClientStreamHandler
+                                   (HsGRPC.MethodName "/test.AddHello/RunningSum")
+                                   (HsGRPC.convertGeneratedServerReaderHandler
+                                      addHelloRunningSum))],
                              HsGRPC.optServerStreamHandlers =
                                [(HsGRPC.ServerStreamHandler
                                    (HsGRPC.MethodName "/test.AddHello/HelloSS")
@@ -90,6 +101,10 @@ addHelloClient client
       ((Hs.pure (HsGRPC.clientRequest client)) <*>
          (HsGRPC.clientRegisterMethod client
             (HsGRPC.MethodName "/test.AddHello/HelloSS")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.AddHello/RunningSum")))
  
 data MultGoodbye request response = MultGoodbye{multGoodbyeMult ::
                                                 request 'HsGRPC.Normal Proto.Test.TwoInts
@@ -102,7 +117,14 @@ data MultGoodbye request response = MultGoodbye{multGoodbyeMult ::
                                                   ->
                                                   Hs.IO
                                                     (response 'HsGRPC.ServerStreaming
-                                                       Proto.Test.SSRpy)}
+                                                       Proto.Test.SSRpy),
+                                                multGoodbyeRunningProd ::
+                                                request 'HsGRPC.ClientStreaming Proto.Test.OneInt
+                                                  Proto.Test.OneInt
+                                                  ->
+                                                  Hs.IO
+                                                    (response 'HsGRPC.ClientStreaming
+                                                       Proto.Test.OneInt)}
                                   deriving Hs.Generic
  
 multGoodbyeServer ::
@@ -110,7 +132,8 @@ multGoodbyeServer ::
                       HsGRPC.ServiceOptions -> Hs.IO ()
 multGoodbyeServer
   MultGoodbye{multGoodbyeMult = multGoodbyeMult,
-              multGoodbyeGoodbyeSS = multGoodbyeGoodbyeSS}
+              multGoodbyeGoodbyeSS = multGoodbyeGoodbyeSS,
+              multGoodbyeRunningProd = multGoodbyeRunningProd}
   (ServiceOptions serverHost serverPort useCompression
      userAgentPrefix userAgentSuffix initialMetadata sslConfig logger
      serverMaxReceiveMessageLength)
@@ -118,7 +141,11 @@ multGoodbyeServer
        HsGRPC.defaultOptions{HsGRPC.optNormalHandlers =
                                [(HsGRPC.UnaryHandler (HsGRPC.MethodName "/test.MultGoodbye/Mult")
                                    (HsGRPC.convertGeneratedServerHandler multGoodbyeMult))],
-                             HsGRPC.optClientStreamHandlers = [],
+                             HsGRPC.optClientStreamHandlers =
+                               [(HsGRPC.ClientStreamHandler
+                                   (HsGRPC.MethodName "/test.MultGoodbye/RunningProd")
+                                   (HsGRPC.convertGeneratedServerReaderHandler
+                                      multGoodbyeRunningProd))],
                              HsGRPC.optServerStreamHandlers =
                                [(HsGRPC.ServerStreamHandler
                                    (HsGRPC.MethodName "/test.MultGoodbye/GoodbyeSS")
@@ -144,6 +171,10 @@ multGoodbyeClient client
       ((Hs.pure (HsGRPC.clientRequest client)) <*>
          (HsGRPC.clientRegisterMethod client
             (HsGRPC.MethodName "/test.MultGoodbye/GoodbyeSS")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.MultGoodbye/RunningProd")))
  
 data TwoInts = TwoInts{twoIntsX :: Hs.Int32, twoIntsY :: Hs.Int32}
              deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)

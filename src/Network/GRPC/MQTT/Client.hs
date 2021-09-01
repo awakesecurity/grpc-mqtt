@@ -166,7 +166,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
               logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
               let wrappedReq = wrapStreamChunk (Just req)
               publishReq wrappedReq
-              -- TODO: Fix this. Send errors won't be propegated to client's send handler
+              -- TODO: Fix this. Send errors won't be propagated to client's send handler
               return $ Right ()
 
         grpcTimeout timeLimit $ do

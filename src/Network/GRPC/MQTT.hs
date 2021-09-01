@@ -6,7 +6,8 @@
 
 module Network.GRPC.MQTT
   ( -- * Re-exports from 'net-mqtt'
-    Topic (..),
+    Topic (unTopic),
+    mkTopic,
     MQTTException (..),
     ProtocolLevel (..),
     Property (..),

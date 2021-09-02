@@ -13,10 +13,10 @@ import Relude
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.SortedList as SL
-import Network.GRPC.MQTT.Wrapping (unwrapPacket)
+import Network.GRPC.MQTT.Wrapping (fromLazyByteString)
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
-import Proto.Mqtt (Packet (..), RemoteClientError)
+import Proto.Mqtt (Packet (..), RemoteError)
 import Proto3.Suite (toLazyByteString)
 import UnliftIO.STM (TChan, readTChan)
 
@@ -57,12 +57,12 @@ instance Sequenced Packet where
 
   seqPayload = packetPayload
 
-mkPacketizedRead :: forall io . (MonadIO io) => TChan LByteString -> io (ExceptT RemoteClientError io LByteString)
+mkPacketizedRead :: forall io. (MonadIO io) => TChan LByteString -> io (ExceptT RemoteError io LByteString)
 mkPacketizedRead chan = do
-  let read = unwrapPacket . toStrict <$> readTChan chan
+  let read = fromLazyByteString @Packet <$> readTChan chan
   readSeq <- mkSequencedRead read
 
-  let readMessage :: Builder.Builder -> ExceptT RemoteClientError io LByteString
+  let readMessage :: Builder.Builder -> ExceptT RemoteError io LByteString
       readMessage acc = do
         (Packet isLastPacket _ chunk) <- ExceptT readSeq
         let builder = acc <> Builder.byteString chunk

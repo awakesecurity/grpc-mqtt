@@ -1,7 +1,64 @@
 syntax = "proto3";
 package mqtt;
 
-enum RCError {
+
+message Packet {
+  bool terminal = 1;
+  int32 sequence_num = 2;
+  bytes payload = 3;
+}
+
+message MQTTRequest {
+  int64 timeout = 1;
+  MetadataMap metamap = 2;
+  bytes payload = 3;
+}
+
+message ResponseBody {
+  bytes value = 1;
+}
+message MQTTResponse {
+  ResponseBody body = 1;
+  MetadataMap init_metamap = 2;
+  MetadataMap trail_metamap = 3;
+  int32 response_code = 4;
+  string details = 5;
+}
+
+message WrappedResponse {
+  oneof or_error {
+    MQTTResponse response = 1;
+    RemoteError error = 2;
+  }
+}
+
+message WrappedStreamChunk {
+  oneof or_error {
+    bytes chunk = 1;
+    RemoteError error = 2;
+  }
+}
+
+message MetadataMap {
+  message Entry {
+    bytes key = 1;
+    repeated bytes value = 2;
+  }
+  repeated Entry fields = 1;
+}
+
+enum AuxControl {
+  Unknown = 0;
+  Alive = 1;
+  Terminate = 2;
+}
+message AuxControlMessage {
+  AuxControl value = 1;
+}
+
+
+
+enum RError {
   UnknownError = 0;
   NoParseWireType = 1;
   NoParseBinary = 2;
@@ -31,91 +88,11 @@ enum RCError {
   IOGRPCHandlerException = 26;
   MQTTFailure = 27;
 }
-
-message Packet {
-  bool terminal = 1;
-  int32 sequence_num = 2;
-  bytes payload = 3;
-}
-
-message RemoteClientError {
-  RCError error_type = 1;
+message RemoteError {
+  RError error_type = 1;
   string message = 2;
   oneof extra {
     int32 status_code = 3;
-    RemoteClientError embedded_error = 4;
+    RemoteError embedded_error = 4;
   }
-}
-
-message List {
-  repeated bytes value = 1;
-}
-
-message MetadataMap {
-  map<string, List> value = 1;
-}
-
-message WrappedStreamChunk {
-  oneof or_error {
-    bytes value = 1;
-    RemoteClientError error = 2;
-  }
-}
-
-message WrappedClientStreamResponse {
-  oneof or_error {
-    ClientStreamResponse response = 1;
-    RemoteClientError error = 2;
-  }
-}
-
-message ClientStreamResponse {
-  bytes body = 1;
-  MetadataMap init_metamap = 2;
-  MetadataMap trail_metamap = 3;
-  int32 response_code = 4;
-  string details = 5;
-}
-
-message WrappedStreamResponse {
-  oneof or_error {
-    StreamResponse response = 1;
-    RemoteClientError error = 2;
-  }
-}
-
-message StreamResponse {
-  MetadataMap metamap = 1;
-  int32 response_code = 2;
-  string details = 3;
-}
-
-message WrappedMQTTRequest {
-  int64 timeout = 1;
-  MetadataMap metamap = 2;
-  bytes payload = 3;
-}
-
-message WrappedUnaryResponse {
-  oneof or_err {
-    UnaryResponse response = 1;
-    RemoteClientError error = 2;
-  }
-}
-message UnaryResponse {
-  bytes body = 1;
-  MetadataMap init_metamap = 2;
-  MetadataMap trail_metamap = 3;
-  int32 response_code = 4;
-  string details = 5;
-}
-
-enum AuxControl {
-  Unknown = 0;
-  Alive = 1;
-  Terminate = 2;
-}
-
-message AuxControlMessage {
-  AuxControl value = 1;
 }

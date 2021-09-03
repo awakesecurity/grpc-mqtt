@@ -37,6 +37,12 @@ import Network.GRPC.MQTT.Wrapping
     wrapResponse,
     wrapStreamChunk,
   )
+import Proto.Mqtt
+  ( AuxControl (AuxControlAlive, AuxControlTerminate),
+    AuxControlMessage (AuxControlMessage),
+    MQTTRequest (MQTTRequest),
+    RemoteError,
+  )
 
 import Control.Exception (bracket)
 import Control.Monad.Except (MonadError (throwError))
@@ -61,8 +67,6 @@ import Network.MQTT.Topic
     split,
     toFilter,
   )
-import Proto.Mqtt
-
 import Proto3.Suite
   ( Enumerated (Enumerated),
     Message,

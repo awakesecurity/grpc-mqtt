@@ -147,7 +147,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
-    readResponse <- mkPacketizedRead responseChan
+    readResponseTopic <- mkPacketizedRead responseChan
 
     -- Subscribe to response topic
     subscribeOrThrow mqttClient [toFilter responseTopic]
@@ -158,8 +158,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       MQTTNormalRequest req timeLimit reqMetadata ->
         grpcTimeout timeLimit $ do
           publishRequest req timeLimit reqMetadata
-          withControlSignals publishControlMsg . exceptToResult $
-            unwrapUnaryResponse <$> readResponse
+          withControlSignals publishControlMsg . exceptToResult $ do
+            rsp <- readResponseTopic
+            hoistEither $ unwrapUnaryResponse rsp
 
       -- Client Streaming Requests
       MQTTWriterRequest timeLimit initMetadata streamHandler -> do
@@ -181,7 +182,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
               -- Publish 'Nothing' to denote end of stream
               publishToRequestTopic $ wrapStreamChunk @request Nothing
 
-            unwrapClientStreamResponse <$> readResponse
+            rsp <- readResponseTopic
+            hoistEither $ unwrapClientStreamResponse rsp
 
       -- Server Streaming Requests
       MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
@@ -190,19 +192,20 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
           withControlSignals publishControlMsg . exceptToResult $ do
             -- Wait for initial metadata
-            rawInitMetadata <- readResponse
+            rawInitMetadata <- readResponseTopic
             metadata <- hoistEither $ parseMessageOrError rawInitMetadata
 
             let mqttSRecv :: IO (Either GRPCIOError (Maybe response))
                 mqttSRecv = runExceptT . withExceptT toGRPCIOError $ do
-                  rsp <- readResponse
+                  rsp <- readResponseTopic
                   hoistEither $ unwrapStreamChunk @response rsp
 
             -- Run user-provided stream handler
             liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv
 
             -- Return final result
-            unwrapServerStreamResponse <$> readResponse
+            rsp <- readResponseTopic
+            hoistEither $ unwrapServerStreamResponse rsp
   where
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do

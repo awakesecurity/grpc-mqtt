@@ -48,12 +48,7 @@ withGRPCClient myGRPCClientConfig $ \grpcClient -> do
 Using multiple servers:
 ```
 methodMapAH <- addHelloRemoteClientMethodMap grpcClient1
-methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2
+methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2s
 let methodMap = methodMapAH <> methodMapMG
 runRemoteClient myMQTTConfig baseTopic methodMap
 ```
-
-**On the topic of `Topic`s**
-
-The `baseTopic :: Topic` used to initialize the Client and RemoteClient above must be a two part MQTT topic that uniquely identifies the RemoteClient instance.  e.g. `testMachine/instance3`. This base topic must match between the two for a connection to be established. 
-

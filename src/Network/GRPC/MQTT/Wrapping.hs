@@ -251,7 +251,6 @@ fromLazyByteString msg =
 
 -- Protobuf type conversions
 
--- | NB: Destroys keys that fail to decode
 toMetadataMap :: Proto.MetadataMap -> HL.MetadataMap
 toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap $ foldMap toMap m
   where

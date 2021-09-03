@@ -10,6 +10,9 @@ service AddHello {
 
   /* Client Streaming Service */
   rpc RunningSum (stream OneInt) returns (OneInt) {}
+
+  /* Simple bidi streaming: ping-pong echo */
+  rpc HelloBi(stream BiRqtRpy) returns (stream BiRqtRpy) {}
 }
 
 service MultGoodbye {
@@ -39,4 +42,8 @@ message SSRqt {
 
 message SSRpy {
   string greeting = 1;
+}
+
+message BiRqtRpy {
+  string message = 1;
 }

@@ -49,11 +49,12 @@ import Control.Monad.Except (MonadError (throwError))
 import Data.HashMap.Strict (lookup)
 import Data.List (stripPrefix)
 import qualified Data.Map.Strict as Map
-import Network.GRPC.HighLevel (GRPCIOError, StreamSend)
+import Network.GRPC.HighLevel (StreamRecv, StreamSend)
 import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client
   ( ClientError (ClientIOError),
     ClientResult (ClientErrorResponse),
+    WritesDone,
   )
 import Network.GRPC.MQTT (MQTTException (MQTTException))
 import Network.MQTT.Client
@@ -75,7 +76,7 @@ import Proto3.Suite
   )
 import Turtle (NominalDiffTime)
 import UnliftIO (TChan, newTChanIO, timeout, writeTChan)
-import UnliftIO.Async (Async, async, cancel, race_)
+import UnliftIO.Async (Async, async, cancel, concurrently_, race_)
 import UnliftIO.Exception (finally, handle, handleAny)
 
 -- | A shared map of all currently running sessions
@@ -161,7 +162,7 @@ runRemoteClient logger cfg baseTopic methodMap = do
             let taggedLogger = logger{log = taggedLog}
             getSession (unTopic sessionId) >>= \case
               Nothing -> logInfo taggedLogger "Received control message for non-existant session"
-              Just session -> controlMsgHandler taggedLogger (unTopic sessionId) session mqttMessage
+              Just session -> controlMsgHandler taggedLogger session mqttMessage
           _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
 
     logException :: Text -> SomeException -> IO ()
@@ -219,6 +220,13 @@ requestHandler SessionArgs{..} reqChan = do
         `whenNothing` throwError (remoteError $ "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod)
 
     readRequest <- liftIO $ mkPacketizedRead reqChan
+    let readStreamChunk :: (Message request) => MaybeT IO request
+        readStreamChunk = do
+          res <- exceptToMaybeT readRequest
+          case unwrapStreamChunk res of
+            Left _ -> empty
+            Right c -> hoistMaybe c
+
     mqttMessage <- readRequest
 
     (MQTTRequest timeLimit reqMetadata payload) <- hoistEither (fromLazyByteString mqttMessage)
@@ -238,19 +246,17 @@ requestHandler SessionArgs{..} reqChan = do
 
       -- Run Client Streaming Request
       ClientClientStreamHandler handler -> do
-        let readStreamChunk :: (Message request) => MaybeT IO request
-            readStreamChunk = do
-              res <- exceptToMaybeT readRequest
-              case unwrapStreamChunk res of
-                Left _ -> empty
-                Right c -> hoistMaybe c
-
-        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSend readStreamChunk)
+        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSender readStreamChunk)
         publishToResponseTopic $ wrapResponse response
 
       -- Run Server Streaming Request
       ClientServerStreamHandler handler -> do
         response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic)
+        publishToResponseTopic $ wrapResponse response
+
+      -- Run BiDirectional Streaming Request
+      ClientBiDiStreamHandler handler -> do
+        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic)
         publishToResponseTopic $ wrapResponse response
   where
     publishErrors :: (RemoteError -> IO ()) -> IO (Either RemoteError ()) -> IO ()
@@ -279,7 +285,7 @@ streamReader ::
   (forall r. (Message r) => r -> IO ()) ->
   clientcall ->
   HL.MetadataMap ->
-  IO (Either GRPCIOError (Maybe response)) ->
+  StreamRecv response ->
   IO ()
 streamReader publish _cc initMetadata recv = do
   publish $ fromMetadataMap initMetadata
@@ -293,26 +299,40 @@ streamReader publish _cc initMetadata recv = do
           when (isJust chunk) readLoop
 
 -- | Reads chunks from MQTT and send them on to the gRPC stream
-streamSend :: forall request. MaybeT IO request -> StreamSend request -> IO ()
-streamSend readChunk send = void $ runMaybeT loop
+streamSender :: forall request. MaybeT IO request -> StreamSend request -> IO ()
+streamSender readChunk send = void $ runMaybeT loop
   where
     loop = do
       chunk <- readChunk
       _ <- liftIO $ send chunk
       loop
 
+bidiHandler ::
+  (Message response) =>
+  MaybeT IO request ->
+  (forall r. (Message r) => r -> IO ()) ->
+  clientcall ->
+  HL.MetadataMap ->
+  StreamRecv response ->
+  StreamSend request ->
+  WritesDone ->
+  IO ()
+bidiHandler readChunk publish cc initMetadata recv send writesDone = do
+  concurrently_
+    (streamSender readChunk send >> writesDone)
+    (streamReader publish cc initMetadata recv)
+
 -- | Handles AuxControl signals from the "/control" topic
-controlMsgHandler :: Logger -> SessionId -> Session -> LByteString -> IO ()
-controlMsgHandler logger sessionId session mqttMessage = do
-  let tagSession msg = "[" <> sessionId <> "] " <> msg
+controlMsgHandler :: Logger -> Session -> LByteString -> IO ()
+controlMsgHandler logger session mqttMessage = do
   case fromByteString (toStrict mqttMessage) of
     Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
-      logInfo logger . tagSession $ "Received terminate message"
+      logInfo logger "Received terminate message"
       cancel $ handlerThread session
     Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
-      logDebug logger . tagSession $ "Received heartbeat message"
+      logDebug logger "Received heartbeat message"
       void . atomically $ tryPutTMVar (sessionHeartbeat session) ()
     Right ctrl ->
-      logWarn logger . tagSession $ "Received unknown control message: " <> show ctrl
+      logWarn logger $ "Received unknown control message: " <> show ctrl
     Left err ->
-      logErr logger . tagSession $ "Failed to parse control message: " <> show err
+      logErr logger $ "Failed to parse control message: " <> show err

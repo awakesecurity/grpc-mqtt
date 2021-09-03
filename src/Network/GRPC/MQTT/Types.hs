@@ -16,14 +16,14 @@ where
 
 import Relude
 
-import qualified Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client
   ( ClientResult,
-    GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
+    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
     MetadataMap,
     StreamRecv,
     StreamSend,
     TimeoutSeconds,
+    WritesDone,
   )
 import Network.GRPC.LowLevel (ClientCall)
 import Proto3.Suite (Message)
@@ -33,9 +33,10 @@ type SessionId = Text
 
 -- | Analogs of 'ClientRequest' from grpc-haskell with the unused fields removed
 data MQTTRequest (streamType :: GRPCMethodType) request response where
-  MQTTNormalRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> MQTTRequest 'Normal request response
-  MQTTWriterRequest :: TimeoutSeconds -> HL.MetadataMap -> (StreamSend request -> IO ()) -> MQTTRequest 'ClientStreaming request response
-  MQTTReaderRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> (HL.MetadataMap -> StreamRecv response -> IO ()) -> MQTTRequest 'ServerStreaming request response
+  MQTTNormalRequest :: request -> TimeoutSeconds -> MetadataMap -> MQTTRequest 'Normal request response
+  MQTTWriterRequest :: TimeoutSeconds -> MetadataMap -> (StreamSend request -> IO ()) -> MQTTRequest 'ClientStreaming request response
+  MQTTReaderRequest :: request -> TimeoutSeconds -> MetadataMap -> (MetadataMap -> StreamRecv response -> IO ()) -> MQTTRequest 'ServerStreaming request response
+  MQTTBiDiRequest :: TimeoutSeconds -> MetadataMap -> (MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> MQTTRequest 'BiDiStreaming request response
 
 {- | The result of a gRPC request that makes a distinction between
  errors that occured as part of the GRPC call itself, or in the MQTT handling.
@@ -60,4 +61,8 @@ data ClientHandler where
   ClientServerStreamHandler ::
     (Message response) =>
     (ByteString -> TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> IO ()) -> IO (ClientResult 'ServerStreaming response)) ->
+    ClientHandler
+  ClientBiDiStreamHandler ::
+    (Message request, Message response) =>
+    (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
     ClientHandler

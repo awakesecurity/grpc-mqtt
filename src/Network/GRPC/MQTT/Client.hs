@@ -28,11 +28,14 @@ import Crypto.Nonce (Generator, new, nonce128urlT)
 import Network.GRPC.HighLevel
   ( GRPCIOError (GRPCIOTimeout),
     MethodName (MethodName),
+    StreamRecv,
+    StreamSend,
   )
 import Network.GRPC.HighLevel.Client
   ( ClientError (ClientIOError),
     ClientResult (ClientErrorResponse),
     TimeoutSeconds,
+    WritesDone,
   )
 import qualified Network.GRPC.HighLevel.Generated as HL
 import Network.GRPC.HighLevel.Server (toBS)
@@ -46,10 +49,22 @@ import Network.GRPC.MQTT.Core
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
 import Network.GRPC.MQTT.Types
-  ( MQTTRequest (MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Wrapping
+  ( fromMetadataMap,
+    fromRemoteError,
+    parseMessageOrError,
+    toGRPCIOError,
+    toMetadataMap,
+    unwrapBiDiStreamResponse,
+    unwrapClientStreamResponse,
+    unwrapServerStreamResponse,
+    unwrapStreamChunk,
+    unwrapUnaryResponse,
+    wrapStreamChunk,
+  )
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTException (MQTTException),
@@ -124,7 +139,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
         `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
 
     publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
-    let publishToRequestTopic :: forall r. Message r => r -> IO ()
+    let publishToRequestTopic :: Message r => r -> IO ()
         publishToRequestTopic = publishReq' . toLazyByteString
 
     let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
@@ -138,7 +153,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           publishToRequestTopic protoRequest
 
     publishCtrl' <- mkPacketizedPublish mqttClient msgSizeLimit controlTopic
-    let publishToControlTopic :: forall r. Message r => r -> IO ()
+    let publishToControlTopic :: Message r => r -> IO ()
         publishToControlTopic = publishCtrl' . toLazyByteString
 
     let publishControlMsg :: AuxControl -> IO ()
@@ -146,6 +161,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           let ctrlMessage = AuxControlMessage (Enumerated (Right ctrl))
           logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
+
+    let publishStream :: request -> IO (Either GRPCIOError ())
+        publishStream req = do
+          logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
+          let wrappedReq = wrapStreamChunk (Just req)
+          publishToRequestTopic wrappedReq
+          -- TODO: Fix this. Send errors won't be propagated to client's send handler
+          return $ Right ()
 
     readResponseTopic <- mkPacketizedRead responseChan
 
@@ -164,16 +187,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
 
       -- Client Streaming Requests
       MQTTWriterRequest timeLimit initMetadata streamHandler -> do
-        let publishStream :: request -> IO (Either GRPCIOError ())
-            publishStream req = do
-              logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-              let wrappedReq = wrapStreamChunk (Just req)
-              publishToRequestTopic wrappedReq
-              -- TODO: Fix this. Send errors won't be propagated to client's send handler
-              return $ Right ()
-
         grpcTimeout timeLimit $ do
-          -- send initMetadata
           publishRequest def timeLimit initMetadata
           withControlSignals publishControlMsg . exceptToResult $ do
             liftIO $ do
@@ -189,13 +203,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
       MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
         grpcTimeout timeLimit $ do
           publishRequest req timeLimit reqMetadata
-
           withControlSignals publishControlMsg . exceptToResult $ do
             -- Wait for initial metadata
             rawInitMetadata <- readResponseTopic
             metadata <- hoistEither $ parseMessageOrError rawInitMetadata
 
-            let mqttSRecv :: IO (Either GRPCIOError (Maybe response))
+            let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT . withExceptT toGRPCIOError $ do
                   rsp <- readResponseTopic
                   hoistEither $ unwrapStreamChunk @response rsp
@@ -206,6 +219,35 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
             -- Return final result
             rsp <- readResponseTopic
             hoistEither $ unwrapServerStreamResponse rsp
+
+      -- BiDirectional Server Streaming Requests
+      MQTTBiDiRequest timeLimit reqMetadata streamHandler ->
+        grpcTimeout timeLimit $ do
+          publishRequest def timeLimit reqMetadata
+          withControlSignals publishControlMsg . exceptToResult $ do
+            -- Wait for initial metadata
+            rawInitMetadata <- readResponseTopic
+            metadata <- hoistEither $ parseMessageOrError rawInitMetadata
+
+            let mqttSRecv :: StreamRecv response
+                mqttSRecv = runExceptT . withExceptT toGRPCIOError $ do
+                  rsp <- readResponseTopic
+                  hoistEither $ unwrapStreamChunk @response rsp
+
+            let mqttSSend :: StreamSend request
+                mqttSSend = publishStream
+
+            let mqttWritesDone :: WritesDone
+                mqttWritesDone = do
+                  publishToRequestTopic $ wrapStreamChunk @request Nothing
+                  return $ Right ()
+
+            -- Run user-provided stream handler
+            liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
+
+            -- Return final result
+            rsp <- readResponseTopic
+            hoistEither $ unwrapBiDiStreamResponse rsp
   where
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do

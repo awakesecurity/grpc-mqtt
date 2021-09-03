@@ -12,7 +12,8 @@ module Network.GRPC.MQTT.TH.Proto where
 import Relude hiding (FilePath)
 
 import Network.GRPC.MQTT.Wrapping
-  ( wrapClientStreamingClientHandler,
+  ( wrapBiDiStreamingClientHandler,
+    wrapClientStreamingClientHandler,
     wrapServerStreamingClientHandler,
     wrapUnaryClientHandler,
   )
@@ -43,7 +44,6 @@ import Proto3.Suite.DotProto.Internal
     prefixedFieldName,
     protoPackageName,
     typeLikeName,
-    _unimplementedError,
   )
 import Turtle (FilePath, directory, filename)
 
@@ -64,12 +64,12 @@ forEachService protoFilepath action = showErrors . runExceptT $ do
     let serviceMethodName (DotProtoServiceRPCMethod RPCMethod{..}) = do
           case rpcMethodName of
             Single nm -> do
-              streamingWrapper <-
-                case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
-                  (NonStreaming, Streaming) -> pure 'wrapServerStreamingClientHandler
-                  (NonStreaming, NonStreaming) -> pure 'wrapUnaryClientHandler
-                  (Streaming, NonStreaming) -> pure 'wrapClientStreamingClientHandler
-                  (Streaming, Streaming) -> _unimplementedError "Bidirectional streaming not supported"
+              let streamingWrapper =
+                    case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
+                      (NonStreaming, Streaming) -> 'wrapServerStreamingClientHandler
+                      (NonStreaming, NonStreaming) -> 'wrapUnaryClientHandler
+                      (Streaming, NonStreaming) -> 'wrapClientStreamingClientHandler
+                      (Streaming, Streaming) -> 'wrapBiDiStreamingClientHandler
               clientFun <- prefixedFieldName serviceName nm
               return [(endpointPrefix <> nm, streamingWrapper, mkName clientFun)]
             _ -> invalidMethodNameError rpcMethodName

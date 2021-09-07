@@ -29,19 +29,23 @@ import Network.GRPC.MQTT.Types
     SessionId,
   )
 import Network.GRPC.MQTT.Wrapping
-  ( parseErrorToRCE,
-    rceMQTTError,
+  ( fromLazyByteString,
+    fromMetadataMap,
+    remoteError,
     toMetadataMap,
     unwrapStreamChunk,
-    wrapClientStreamResponse,
+    wrapResponse,
     wrapStreamChunk,
-    wrapStreamInitMetadata,
-    wrapStreamResponse,
-    wrapUnaryResponse,
+  )
+import Proto.Mqtt
+  ( AuxControl (AuxControlAlive, AuxControlTerminate),
+    AuxControlMessage (AuxControlMessage),
+    MQTTRequest (MQTTRequest),
+    RemoteError,
   )
 
 import Control.Exception (bracket)
-import Control.Monad.Except (MonadError (throwError), withExceptT)
+import Control.Monad.Except (MonadError (throwError))
 import Data.HashMap.Strict (lookup)
 import Data.List (stripPrefix)
 import qualified Data.Map.Strict as Map
@@ -62,12 +66,6 @@ import Network.MQTT.Topic
   ( Topic (unTopic),
     split,
     toFilter,
-  )
-import Proto.Mqtt
-  ( AuxControl (AuxControlAlive, AuxControlTerminate),
-    AuxControlMessage (AuxControlMessage),
-    RemoteClientError (..),
-    WrappedMQTTRequest (WrappedMQTTRequest),
   )
 import Proto3.Suite
   ( Enumerated (Enumerated),
@@ -191,10 +189,10 @@ createNewSession args@SessionArgs{..} = do
           requestHandlerWithWatchdog :: IO ()
           requestHandlerWithWatchdog =
             race_
-              heartbeatMon
+              heartbeatMonitor
               (requestHandler args reqChan)
-          heartbeatMon :: IO ()
-          heartbeatMon = do
+          heartbeatMonitor :: IO ()
+          heartbeatMonitor = do
             watchdog (heartbeatPeriodSeconds + 1) heartbeatVar
             logWarn sessionLogger "watchdog timed out"
 
@@ -211,18 +209,19 @@ requestHandler SessionArgs{..} reqChan = do
   logInfo sessionLogger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
 
   let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
-  publishResponse <- mkPacketizedPublish client maxMsgSize responseTopic
+  publishRsp' <- mkPacketizedPublish client maxMsgSize responseTopic
+  let publishToResponseTopic :: forall r. Message r => r -> IO ()
+      publishToResponseTopic = publishRsp' . toLazyByteString
 
-  publishErrors publishResponse . runExceptT $ do
+  publishErrors publishToResponseTopic . runExceptT $ do
     clientHandler <-
       lookup grpcMethod methodMap
-        `whenNothing` throwError (rceMQTTError $ "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod)
+        `whenNothing` throwError (remoteError $ "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod)
 
     readRequest <- liftIO $ mkPacketizedRead reqChan
     mqttMessage <- readRequest
 
-    (WrappedMQTTRequest timeLimit reqMetadata payload) <-
-      withExceptT parseErrorToRCE $ hoistEither (fromByteString (toStrict mqttMessage))
+    (MQTTRequest timeLimit reqMetadata payload) <- hoistEither (fromLazyByteString mqttMessage)
 
     logDebug sessionLogger $
       unlines
@@ -235,7 +234,7 @@ requestHandler SessionArgs{..} reqChan = do
       -- Run Unary Request
       ClientUnaryHandler handler -> do
         response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
-        publishResponse $ wrapUnaryResponse response
+        publishToResponseTopic $ wrapResponse response
 
       -- Run Client Streaming Request
       ClientClientStreamHandler handler -> do
@@ -247,20 +246,20 @@ requestHandler SessionArgs{..} reqChan = do
                 Right c -> hoistMaybe c
 
         response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSend readStreamChunk)
-        publishResponse $ wrapClientStreamResponse response
+        publishToResponseTopic $ wrapResponse response
 
       -- Run Server Streaming Request
       ClientServerStreamHandler handler -> do
-        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishResponse)
-        publishResponse $ wrapStreamResponse response
+        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic)
+        publishToResponseTopic $ wrapResponse response
   where
-    publishErrors :: (LByteString -> IO ()) -> IO (Either RemoteClientError ()) -> IO ()
+    publishErrors :: (RemoteError -> IO ()) -> IO (Either RemoteError ()) -> IO ()
     publishErrors publishErr action =
       action >>= \case
         Right _ -> pure ()
         Left err -> do
           logErr sessionLogger $ show err
-          publishErr $ toLazyByteString err
+          publishErr err
 
 {- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
  Intended to be used with 'race'
@@ -277,18 +276,18 @@ watchdog timeLimit var = loop
 streamReader ::
   forall response clientcall.
   (Message response) =>
-  (LByteString -> IO ()) ->
+  (forall r. (Message r) => r -> IO ()) ->
   clientcall ->
   HL.MetadataMap ->
   IO (Either GRPCIOError (Maybe response)) ->
   IO ()
 streamReader publish _cc initMetadata recv = do
-  publish $ wrapStreamInitMetadata initMetadata
+  publish $ fromMetadataMap initMetadata
   readLoop
   where
     readLoop =
       recv >>= \case
-        Left err -> publish $ wrapStreamResponse @response (ClientErrorResponse $ ClientIOError err)
+        Left err -> publish $ wrapResponse @response (ClientErrorResponse $ ClientIOError err)
         Right chunk -> do
           publish $ wrapStreamChunk chunk
           when (isJust chunk) readLoop

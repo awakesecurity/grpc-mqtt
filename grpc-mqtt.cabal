@@ -86,8 +86,7 @@ library
   other-modules:      Proto.Mqtt
   ghc-options:        -O2
   hs-source-dirs:     src gen
-  build-depends:      base64
-                    , conduit-extra
+  build-depends:      conduit-extra
                     , connection
                     , mtl
                     , network-conduit-tls

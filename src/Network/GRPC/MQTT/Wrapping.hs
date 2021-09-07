@@ -6,7 +6,25 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.Wrapping where
+module Network.GRPC.MQTT.Wrapping
+  ( fromLazyByteString,
+    fromRemoteError,
+    parseMessageOrError,
+    remoteError,
+    toGRPCIOError,
+    toMetadataMap,
+    fromMetadataMap,
+    wrapStreamChunk,
+    unwrapStreamChunk,
+    wrapResponse,
+    unwrapUnaryResponse,
+    unwrapClientStreamResponse,
+    unwrapServerStreamResponse,
+    wrapUnaryClientHandler,
+    wrapClientStreamingClientHandler,
+    wrapServerStreamingClientHandler,
+  )
+where
 
 import Relude
 
@@ -16,35 +34,26 @@ import Network.GRPC.MQTT.Types
   )
 
 import Proto.Mqtt as Proto
-  ( ClientStreamResponse (..),
-    List (List, listValue),
+  ( MQTTResponse (..),
     MetadataMap (MetadataMap),
-    Packet,
-    RCError (..),
-    RemoteClientError (..),
-    RemoteClientErrorExtra (..),
-    StreamResponse (..),
-    UnaryResponse (..),
-    WrappedClientStreamResponse (WrappedClientStreamResponse),
-    WrappedClientStreamResponseOrError (..),
-    WrappedMQTTRequest (WrappedMQTTRequest),
+    MetadataMap_Entry (MetadataMap_Entry),
+    RError (..),
+    RemoteError (..),
+    RemoteErrorExtra (..),
+    ResponseBody (ResponseBody, responseBodyValue),
+    WrappedResponse (WrappedResponse),
+    WrappedResponseOrError
+      ( WrappedResponseOrErrorError,
+        WrappedResponseOrErrorResponse
+      ),
     WrappedStreamChunk (WrappedStreamChunk),
     WrappedStreamChunkOrError
-      ( WrappedStreamChunkOrErrorError,
-        WrappedStreamChunkOrErrorValue
+      ( WrappedStreamChunkOrErrorChunk,
+        WrappedStreamChunkOrErrorError
       ),
-    WrappedStreamResponse (WrappedStreamResponse),
-    WrappedStreamResponseOrError
-      ( WrappedStreamResponseOrErrorError,
-        WrappedStreamResponseOrErrorResponse
-      ),
-    WrappedUnaryResponse (..),
-    WrappedUnaryResponseOrErr (..),
   )
 
 import Control.Exception (ErrorCall, try)
-import qualified Data.ByteString as BS
-import Data.ByteString.Base64 (decodeBase64, encodeBase64)
 import qualified Data.Map as M
 import qualified Data.Vector as V
 import GHC.IO.Unsafe (unsafePerformIO)
@@ -71,11 +80,10 @@ import Proto3.Suite
   ( Enumerated (Enumerated),
     Message,
     fromByteString,
-    toLazyByteString,
   )
 import Proto3.Wire.Decode (ParseError (..))
 
--- Client Wrappers
+-- Client Handler Wrappers
 wrapUnaryClientHandler ::
   (Message request, Message response) =>
   (ClientRequest 'Normal request response -> IO (ClientResult 'Normal response)) ->
@@ -104,217 +112,154 @@ wrapClientStreamingClientHandler handler =
   ClientClientStreamHandler $ \timeout metadata send -> do
     handler (ClientWriterRequest timeout metadata send)
 
--- Requests
-wrapRequest ::
-  (Message request) =>
-  Int ->
-  HL.MetadataMap ->
-  request ->
-  LByteString
-wrapRequest timeout reqMetadata request =
-  toLazyByteString $
-    WrappedMQTTRequest
-      (fromIntegral timeout)
-      (Just $ fromMetadataMap reqMetadata)
-      (toBS request)
-
--- Unary Wrappers
-wrapUnaryResponse :: (Message response) => ClientResult 'Normal response -> LByteString
-wrapUnaryResponse res =
-  toLazyByteString . WrappedUnaryResponse . Just $
+-- Responses
+wrapResponse :: (Message response) => ClientResult streamType response -> WrappedResponse
+wrapResponse res =
+  WrappedResponse . Just $
     case res of
       ClientNormalResponse rspBody initMD trailMD rspCode details ->
-        WrappedUnaryResponseOrErrResponse $
-          UnaryResponse
-            (toBS rspBody)
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (Just $ ResponseBody (toBS rspBody))
             (Just $ fromMetadataMap initMD)
             (Just $ fromMetadataMap trailMD)
             (fromStatusCode rspCode)
             (fromStatusDetails details)
-      ClientErrorResponse err ->
-        WrappedUnaryResponseOrErrError $ toRemoteClientError err
-
-unwrapUnaryResponse :: forall response. (Message response) => LByteString -> MQTTResult 'Normal response
-unwrapUnaryResponse wrappedMessage = either id id parsedResult
-  where
-    parsedResult :: Either (MQTTResult 'Normal response) (MQTTResult 'Normal response)
-    parsedResult = do
-      WrappedUnaryResponse mResponse <- parseWithClientError (toStrict wrappedMessage)
-      UnaryResponse{..} <- case mResponse of
-        Nothing -> Left $ MQTTError "Empty response"
-        Just (WrappedUnaryResponseOrErrError err) -> Left $ fromRemoteClientError err
-        Just (WrappedUnaryResponseOrErrResponse resp) -> Right resp
-
-      parsedResponseBody <- parseWithClientError unaryResponseBody
-
-      statusCode <- case toStatusCode unaryResponseResponseCode of
-        Nothing -> Left $ MQTTError ("Invalid reponse code: " <> show unaryResponseResponseCode)
-        Just sc -> Right sc
-
-      return $
-        GRPCResult $
-          ClientNormalResponse
-            parsedResponseBody
-            (maybe mempty toMetadataMap unaryResponseInitMetamap)
-            (maybe mempty toMetadataMap unaryResponseTrailMetamap)
-            statusCode
-            (toStatusDetails unaryResponseDetails)
-
--- Client Streaming Wrappers
-wrapClientStreamResponse :: (Message response) => ClientResult 'ClientStreaming response -> LByteString
-wrapClientStreamResponse res =
-  toLazyByteString . WrappedClientStreamResponse . Just $
-    case res of
       ClientWriterResponse rspBody initMD trailMD rspCode details ->
-        WrappedClientStreamResponseOrErrorResponse $
-          ClientStreamResponse
-            (maybe mempty toBS rspBody)
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (ResponseBody . toBS <$> rspBody)
             (Just $ fromMetadataMap initMD)
             (Just $ fromMetadataMap trailMD)
             (fromStatusCode rspCode)
             (fromStatusDetails details)
-      ClientErrorResponse err ->
-        WrappedClientStreamResponseOrErrorError $ toRemoteClientError err
-
-unwrapClientStreamResponse :: forall response. (Message response) => LByteString -> MQTTResult 'ClientStreaming response
-unwrapClientStreamResponse wrappedMessage = either id id parsedResult
-  where
-    parsedResult :: Either (MQTTResult 'ClientStreaming response) (MQTTResult 'ClientStreaming response)
-    parsedResult = do
-      WrappedClientStreamResponse mResponse <- parseWithClientError (toStrict wrappedMessage)
-      ClientStreamResponse{..} <- case mResponse of
-        Nothing -> Left $ MQTTError "Empty response"
-        Just (WrappedClientStreamResponseOrErrorError err) -> Left $ fromRemoteClientError err
-        Just (WrappedClientStreamResponseOrErrorResponse resp) -> Right resp
-
-      statusCode <- case toStatusCode clientStreamResponseResponseCode of
-        Nothing -> Left $ MQTTError ("Invalid reponse code: " <> show clientStreamResponseResponseCode)
-        Just sc -> Right sc
-
-      response <-
-        if BS.null clientStreamResponseBody
-          then Right Nothing
-          else Just <$> parseWithClientError clientStreamResponseBody
-
-      return $
-        GRPCResult $
-          ClientWriterResponse
-            response
-            (maybe mempty toMetadataMap clientStreamResponseInitMetamap)
-            (maybe mempty toMetadataMap clientStreamResponseTrailMetamap)
-            statusCode
-            (toStatusDetails clientStreamResponseDetails)
-
--- Streaming Wrappers
-wrapStreamInitMetadata :: HL.MetadataMap -> LByteString
-wrapStreamInitMetadata = toLazyByteString . fromMetadataMap
-
-wrapStreamResponse :: ClientResult 'ServerStreaming response -> LByteString
-wrapStreamResponse response =
-  toLazyByteString . WrappedStreamResponse . Just $
-    case response of
       ClientReaderResponse rspMetadata statusCode details ->
-        WrappedStreamResponseOrErrorResponse $
-          StreamResponse
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
             (Just $ fromMetadataMap rspMetadata)
             (fromStatusCode statusCode)
             (fromStatusDetails details)
-      ClientErrorResponse ce ->
-        WrappedStreamResponseOrErrorError $
-          toRemoteClientError ce
+      ClientErrorResponse err ->
+        WrappedResponseOrErrorError $ toRemoteError err
+      _ -> error "BiDi not supported"
 
-unwrapStreamResponse :: forall response. LByteString -> MQTTResult 'ServerStreaming response
-unwrapStreamResponse wrappedMessage = either id id parsedResult
+data ParsedMQTTResponse response = ParsedMQTTResponse
+  { responseBody :: Maybe response
+  , initMetadata :: HL.MetadataMap
+  , trailMetadata :: HL.MetadataMap
+  , statusCode :: StatusCode
+  , statusDetails :: StatusDetails
+  }
+
+unwrapResponse :: forall response. (Message response) => LByteString -> Either RemoteError (ParsedMQTTResponse response)
+unwrapResponse wrappedMessage = do
+  MQTTResponse{..} <-
+    case fromLazyByteString wrappedMessage of
+      Left err -> Left err
+      Right (WrappedResponse Nothing) -> Left $ remoteError "Empty response"
+      Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> Left err
+      Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> Right rsp
+
+  responseBody <-
+    case fromByteString . responseBodyValue <$> mqttresponseBody of
+      Just (Left err) -> Left $ parseErrorToRCE err
+      Nothing -> Right Nothing
+      Just (Right r) -> Right (Just r)
+
+  let initMetadata = maybe mempty toMetadataMap mqttresponseInitMetamap
+  let trailMetadata = maybe mempty toMetadataMap mqttresponseTrailMetamap
+
+  statusCode <-
+    case toStatusCode mqttresponseResponseCode of
+      Nothing -> Left $ remoteError ("Invalid reponse code: " <> show mqttresponseResponseCode)
+      Just sc -> Right sc
+
+  let statusDetails = toStatusDetails mqttresponseDetails
+
+  return $
+    ParsedMQTTResponse
+      responseBody
+      initMetadata
+      trailMetadata
+      statusCode
+      statusDetails
+
+unwrapUnaryResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'Normal response)
+unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMessage
   where
-    parsedResult :: Either (MQTTResult 'ServerStreaming response) (MQTTResult 'ServerStreaming response)
-    parsedResult = do
-      WrappedStreamResponse mResponse <- parseWithClientError (toStrict wrappedMessage)
-      StreamResponse{..} <- case mResponse of
-        Nothing -> Left $ MQTTError "Empty response"
-        Just (WrappedStreamResponseOrErrorError err) -> Left $ fromRemoteClientError err
-        Just (WrappedStreamResponseOrErrorResponse resp) -> Right resp
+    toNormalResult :: ParsedMQTTResponse response -> MQTTResult 'Normal response
+    toNormalResult ParsedMQTTResponse{..} =
+      case responseBody of
+        Nothing -> MQTTError "Empty response body"
+        (Just body) -> GRPCResult $ ClientNormalResponse body initMetadata trailMetadata statusCode statusDetails
 
-      statusCode <- case toStatusCode streamResponseResponseCode of
-        Nothing -> Left $ MQTTError ("Invalid reponse code: " <> show streamResponseResponseCode)
-        Just sc -> Right sc
+unwrapClientStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ClientStreaming response)
+unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toClientStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ClientStreaming response
+    toClientStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientWriterResponse responseBody initMetadata trailMetadata statusCode statusDetails
 
-      return $
-        GRPCResult $
-          ClientReaderResponse
-            (maybe mempty toMetadataMap streamResponseMetamap)
-            statusCode
-            (toStatusDetails streamResponseDetails)
+unwrapServerStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ServerStreaming response)
+unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toServerStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ServerStreaming response
+    toServerStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientReaderResponse trailMetadata statusCode statusDetails
 
-wrapStreamChunk :: (Message response) => Maybe response -> LByteString
+-- Stream Chunks
+wrapStreamChunk :: (Message a) => Maybe a -> WrappedStreamChunk
 wrapStreamChunk chunk =
-  toLazyByteString $
-    WrappedStreamChunk
-      (WrappedStreamChunkOrErrorValue . toBS <$> chunk)
+  WrappedStreamChunk
+    (WrappedStreamChunkOrErrorChunk . toBS <$> chunk)
 
-unwrapStreamChunk :: (Message response) => LByteString -> Either GRPCIOError (Maybe response)
+unwrapStreamChunk :: (Message a) => LByteString -> Either RemoteError (Maybe a)
 unwrapStreamChunk msg =
-  case fromByteString (toStrict msg) of
-    Left err -> Left $ GRPCIODecodeError (displayException err)
-    Right (WrappedStreamChunk chunk) ->
-      case chunk of
-        Nothing -> Right Nothing
-        Just (WrappedStreamChunkOrErrorValue value) ->
-          case fromByteString value of
-            Left err -> Left $ GRPCIODecodeError (displayException err)
-            Right rsp -> Right $ Just rsp
-        Just (WrappedStreamChunkOrErrorError rcErr) -> Left $ toGRPCIOError rcErr
+  fromLazyByteString msg >>= \case
+    WrappedStreamChunk Nothing -> Right Nothing
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorChunk chunk)) ->
+      case fromByteString chunk of
+        Left err -> Left $ parseErrorToRCE err
+        Right rsp -> Right (Just rsp)
 
-unwrapPacket :: ByteString -> Either RemoteClientError Packet
-unwrapPacket bs =
-  case fromByteString @Packet bs of
-    Left parseErr -> do
-      case fromByteString @RemoteClientError bs of
-        Right rce -> Left rce
-        _ -> Left (parseErrorToRCE parseErr)
-    Right x -> Right x
-
--- Utility functions
-wrapMQTTError :: LText -> LByteString
-wrapMQTTError = toLazyByteString . rceMQTTError
-
-rceMQTTError :: LText -> RemoteClientError
-rceMQTTError errMsg = 
-  RemoteClientError
-    { remoteClientErrorErrorType = Enumerated $ Right RCErrorMQTTFailure
-    , remoteClientErrorMessage = errMsg
-    , remoteClientErrorExtra = Nothing
+-- Utilities
+remoteError :: LText -> RemoteError
+remoteError errMsg =
+  RemoteError
+    { remoteErrorErrorType = Enumerated $ Right RErrorMQTTFailure
+    , remoteErrorMessage = errMsg
+    , remoteErrorExtra = Nothing
     }
 
-parseWithClientError :: (Message a) => ByteString -> Either (MQTTResult streamtype response) a
-parseWithClientError = first (GRPCResult . ClientErrorResponse . ClientErrorNoParse) . fromByteString
-
-unwrapMetadataMap :: LByteString -> Either RemoteClientError HL.MetadataMap
-unwrapMetadataMap msg =
-  case fromByteString (toStrict msg) of
-    Right x -> Right (toMetadataMap x)
-    Left parseErr ->
-      case fromByteString @RemoteClientError (toStrict msg) of
-        Left _ -> Left (parseErrorToRCE parseErr)
+parseMessageOrError :: (Message a) => LByteString -> Either RemoteError a
+parseMessageOrError msg =
+  case fromLazyByteString msg of
+    Right a -> Right a
+    Left err ->
+      case fromLazyByteString msg of
+        Left _ -> Left err
         Right recvErr -> Left recvErr
 
+fromLazyByteString :: Message a => LByteString -> Either RemoteError a
+fromLazyByteString msg =
+  case fromByteString (toStrict msg) of
+    Left parseErr -> Left $ parseErrorToRCE parseErr
+    Right x -> Right x
 
 -- Protobuf type conversions
 
--- | NB: Destroys keys that fail to decode
 toMetadataMap :: Proto.MetadataMap -> HL.MetadataMap
-toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap (convertVals <$> M.mapKeys convertKeys m)
+toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap $ foldMap toMap m
   where
-    convertVals = maybe [] (V.toList . listValue)
-    convertKeys k =
-      case decodeBase64 $ encodeUtf8 k of
-        Left _err -> mempty
-        Right k' -> k'
+    toMap (MetadataMap_Entry k v) = M.singleton k (V.toList v)
 
 fromMetadataMap :: HL.MetadataMap -> Proto.MetadataMap
-fromMetadataMap (HL.MetadataMap m) = Proto.MetadataMap (convertVals <$> M.mapKeys convertKeys m)
+fromMetadataMap (HL.MetadataMap m) = Proto.MetadataMap $ foldMap toVec (M.toAscList m)
   where
-    convertVals = Just . List . V.fromList
-    convertKeys = fromStrict . encodeBase64
+    toVec (k, v) = V.singleton $ MetadataMap_Entry k (V.fromList v)
 
 toStatusCode :: Int32 -> Maybe StatusCode
 toStatusCode = toEnumMaybe . fromIntegral
@@ -334,131 +279,131 @@ fromStatusDetails :: StatusDetails -> LText
 fromStatusDetails = decodeUtf8 . unStatusDetails
 
 -- Error conversions
-toRemoteClientError :: ClientError -> RemoteClientError
-toRemoteClientError (ClientErrorNoParse pe) = parseErrorToRCE pe
-toRemoteClientError (ClientIOError ge) =
+toRemoteError :: ClientError -> RemoteError
+toRemoteError (ClientErrorNoParse pe) = parseErrorToRCE pe
+toRemoteError (ClientIOError ge) =
   case ge of
     GRPCIOCallError ce ->
       case ce of
-        CallOk -> wrapPlainRCE RCErrorIOGRPCCallOk
-        CallError -> wrapPlainRCE RCErrorIOGRPCCallError
-        CallErrorNotOnServer -> wrapPlainRCE RCErrorIOGRPCCallNotOnServer
-        CallErrorNotOnClient -> wrapPlainRCE RCErrorIOGRPCCallNotOnClient
-        CallErrorAlreadyAccepted -> wrapPlainRCE RCErrorIOGRPCCallAlreadyAccepted
-        CallErrorAlreadyInvoked -> wrapPlainRCE RCErrorIOGRPCCallAlreadyInvoked
-        CallErrorNotInvoked -> wrapPlainRCE RCErrorIOGRPCCallNotInvoked
-        CallErrorAlreadyFinished -> wrapPlainRCE RCErrorIOGRPCCallAlreadyFinished
-        CallErrorTooManyOperations -> wrapPlainRCE RCErrorIOGRPCCallTooManyOperations
-        CallErrorInvalidFlags -> wrapPlainRCE RCErrorIOGRPCCallInvalidFlags
-        CallErrorInvalidMetadata -> wrapPlainRCE RCErrorIOGRPCCallInvalidMetadata
-        CallErrorInvalidMessage -> wrapPlainRCE RCErrorIOGRPCCallInvalidMessage
-        CallErrorNotServerCompletionQueue -> wrapPlainRCE RCErrorIOGRPCCallNotServerCompletionQueue
-        CallErrorBatchTooBig -> wrapPlainRCE RCErrorIOGRPCCallBatchTooBig
-        CallErrorPayloadTypeMismatch -> wrapPlainRCE RCErrorIOGRPCCallPayloadTypeMismatch
-        CallErrorCompletionQueueShutdown -> wrapPlainRCE RCErrorIOGRPCCallCompletionQueueShutdown
-    GRPCIOTimeout -> wrapPlainRCE RCErrorIOGRPCTimeout
-    GRPCIOShutdown -> wrapPlainRCE RCErrorIOGRPCShutdown
-    GRPCIOShutdownFailure -> wrapPlainRCE RCErrorIOGRPCShutdownFailure
-    GRPCIOUnknownError -> wrapPlainRCE RCErrorUnknownError
-    GRPCIOBadStatusCode sc sd -> wrapRCE RCErrorIOGRPCBadStatusCode (fromStatusDetails sd) (Just (RemoteClientErrorExtraStatusCode (fromStatusCode sc)))
-    GRPCIODecodeError s -> wrapRCE RCErrorIOGRPCDecode (fromString s) Nothing
-    GRPCIOInternalUnexpectedRecv s -> wrapRCE RCErrorIOGRPCInternalUnexpectedRecv (fromString s) Nothing
-    GRPCIOHandlerException s -> wrapRCE RCErrorIOGRPCHandlerException (fromString s) Nothing
+        CallOk -> wrapPlainRCE RErrorIOGRPCCallOk
+        CallError -> wrapPlainRCE RErrorIOGRPCCallError
+        CallErrorNotOnServer -> wrapPlainRCE RErrorIOGRPCCallNotOnServer
+        CallErrorNotOnClient -> wrapPlainRCE RErrorIOGRPCCallNotOnClient
+        CallErrorAlreadyAccepted -> wrapPlainRCE RErrorIOGRPCCallAlreadyAccepted
+        CallErrorAlreadyInvoked -> wrapPlainRCE RErrorIOGRPCCallAlreadyInvoked
+        CallErrorNotInvoked -> wrapPlainRCE RErrorIOGRPCCallNotInvoked
+        CallErrorAlreadyFinished -> wrapPlainRCE RErrorIOGRPCCallAlreadyFinished
+        CallErrorTooManyOperations -> wrapPlainRCE RErrorIOGRPCCallTooManyOperations
+        CallErrorInvalidFlags -> wrapPlainRCE RErrorIOGRPCCallInvalidFlags
+        CallErrorInvalidMetadata -> wrapPlainRCE RErrorIOGRPCCallInvalidMetadata
+        CallErrorInvalidMessage -> wrapPlainRCE RErrorIOGRPCCallInvalidMessage
+        CallErrorNotServerCompletionQueue -> wrapPlainRCE RErrorIOGRPCCallNotServerCompletionQueue
+        CallErrorBatchTooBig -> wrapPlainRCE RErrorIOGRPCCallBatchTooBig
+        CallErrorPayloadTypeMismatch -> wrapPlainRCE RErrorIOGRPCCallPayloadTypeMismatch
+        CallErrorCompletionQueueShutdown -> wrapPlainRCE RErrorIOGRPCCallCompletionQueueShutdown
+    GRPCIOTimeout -> wrapPlainRCE RErrorIOGRPCTimeout
+    GRPCIOShutdown -> wrapPlainRCE RErrorIOGRPCShutdown
+    GRPCIOShutdownFailure -> wrapPlainRCE RErrorIOGRPCShutdownFailure
+    GRPCIOUnknownError -> wrapPlainRCE RErrorUnknownError
+    GRPCIOBadStatusCode sc sd -> wrapRCE RErrorIOGRPCBadStatusCode (fromStatusDetails sd) (Just (RemoteErrorExtraStatusCode (fromStatusCode sc)))
+    GRPCIODecodeError s -> wrapRCE RErrorIOGRPCDecode (fromString s) Nothing
+    GRPCIOInternalUnexpectedRecv s -> wrapRCE RErrorIOGRPCInternalUnexpectedRecv (fromString s) Nothing
+    GRPCIOHandlerException s -> wrapRCE RErrorIOGRPCHandlerException (fromString s) Nothing
   where
-    wrapRCE errType = RemoteClientError (Enumerated (Right errType))
+    wrapRCE errType = RemoteError (Enumerated (Right errType))
     wrapPlainRCE errType = wrapRCE errType "" Nothing
 
-fromRemoteClientError :: RemoteClientError -> MQTTResult streamtype response
-fromRemoteClientError (RemoteClientError (Enumerated errType) errMsg errExtra) =
+fromRemoteError :: RemoteError -> MQTTResult streamtype response
+fromRemoteError (RemoteError (Enumerated errType) errMsg errExtra) =
   case errType of
-    Right RCErrorIOGRPCCallOk -> wrapGRPCResult $ GRPCIOCallError CallOk
-    Right RCErrorIOGRPCCallError -> wrapGRPCResult $ GRPCIOCallError CallError
-    Right RCErrorIOGRPCCallNotOnServer -> wrapGRPCResult $ GRPCIOCallError CallErrorNotOnServer
-    Right RCErrorIOGRPCCallNotOnClient -> wrapGRPCResult $ GRPCIOCallError CallErrorNotOnClient
-    Right RCErrorIOGRPCCallAlreadyAccepted -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyAccepted
-    Right RCErrorIOGRPCCallAlreadyInvoked -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyInvoked
-    Right RCErrorIOGRPCCallNotInvoked -> wrapGRPCResult $ GRPCIOCallError CallErrorNotInvoked
-    Right RCErrorIOGRPCCallAlreadyFinished -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyFinished
-    Right RCErrorIOGRPCCallTooManyOperations -> wrapGRPCResult $ GRPCIOCallError CallErrorTooManyOperations
-    Right RCErrorIOGRPCCallInvalidFlags -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidFlags
-    Right RCErrorIOGRPCCallInvalidMetadata -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidMetadata
-    Right RCErrorIOGRPCCallInvalidMessage -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidMessage
-    Right RCErrorIOGRPCCallNotServerCompletionQueue -> wrapGRPCResult $ GRPCIOCallError CallErrorNotServerCompletionQueue
-    Right RCErrorIOGRPCCallBatchTooBig -> wrapGRPCResult $ GRPCIOCallError CallErrorBatchTooBig
-    Right RCErrorIOGRPCCallPayloadTypeMismatch -> wrapGRPCResult $ GRPCIOCallError CallErrorPayloadTypeMismatch
-    Right RCErrorIOGRPCCallCompletionQueueShutdown -> wrapGRPCResult $ GRPCIOCallError CallErrorCompletionQueueShutdown
-    Right RCErrorIOGRPCTimeout -> wrapGRPCResult GRPCIOTimeout
-    Right RCErrorIOGRPCShutdown -> wrapGRPCResult GRPCIOShutdown
-    Right RCErrorIOGRPCShutdownFailure -> wrapGRPCResult GRPCIOShutdownFailure
-    Right RCErrorIOGRPCBadStatusCode
-      | Just (RemoteClientErrorExtraStatusCode sc) <- errExtra
+    Right RErrorIOGRPCCallOk -> wrapGRPCResult $ GRPCIOCallError CallOk
+    Right RErrorIOGRPCCallError -> wrapGRPCResult $ GRPCIOCallError CallError
+    Right RErrorIOGRPCCallNotOnServer -> wrapGRPCResult $ GRPCIOCallError CallErrorNotOnServer
+    Right RErrorIOGRPCCallNotOnClient -> wrapGRPCResult $ GRPCIOCallError CallErrorNotOnClient
+    Right RErrorIOGRPCCallAlreadyAccepted -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyAccepted
+    Right RErrorIOGRPCCallAlreadyInvoked -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyInvoked
+    Right RErrorIOGRPCCallNotInvoked -> wrapGRPCResult $ GRPCIOCallError CallErrorNotInvoked
+    Right RErrorIOGRPCCallAlreadyFinished -> wrapGRPCResult $ GRPCIOCallError CallErrorAlreadyFinished
+    Right RErrorIOGRPCCallTooManyOperations -> wrapGRPCResult $ GRPCIOCallError CallErrorTooManyOperations
+    Right RErrorIOGRPCCallInvalidFlags -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidFlags
+    Right RErrorIOGRPCCallInvalidMetadata -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidMetadata
+    Right RErrorIOGRPCCallInvalidMessage -> wrapGRPCResult $ GRPCIOCallError CallErrorInvalidMessage
+    Right RErrorIOGRPCCallNotServerCompletionQueue -> wrapGRPCResult $ GRPCIOCallError CallErrorNotServerCompletionQueue
+    Right RErrorIOGRPCCallBatchTooBig -> wrapGRPCResult $ GRPCIOCallError CallErrorBatchTooBig
+    Right RErrorIOGRPCCallPayloadTypeMismatch -> wrapGRPCResult $ GRPCIOCallError CallErrorPayloadTypeMismatch
+    Right RErrorIOGRPCCallCompletionQueueShutdown -> wrapGRPCResult $ GRPCIOCallError CallErrorCompletionQueueShutdown
+    Right RErrorIOGRPCTimeout -> wrapGRPCResult GRPCIOTimeout
+    Right RErrorIOGRPCShutdown -> wrapGRPCResult GRPCIOShutdown
+    Right RErrorIOGRPCShutdownFailure -> wrapGRPCResult GRPCIOShutdownFailure
+    Right RErrorIOGRPCBadStatusCode
+      | Just (RemoteErrorExtraStatusCode sc) <- errExtra
         , Just statusCode <- toStatusCode sc ->
         wrapGRPCResult $ GRPCIOBadStatusCode statusCode (toStatusDetails errMsg)
       | otherwise -> MQTTError "Failed to decode BadStatusCodeError"
-    Right RCErrorIOGRPCDecode -> wrapGRPCResult $ GRPCIODecodeError (toString errMsg)
-    Right RCErrorIOGRPCInternalUnexpectedRecv -> wrapGRPCResult $ GRPCIOInternalUnexpectedRecv (toString errMsg)
-    Right RCErrorIOGRPCHandlerException -> wrapGRPCResult $ GRPCIOHandlerException (toString errMsg)
-    Right RCErrorNoParseBinary -> wrapNoParseResult $ BinaryError errMsg
-    Right RCErrorNoParseWireType -> wrapNoParseResult $ WireTypeError errMsg
-    Right RCErrorNoParseEmbedded -> wrapNoParseResult $ EmbeddedError errMsg (handleEmbedded =<< errExtra)
-    Right RCErrorUnknownError -> MQTTError $ "Unknown error: " <> toStrict errMsg
-    Right RCErrorMQTTFailure -> MQTTError $ toStrict errMsg
+    Right RErrorIOGRPCDecode -> wrapGRPCResult $ GRPCIODecodeError (toString errMsg)
+    Right RErrorIOGRPCInternalUnexpectedRecv -> wrapGRPCResult $ GRPCIOInternalUnexpectedRecv (toString errMsg)
+    Right RErrorIOGRPCHandlerException -> wrapGRPCResult $ GRPCIOHandlerException (toString errMsg)
+    Right RErrorNoParseBinary -> wrapNoParseResult $ BinaryError errMsg
+    Right RErrorNoParseWireType -> wrapNoParseResult $ WireTypeError errMsg
+    Right RErrorNoParseEmbedded -> wrapNoParseResult $ EmbeddedError errMsg (handleEmbedded =<< errExtra)
+    Right RErrorUnknownError -> MQTTError $ "Unknown error: " <> toStrict errMsg
+    Right RErrorMQTTFailure -> MQTTError $ toStrict errMsg
     Left _ -> MQTTError $ "Unknown error: " <> toStrict errMsg
   where
     wrapGRPCResult = GRPCResult . ClientErrorResponse . ClientIOError
     wrapNoParseResult = GRPCResult . ClientErrorResponse . ClientErrorNoParse
 
-handleEmbedded :: RemoteClientErrorExtra -> Maybe ParseError
-handleEmbedded (RemoteClientErrorExtraEmbeddedError (RemoteClientError (Enumerated (Right errType)) errMsg errExtra)) =
+handleEmbedded :: RemoteErrorExtra -> Maybe ParseError
+handleEmbedded (RemoteErrorExtraEmbeddedError (RemoteError (Enumerated (Right errType)) errMsg errExtra)) =
   case errType of
-    RCErrorNoParseBinary -> Just $ BinaryError errMsg
-    RCErrorNoParseWireType -> Just $ WireTypeError errMsg
-    RCErrorNoParseEmbedded -> Just $ EmbeddedError errMsg (handleEmbedded =<< errExtra)
+    RErrorNoParseBinary -> Just $ BinaryError errMsg
+    RErrorNoParseWireType -> Just $ WireTypeError errMsg
+    RErrorNoParseEmbedded -> Just $ EmbeddedError errMsg (handleEmbedded =<< errExtra)
     _ -> Nothing
 handleEmbedded _ = Nothing
 
-parseErrorToRCE :: ParseError -> RemoteClientError
-parseErrorToRCE (WireTypeError txt) = RemoteClientError (Enumerated (Right RCErrorNoParseWireType)) txt Nothing
-parseErrorToRCE (BinaryError txt) = RemoteClientError (Enumerated (Right RCErrorNoParseBinary)) txt Nothing
+parseErrorToRCE :: ParseError -> RemoteError
+parseErrorToRCE (WireTypeError txt) = RemoteError (Enumerated (Right RErrorNoParseWireType)) txt Nothing
+parseErrorToRCE (BinaryError txt) = RemoteError (Enumerated (Right RErrorNoParseBinary)) txt Nothing
 parseErrorToRCE (EmbeddedError txt m_pe) =
-  RemoteClientError
-    (Enumerated (Right RCErrorNoParseEmbedded))
+  RemoteError
+    (Enumerated (Right RErrorNoParseEmbedded))
     txt
-    (RemoteClientErrorExtraEmbeddedError . parseErrorToRCE <$> m_pe)
+    (RemoteErrorExtraEmbeddedError . parseErrorToRCE <$> m_pe)
 
-toGRPCIOError :: RemoteClientError -> GRPCIOError
-toGRPCIOError (RemoteClientError (Enumerated errType) errMsg errExtra) =
+toGRPCIOError :: RemoteError -> GRPCIOError
+toGRPCIOError (RemoteError (Enumerated errType) errMsg errExtra) =
   case errType of
-    Right RCErrorIOGRPCCallOk -> GRPCIOCallError CallOk
-    Right RCErrorIOGRPCCallError -> GRPCIOCallError CallError
-    Right RCErrorIOGRPCCallNotOnServer -> GRPCIOCallError CallErrorNotOnServer
-    Right RCErrorIOGRPCCallNotOnClient -> GRPCIOCallError CallErrorNotOnClient
-    Right RCErrorIOGRPCCallAlreadyAccepted -> GRPCIOCallError CallErrorAlreadyAccepted
-    Right RCErrorIOGRPCCallAlreadyInvoked -> GRPCIOCallError CallErrorAlreadyInvoked
-    Right RCErrorIOGRPCCallNotInvoked -> GRPCIOCallError CallErrorNotInvoked
-    Right RCErrorIOGRPCCallAlreadyFinished -> GRPCIOCallError CallErrorAlreadyFinished
-    Right RCErrorIOGRPCCallTooManyOperations -> GRPCIOCallError CallErrorTooManyOperations
-    Right RCErrorIOGRPCCallInvalidFlags -> GRPCIOCallError CallErrorInvalidFlags
-    Right RCErrorIOGRPCCallInvalidMetadata -> GRPCIOCallError CallErrorInvalidMetadata
-    Right RCErrorIOGRPCCallInvalidMessage -> GRPCIOCallError CallErrorInvalidMessage
-    Right RCErrorIOGRPCCallNotServerCompletionQueue -> GRPCIOCallError CallErrorNotServerCompletionQueue
-    Right RCErrorIOGRPCCallBatchTooBig -> GRPCIOCallError CallErrorBatchTooBig
-    Right RCErrorIOGRPCCallPayloadTypeMismatch -> GRPCIOCallError CallErrorPayloadTypeMismatch
-    Right RCErrorIOGRPCCallCompletionQueueShutdown -> GRPCIOCallError CallErrorCompletionQueueShutdown
-    Right RCErrorIOGRPCTimeout -> GRPCIOTimeout
-    Right RCErrorIOGRPCShutdown -> GRPCIOShutdown
-    Right RCErrorIOGRPCShutdownFailure -> GRPCIOShutdownFailure
-    Right RCErrorIOGRPCBadStatusCode
-      | Just (RemoteClientErrorExtraStatusCode sc) <- errExtra
+    Right RErrorIOGRPCCallOk -> GRPCIOCallError CallOk
+    Right RErrorIOGRPCCallError -> GRPCIOCallError CallError
+    Right RErrorIOGRPCCallNotOnServer -> GRPCIOCallError CallErrorNotOnServer
+    Right RErrorIOGRPCCallNotOnClient -> GRPCIOCallError CallErrorNotOnClient
+    Right RErrorIOGRPCCallAlreadyAccepted -> GRPCIOCallError CallErrorAlreadyAccepted
+    Right RErrorIOGRPCCallAlreadyInvoked -> GRPCIOCallError CallErrorAlreadyInvoked
+    Right RErrorIOGRPCCallNotInvoked -> GRPCIOCallError CallErrorNotInvoked
+    Right RErrorIOGRPCCallAlreadyFinished -> GRPCIOCallError CallErrorAlreadyFinished
+    Right RErrorIOGRPCCallTooManyOperations -> GRPCIOCallError CallErrorTooManyOperations
+    Right RErrorIOGRPCCallInvalidFlags -> GRPCIOCallError CallErrorInvalidFlags
+    Right RErrorIOGRPCCallInvalidMetadata -> GRPCIOCallError CallErrorInvalidMetadata
+    Right RErrorIOGRPCCallInvalidMessage -> GRPCIOCallError CallErrorInvalidMessage
+    Right RErrorIOGRPCCallNotServerCompletionQueue -> GRPCIOCallError CallErrorNotServerCompletionQueue
+    Right RErrorIOGRPCCallBatchTooBig -> GRPCIOCallError CallErrorBatchTooBig
+    Right RErrorIOGRPCCallPayloadTypeMismatch -> GRPCIOCallError CallErrorPayloadTypeMismatch
+    Right RErrorIOGRPCCallCompletionQueueShutdown -> GRPCIOCallError CallErrorCompletionQueueShutdown
+    Right RErrorIOGRPCTimeout -> GRPCIOTimeout
+    Right RErrorIOGRPCShutdown -> GRPCIOShutdown
+    Right RErrorIOGRPCShutdownFailure -> GRPCIOShutdownFailure
+    Right RErrorIOGRPCBadStatusCode
+      | Just (RemoteErrorExtraStatusCode sc) <- errExtra
         , Just statusCode <- toStatusCode sc ->
         GRPCIOBadStatusCode statusCode (toStatusDetails errMsg)
       | otherwise -> GRPCIODecodeError "Failed to decode BadStatusCodeError"
-    Right RCErrorIOGRPCDecode -> GRPCIODecodeError (toString errMsg)
-    Right RCErrorIOGRPCInternalUnexpectedRecv -> GRPCIOInternalUnexpectedRecv (toString errMsg)
-    Right RCErrorIOGRPCHandlerException -> GRPCIOHandlerException (toString errMsg)
-    Right RCErrorNoParseBinary -> GRPCIODecodeError (toString errMsg)
-    Right RCErrorNoParseWireType -> GRPCIODecodeError (toString errMsg)
-    Right RCErrorNoParseEmbedded -> GRPCIODecodeError (toString errMsg)
-    Right RCErrorUnknownError -> GRPCIOHandlerException ("Unknown error: " <> toString errMsg)
-    Right RCErrorMQTTFailure -> GRPCIOHandlerException ("Embeded MQTT error: " <> toString errMsg)
+    Right RErrorIOGRPCDecode -> GRPCIODecodeError (toString errMsg)
+    Right RErrorIOGRPCInternalUnexpectedRecv -> GRPCIOInternalUnexpectedRecv (toString errMsg)
+    Right RErrorIOGRPCHandlerException -> GRPCIOHandlerException (toString errMsg)
+    Right RErrorNoParseBinary -> GRPCIODecodeError (toString errMsg)
+    Right RErrorNoParseWireType -> GRPCIODecodeError (toString errMsg)
+    Right RErrorNoParseEmbedded -> GRPCIODecodeError (toString errMsg)
+    Right RErrorUnknownError -> GRPCIOHandlerException ("Unknown error: " <> toString errMsg)
+    Right RErrorMQTTFailure -> GRPCIOHandlerException ("Embeded MQTT error: " <> toString errMsg)
     Left _ -> GRPCIOHandlerException ("Unknown error: " <> toString errMsg)

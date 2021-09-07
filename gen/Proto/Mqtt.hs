@@ -35,183 +35,6 @@ import qualified GHC.Enum as Hs
 import qualified GHC.Generics as Hs
 import qualified Unsafe.Coerce as Hs
  
-data RCError = RCErrorUnknownError
-             | RCErrorNoParseWireType
-             | RCErrorNoParseBinary
-             | RCErrorNoParseEmbedded
-             | RCErrorIOGRPCCallOk
-             | RCErrorIOGRPCCallError
-             | RCErrorIOGRPCCallNotOnServer
-             | RCErrorIOGRPCCallNotOnClient
-             | RCErrorIOGRPCCallAlreadyAccepted
-             | RCErrorIOGRPCCallAlreadyInvoked
-             | RCErrorIOGRPCCallNotInvoked
-             | RCErrorIOGRPCCallAlreadyFinished
-             | RCErrorIOGRPCCallTooManyOperations
-             | RCErrorIOGRPCCallInvalidFlags
-             | RCErrorIOGRPCCallInvalidMetadata
-             | RCErrorIOGRPCCallInvalidMessage
-             | RCErrorIOGRPCCallNotServerCompletionQueue
-             | RCErrorIOGRPCCallBatchTooBig
-             | RCErrorIOGRPCCallPayloadTypeMismatch
-             | RCErrorIOGRPCCallCompletionQueueShutdown
-             | RCErrorIOGRPCTimeout
-             | RCErrorIOGRPCShutdown
-             | RCErrorIOGRPCShutdownFailure
-             | RCErrorIOGRPCBadStatusCode
-             | RCErrorIOGRPCDecode
-             | RCErrorIOGRPCInternalUnexpectedRecv
-             | RCErrorIOGRPCHandlerException
-             | RCErrorMQTTFailure
-             deriving (Hs.Show, Hs.Eq, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named RCError where
-        nameOf _ = (Hs.fromString "RCError")
- 
-instance HsProtobuf.HasDefault RCError
- 
-instance Hs.Bounded RCError where
-        minBound = RCErrorUnknownError
-        maxBound = RCErrorMQTTFailure
- 
-instance Hs.Ord RCError where
-        compare x y
-          = Hs.compare (HsProtobuf.fromProtoEnum x)
-              (HsProtobuf.fromProtoEnum y)
- 
-instance HsProtobuf.ProtoEnum RCError where
-        toProtoEnumMay 0 = Hs.Just RCErrorUnknownError
-        toProtoEnumMay 1 = Hs.Just RCErrorNoParseWireType
-        toProtoEnumMay 2 = Hs.Just RCErrorNoParseBinary
-        toProtoEnumMay 3 = Hs.Just RCErrorNoParseEmbedded
-        toProtoEnumMay 4 = Hs.Just RCErrorIOGRPCCallOk
-        toProtoEnumMay 5 = Hs.Just RCErrorIOGRPCCallError
-        toProtoEnumMay 6 = Hs.Just RCErrorIOGRPCCallNotOnServer
-        toProtoEnumMay 7 = Hs.Just RCErrorIOGRPCCallNotOnClient
-        toProtoEnumMay 8 = Hs.Just RCErrorIOGRPCCallAlreadyAccepted
-        toProtoEnumMay 9 = Hs.Just RCErrorIOGRPCCallAlreadyInvoked
-        toProtoEnumMay 10 = Hs.Just RCErrorIOGRPCCallNotInvoked
-        toProtoEnumMay 11 = Hs.Just RCErrorIOGRPCCallAlreadyFinished
-        toProtoEnumMay 12 = Hs.Just RCErrorIOGRPCCallTooManyOperations
-        toProtoEnumMay 13 = Hs.Just RCErrorIOGRPCCallInvalidFlags
-        toProtoEnumMay 14 = Hs.Just RCErrorIOGRPCCallInvalidMetadata
-        toProtoEnumMay 15 = Hs.Just RCErrorIOGRPCCallInvalidMessage
-        toProtoEnumMay 16
-          = Hs.Just RCErrorIOGRPCCallNotServerCompletionQueue
-        toProtoEnumMay 17 = Hs.Just RCErrorIOGRPCCallBatchTooBig
-        toProtoEnumMay 18 = Hs.Just RCErrorIOGRPCCallPayloadTypeMismatch
-        toProtoEnumMay 19
-          = Hs.Just RCErrorIOGRPCCallCompletionQueueShutdown
-        toProtoEnumMay 20 = Hs.Just RCErrorIOGRPCTimeout
-        toProtoEnumMay 21 = Hs.Just RCErrorIOGRPCShutdown
-        toProtoEnumMay 22 = Hs.Just RCErrorIOGRPCShutdownFailure
-        toProtoEnumMay 23 = Hs.Just RCErrorIOGRPCBadStatusCode
-        toProtoEnumMay 24 = Hs.Just RCErrorIOGRPCDecode
-        toProtoEnumMay 25 = Hs.Just RCErrorIOGRPCInternalUnexpectedRecv
-        toProtoEnumMay 26 = Hs.Just RCErrorIOGRPCHandlerException
-        toProtoEnumMay 27 = Hs.Just RCErrorMQTTFailure
-        toProtoEnumMay _ = Hs.Nothing
-        fromProtoEnum (RCErrorUnknownError) = 0
-        fromProtoEnum (RCErrorNoParseWireType) = 1
-        fromProtoEnum (RCErrorNoParseBinary) = 2
-        fromProtoEnum (RCErrorNoParseEmbedded) = 3
-        fromProtoEnum (RCErrorIOGRPCCallOk) = 4
-        fromProtoEnum (RCErrorIOGRPCCallError) = 5
-        fromProtoEnum (RCErrorIOGRPCCallNotOnServer) = 6
-        fromProtoEnum (RCErrorIOGRPCCallNotOnClient) = 7
-        fromProtoEnum (RCErrorIOGRPCCallAlreadyAccepted) = 8
-        fromProtoEnum (RCErrorIOGRPCCallAlreadyInvoked) = 9
-        fromProtoEnum (RCErrorIOGRPCCallNotInvoked) = 10
-        fromProtoEnum (RCErrorIOGRPCCallAlreadyFinished) = 11
-        fromProtoEnum (RCErrorIOGRPCCallTooManyOperations) = 12
-        fromProtoEnum (RCErrorIOGRPCCallInvalidFlags) = 13
-        fromProtoEnum (RCErrorIOGRPCCallInvalidMetadata) = 14
-        fromProtoEnum (RCErrorIOGRPCCallInvalidMessage) = 15
-        fromProtoEnum (RCErrorIOGRPCCallNotServerCompletionQueue) = 16
-        fromProtoEnum (RCErrorIOGRPCCallBatchTooBig) = 17
-        fromProtoEnum (RCErrorIOGRPCCallPayloadTypeMismatch) = 18
-        fromProtoEnum (RCErrorIOGRPCCallCompletionQueueShutdown) = 19
-        fromProtoEnum (RCErrorIOGRPCTimeout) = 20
-        fromProtoEnum (RCErrorIOGRPCShutdown) = 21
-        fromProtoEnum (RCErrorIOGRPCShutdownFailure) = 22
-        fromProtoEnum (RCErrorIOGRPCBadStatusCode) = 23
-        fromProtoEnum (RCErrorIOGRPCDecode) = 24
-        fromProtoEnum (RCErrorIOGRPCInternalUnexpectedRecv) = 25
-        fromProtoEnum (RCErrorIOGRPCHandlerException) = 26
-        fromProtoEnum (RCErrorMQTTFailure) = 27
- 
-instance HsJSONPB.ToJSONPB RCError where
-        toJSONPB x _ = HsJSONPB.enumFieldString x
-        toEncodingPB x _ = HsJSONPB.enumFieldEncoding x
- 
-instance HsJSONPB.FromJSONPB RCError where
-        parseJSONPB (HsJSONPB.String "UnknownError")
-          = Hs.pure RCErrorUnknownError
-        parseJSONPB (HsJSONPB.String "NoParseWireType")
-          = Hs.pure RCErrorNoParseWireType
-        parseJSONPB (HsJSONPB.String "NoParseBinary")
-          = Hs.pure RCErrorNoParseBinary
-        parseJSONPB (HsJSONPB.String "NoParseEmbedded")
-          = Hs.pure RCErrorNoParseEmbedded
-        parseJSONPB (HsJSONPB.String "IOGRPCCallOk")
-          = Hs.pure RCErrorIOGRPCCallOk
-        parseJSONPB (HsJSONPB.String "IOGRPCCallError")
-          = Hs.pure RCErrorIOGRPCCallError
-        parseJSONPB (HsJSONPB.String "IOGRPCCallNotOnServer")
-          = Hs.pure RCErrorIOGRPCCallNotOnServer
-        parseJSONPB (HsJSONPB.String "IOGRPCCallNotOnClient")
-          = Hs.pure RCErrorIOGRPCCallNotOnClient
-        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyAccepted")
-          = Hs.pure RCErrorIOGRPCCallAlreadyAccepted
-        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyInvoked")
-          = Hs.pure RCErrorIOGRPCCallAlreadyInvoked
-        parseJSONPB (HsJSONPB.String "IOGRPCCallNotInvoked")
-          = Hs.pure RCErrorIOGRPCCallNotInvoked
-        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyFinished")
-          = Hs.pure RCErrorIOGRPCCallAlreadyFinished
-        parseJSONPB (HsJSONPB.String "IOGRPCCallTooManyOperations")
-          = Hs.pure RCErrorIOGRPCCallTooManyOperations
-        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidFlags")
-          = Hs.pure RCErrorIOGRPCCallInvalidFlags
-        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidMetadata")
-          = Hs.pure RCErrorIOGRPCCallInvalidMetadata
-        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidMessage")
-          = Hs.pure RCErrorIOGRPCCallInvalidMessage
-        parseJSONPB (HsJSONPB.String "IOGRPCCallNotServerCompletionQueue")
-          = Hs.pure RCErrorIOGRPCCallNotServerCompletionQueue
-        parseJSONPB (HsJSONPB.String "IOGRPCCallBatchTooBig")
-          = Hs.pure RCErrorIOGRPCCallBatchTooBig
-        parseJSONPB (HsJSONPB.String "IOGRPCCallPayloadTypeMismatch")
-          = Hs.pure RCErrorIOGRPCCallPayloadTypeMismatch
-        parseJSONPB (HsJSONPB.String "IOGRPCCallCompletionQueueShutdown")
-          = Hs.pure RCErrorIOGRPCCallCompletionQueueShutdown
-        parseJSONPB (HsJSONPB.String "IOGRPCTimeout")
-          = Hs.pure RCErrorIOGRPCTimeout
-        parseJSONPB (HsJSONPB.String "IOGRPCShutdown")
-          = Hs.pure RCErrorIOGRPCShutdown
-        parseJSONPB (HsJSONPB.String "IOGRPCShutdownFailure")
-          = Hs.pure RCErrorIOGRPCShutdownFailure
-        parseJSONPB (HsJSONPB.String "IOGRPCBadStatusCode")
-          = Hs.pure RCErrorIOGRPCBadStatusCode
-        parseJSONPB (HsJSONPB.String "IOGRPCDecode")
-          = Hs.pure RCErrorIOGRPCDecode
-        parseJSONPB (HsJSONPB.String "IOGRPCInternalUnexpectedRecv")
-          = Hs.pure RCErrorIOGRPCInternalUnexpectedRecv
-        parseJSONPB (HsJSONPB.String "IOGRPCHandlerException")
-          = Hs.pure RCErrorIOGRPCHandlerException
-        parseJSONPB (HsJSONPB.String "MQTTFailure")
-          = Hs.pure RCErrorMQTTFailure
-        parseJSONPB v = (HsJSONPB.typeMismatch "RCError" v)
- 
-instance HsJSONPB.ToJSON RCError where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON RCError where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsProtobuf.Finite RCError
- 
 data Packet = Packet{packetTerminal :: Hs.Bool,
                      packetSequenceNum :: Hs.Int32, packetPayload :: Hs.ByteString}
             deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
@@ -305,307 +128,456 @@ instance HsJSONPB.ToSchema Packet where
                                                         ("sequence_num", packetSequenceNum),
                                                         ("payload", packetPayload)]}})
  
-data RemoteClientError = RemoteClientError{remoteClientErrorErrorType
-                                           :: HsProtobuf.Enumerated Proto.Mqtt.RCError,
-                                           remoteClientErrorMessage :: Hs.Text,
-                                           remoteClientErrorExtra ::
-                                           Hs.Maybe RemoteClientErrorExtra}
-                       deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+data MQTTRequest = MQTTRequest{mqttrequestTimeout :: Hs.Int64,
+                               mqttrequestMetamap :: Hs.Maybe Proto.Mqtt.MetadataMap,
+                               mqttrequestPayload :: Hs.ByteString}
+                 deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
-instance HsProtobuf.Named RemoteClientError where
-        nameOf _ = (Hs.fromString "RemoteClientError")
+instance HsProtobuf.Named MQTTRequest where
+        nameOf _ = (Hs.fromString "MQTTRequest")
  
-instance HsProtobuf.HasDefault RemoteClientError
+instance HsProtobuf.HasDefault MQTTRequest
  
-instance HsProtobuf.Message RemoteClientError where
+instance HsProtobuf.Message MQTTRequest where
         encodeMessage _
-          RemoteClientError{remoteClientErrorErrorType =
-                              remoteClientErrorErrorType,
-                            remoteClientErrorMessage = remoteClientErrorMessage,
-                            remoteClientErrorExtra = remoteClientErrorExtra}
+          MQTTRequest{mqttrequestTimeout = mqttrequestTimeout,
+                      mqttrequestMetamap = mqttrequestMetamap,
+                      mqttrequestPayload = mqttrequestPayload}
           = (Hs.mconcat
                [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   remoteClientErrorErrorType),
+                   mqttrequestTimeout),
                 (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   remoteClientErrorMessage),
-                case remoteClientErrorExtra of
-                    Hs.Nothing -> Hs.mempty
-                    Hs.Just x
-                      -> case x of
-                             RemoteClientErrorExtraStatusCode y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
-                                     (HsProtobuf.ForceEmit y))
-                             RemoteClientErrorExtraEmbeddedError y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteClientError)
-                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteClientError)
-                                        (Hs.Just y)))])
+                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
+                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
+                      mqttrequestMetamap)),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
+                   mqttrequestPayload)])
         decodeMessage _
-          = (Hs.pure RemoteClientError) <*>
+          = (Hs.pure MQTTRequest) <*>
               (HsProtobuf.at HsProtobuf.decodeMessageField
                  (HsProtobuf.FieldNumber 1))
               <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 2))
+              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
+                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
+                 (HsProtobuf.at HsProtobuf.decodeMessageField
+                    (HsProtobuf.FieldNumber 2)))
               <*>
-              (HsProtobuf.oneof Hs.Nothing
-                 [((HsProtobuf.FieldNumber 3),
-                   (Hs.pure (Hs.Just Hs.. RemoteClientErrorExtraStatusCode)) <*>
-                     HsProtobuf.decodeMessageField),
-                  ((HsProtobuf.FieldNumber 4),
-                   (Hs.pure (Hs.fmap RemoteClientErrorExtraEmbeddedError)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteClientError))
-                        @(_ (Hs.Maybe Proto.Mqtt.RemoteClientError))
-                        HsProtobuf.decodeMessageField))])
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 3))
         dotProto _
           = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim (HsProtobuf.Named (HsProtobuf.Single "RCError")))
-                (HsProtobuf.Single "error_type")
+                (HsProtobuf.Prim HsProtobuf.Int64)
+                (HsProtobuf.Single "timeout")
                 []
                 ""),
              (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim HsProtobuf.String)
-                (HsProtobuf.Single "message")
+                (HsProtobuf.Prim
+                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
+                (HsProtobuf.Single "metamap")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
+                (HsProtobuf.Prim HsProtobuf.Bytes)
+                (HsProtobuf.Single "payload")
                 []
                 "")]
  
-instance HsJSONPB.ToJSONPB RemoteClientError where
-        toJSONPB (RemoteClientError f1 f2 f3_or_f4)
+instance HsJSONPB.ToJSONPB MQTTRequest where
+        toJSONPB (MQTTRequest f1 f2 f3)
           = (HsJSONPB.object
-               ["error_type" .= f1, "message" .= f2,
-                (let encodeExtra
-                       = (case f3_or_f4 of
-                              Hs.Just (RemoteClientErrorExtraStatusCode f3)
-                                -> (HsJSONPB.pair "status_code" f3)
-                              Hs.Just (RemoteClientErrorExtraEmbeddedError f4)
-                                -> (HsJSONPB.pair "embedded_error" f4)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("extra" .= (HsJSONPB.objectOrNull [encodeExtra] options)) options
-                       else encodeExtra options)])
-        toEncodingPB (RemoteClientError f1 f2 f3_or_f4)
+               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
+        toEncodingPB (MQTTRequest f1 f2 f3)
           = (HsJSONPB.pairs
-               ["error_type" .= f1, "message" .= f2,
-                (let encodeExtra
-                       = (case f3_or_f4 of
-                              Hs.Just (RemoteClientErrorExtraStatusCode f3)
-                                -> (HsJSONPB.pair "status_code" f3)
-                              Hs.Just (RemoteClientErrorExtraEmbeddedError f4)
-                                -> (HsJSONPB.pair "embedded_error" f4)
+               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
+ 
+instance HsJSONPB.FromJSONPB MQTTRequest where
+        parseJSONPB
+          = (HsJSONPB.withObject "MQTTRequest"
+               (\ obj ->
+                  (Hs.pure MQTTRequest) <*> obj .: "timeout" <*> obj .: "metamap" <*>
+                    obj .: "payload"))
+ 
+instance HsJSONPB.ToJSON MQTTRequest where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON MQTTRequest where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema MQTTRequest where
+        declareNamedSchema _
+          = do let declare_timeout = HsJSONPB.declareSchemaRef
+               mqttrequestTimeout <- declare_timeout Proxy.Proxy
+               let declare_metamap = HsJSONPB.declareSchemaRef
+               mqttrequestMetamap <- declare_metamap Proxy.Proxy
+               let declare_payload = HsJSONPB.declareSchemaRef
+               mqttrequestPayload <- declare_payload Proxy.Proxy
+               let _ = Hs.pure MQTTRequest <*> HsJSONPB.asProxy declare_timeout
+                         <*> HsJSONPB.asProxy declare_metamap
+                         <*> HsJSONPB.asProxy declare_payload
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "MQTTRequest",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("timeout", mqttrequestTimeout),
+                                                        ("metamap", mqttrequestMetamap),
+                                                        ("payload", mqttrequestPayload)]}})
+ 
+newtype ResponseBody = ResponseBody{responseBodyValue ::
+                                    Hs.ByteString}
+                       deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named ResponseBody where
+        nameOf _ = (Hs.fromString "ResponseBody")
+ 
+instance HsProtobuf.HasDefault ResponseBody
+ 
+instance HsProtobuf.Message ResponseBody where
+        encodeMessage _ ResponseBody{responseBodyValue = responseBodyValue}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   responseBodyValue)])
+        decodeMessage _
+          = (Hs.pure ResponseBody) <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 1))
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Prim HsProtobuf.Bytes)
+                (HsProtobuf.Single "value")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB ResponseBody where
+        toJSONPB (ResponseBody f1) = (HsJSONPB.object ["value" .= f1])
+        toEncodingPB (ResponseBody f1) = (HsJSONPB.pairs ["value" .= f1])
+ 
+instance HsJSONPB.FromJSONPB ResponseBody where
+        parseJSONPB
+          = (HsJSONPB.withObject "ResponseBody"
+               (\ obj -> (Hs.pure ResponseBody) <*> obj .: "value"))
+ 
+instance HsJSONPB.ToJSON ResponseBody where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON ResponseBody where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema ResponseBody where
+        declareNamedSchema _
+          = do let declare_value = HsJSONPB.declareSchemaRef
+               responseBodyValue <- declare_value Proxy.Proxy
+               let _ = Hs.pure ResponseBody <*> HsJSONPB.asProxy declare_value
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "ResponseBody",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("value", responseBodyValue)]}})
+ 
+data MQTTResponse = MQTTResponse{mqttresponseBody ::
+                                 Hs.Maybe Proto.Mqtt.ResponseBody,
+                                 mqttresponseInitMetamap :: Hs.Maybe Proto.Mqtt.MetadataMap,
+                                 mqttresponseTrailMetamap :: Hs.Maybe Proto.Mqtt.MetadataMap,
+                                 mqttresponseResponseCode :: Hs.Int32,
+                                 mqttresponseDetails :: Hs.Text}
+                  deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named MQTTResponse where
+        nameOf _ = (Hs.fromString "MQTTResponse")
+ 
+instance HsProtobuf.HasDefault MQTTResponse
+ 
+instance HsProtobuf.Message MQTTResponse where
+        encodeMessage _
+          MQTTResponse{mqttresponseBody = mqttresponseBody,
+                       mqttresponseInitMetamap = mqttresponseInitMetamap,
+                       mqttresponseTrailMetamap = mqttresponseTrailMetamap,
+                       mqttresponseResponseCode = mqttresponseResponseCode,
+                       mqttresponseDetails = mqttresponseDetails}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.ResponseBody)
+                      @(HsProtobuf.Nested Proto.Mqtt.ResponseBody)
+                      mqttresponseBody)),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
+                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
+                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
+                      mqttresponseInitMetamap)),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
+                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
+                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
+                      mqttresponseTrailMetamap)),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
+                   mqttresponseResponseCode),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 5)
+                   mqttresponseDetails)])
+        decodeMessage _
+          = (Hs.pure MQTTResponse) <*>
+              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.ResponseBody))
+                 @(_ (Hs.Maybe Proto.Mqtt.ResponseBody))
+                 (HsProtobuf.at HsProtobuf.decodeMessageField
+                    (HsProtobuf.FieldNumber 1)))
+              <*>
+              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
+                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
+                 (HsProtobuf.at HsProtobuf.decodeMessageField
+                    (HsProtobuf.FieldNumber 2)))
+              <*>
+              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
+                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
+                 (HsProtobuf.at HsProtobuf.decodeMessageField
+                    (HsProtobuf.FieldNumber 3)))
+              <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 4))
+              <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 5))
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Prim
+                   (HsProtobuf.Named (HsProtobuf.Single "ResponseBody")))
+                (HsProtobuf.Single "body")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
+                (HsProtobuf.Prim
+                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
+                (HsProtobuf.Single "init_metamap")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
+                (HsProtobuf.Prim
+                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
+                (HsProtobuf.Single "trail_metamap")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 4)
+                (HsProtobuf.Prim HsProtobuf.Int32)
+                (HsProtobuf.Single "response_code")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 5)
+                (HsProtobuf.Prim HsProtobuf.String)
+                (HsProtobuf.Single "details")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB MQTTResponse where
+        toJSONPB (MQTTResponse f1 f2 f3 f4 f5)
+          = (HsJSONPB.object
+               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
+                "response_code" .= f4, "details" .= f5])
+        toEncodingPB (MQTTResponse f1 f2 f3 f4 f5)
+          = (HsJSONPB.pairs
+               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
+                "response_code" .= f4, "details" .= f5])
+ 
+instance HsJSONPB.FromJSONPB MQTTResponse where
+        parseJSONPB
+          = (HsJSONPB.withObject "MQTTResponse"
+               (\ obj ->
+                  (Hs.pure MQTTResponse) <*> obj .: "body" <*> obj .: "init_metamap"
+                    <*> obj .: "trail_metamap"
+                    <*> obj .: "response_code"
+                    <*> obj .: "details"))
+ 
+instance HsJSONPB.ToJSON MQTTResponse where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON MQTTResponse where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema MQTTResponse where
+        declareNamedSchema _
+          = do let declare_body = HsJSONPB.declareSchemaRef
+               mqttresponseBody <- declare_body Proxy.Proxy
+               let declare_init_metamap = HsJSONPB.declareSchemaRef
+               mqttresponseInitMetamap <- declare_init_metamap Proxy.Proxy
+               let declare_trail_metamap = HsJSONPB.declareSchemaRef
+               mqttresponseTrailMetamap <- declare_trail_metamap Proxy.Proxy
+               let declare_response_code = HsJSONPB.declareSchemaRef
+               mqttresponseResponseCode <- declare_response_code Proxy.Proxy
+               let declare_details = HsJSONPB.declareSchemaRef
+               mqttresponseDetails <- declare_details Proxy.Proxy
+               let _ = Hs.pure MQTTResponse <*> HsJSONPB.asProxy declare_body <*>
+                         HsJSONPB.asProxy declare_init_metamap
+                         <*> HsJSONPB.asProxy declare_trail_metamap
+                         <*> HsJSONPB.asProxy declare_response_code
+                         <*> HsJSONPB.asProxy declare_details
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "MQTTResponse",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("body", mqttresponseBody),
+                                                        ("init_metamap", mqttresponseInitMetamap),
+                                                        ("trail_metamap", mqttresponseTrailMetamap),
+                                                        ("response_code", mqttresponseResponseCode),
+                                                        ("details", mqttresponseDetails)]}})
+ 
+newtype WrappedResponse = WrappedResponse{wrappedResponseOrError ::
+                                          Hs.Maybe WrappedResponseOrError}
+                          deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named WrappedResponse where
+        nameOf _ = (Hs.fromString "WrappedResponse")
+ 
+instance HsProtobuf.HasDefault WrappedResponse
+ 
+instance HsProtobuf.Message WrappedResponse where
+        encodeMessage _
+          WrappedResponse{wrappedResponseOrError = wrappedResponseOrError}
+          = (Hs.mconcat
+               [case wrappedResponseOrError of
+                    Hs.Nothing -> Hs.mempty
+                    Hs.Just x
+                      -> case x of
+                             WrappedResponseOrErrorResponse y
+                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.MQTTResponse)
+                                        @(HsProtobuf.Nested Proto.Mqtt.MQTTResponse)
+                                        (Hs.Just y)))
+                             WrappedResponseOrErrorError y
+                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
+                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteError)
+                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteError)
+                                        (Hs.Just y)))])
+        decodeMessage _
+          = (Hs.pure WrappedResponse) <*>
+              (HsProtobuf.oneof Hs.Nothing
+                 [((HsProtobuf.FieldNumber 1),
+                   (Hs.pure (Hs.fmap WrappedResponseOrErrorResponse)) <*>
+                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MQTTResponse))
+                        @(_ (Hs.Maybe Proto.Mqtt.MQTTResponse))
+                        HsProtobuf.decodeMessageField)),
+                  ((HsProtobuf.FieldNumber 2),
+                   (Hs.pure (Hs.fmap WrappedResponseOrErrorError)) <*>
+                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteError))
+                        @(_ (Hs.Maybe Proto.Mqtt.RemoteError))
+                        HsProtobuf.decodeMessageField))])
+        dotProto _ = []
+ 
+instance HsJSONPB.ToJSONPB WrappedResponse where
+        toJSONPB (WrappedResponse f1_or_f2)
+          = (HsJSONPB.object
+               [(let encodeOr_error
+                       = (case f1_or_f2 of
+                              Hs.Just (WrappedResponseOrErrorResponse f1)
+                                -> (HsJSONPB.pair "response" f1)
+                              Hs.Just (WrappedResponseOrErrorError f2)
+                                -> (HsJSONPB.pair "error" f2)
                               Hs.Nothing -> Hs.mempty)
                    in
                    \ options ->
                      if HsJSONPB.optEmitNamedOneof options then
-                       ("extra" .= (HsJSONPB.pairsOrNull [encodeExtra] options)) options
-                       else encodeExtra options)])
+                       ("or_error" .= (HsJSONPB.objectOrNull [encodeOr_error] options))
+                         options
+                       else encodeOr_error options)])
+        toEncodingPB (WrappedResponse f1_or_f2)
+          = (HsJSONPB.pairs
+               [(let encodeOr_error
+                       = (case f1_or_f2 of
+                              Hs.Just (WrappedResponseOrErrorResponse f1)
+                                -> (HsJSONPB.pair "response" f1)
+                              Hs.Just (WrappedResponseOrErrorError f2)
+                                -> (HsJSONPB.pair "error" f2)
+                              Hs.Nothing -> Hs.mempty)
+                   in
+                   \ options ->
+                     if HsJSONPB.optEmitNamedOneof options then
+                       ("or_error" .= (HsJSONPB.pairsOrNull [encodeOr_error] options))
+                         options
+                       else encodeOr_error options)])
  
-instance HsJSONPB.FromJSONPB RemoteClientError where
+instance HsJSONPB.FromJSONPB WrappedResponse where
         parseJSONPB
-          = (HsJSONPB.withObject "RemoteClientError"
+          = (HsJSONPB.withObject "WrappedResponse"
                (\ obj ->
-                  (Hs.pure RemoteClientError) <*> obj .: "error_type" <*>
-                    obj .: "message"
-                    <*>
-                    (let parseExtra parseObj
+                  (Hs.pure WrappedResponse) <*>
+                    (let parseOr_error parseObj
                            = Hs.msum
-                               [Hs.Just Hs.. RemoteClientErrorExtraStatusCode <$>
-                                  (HsJSONPB.parseField parseObj "status_code"),
-                                Hs.Just Hs.. RemoteClientErrorExtraEmbeddedError <$>
-                                  (HsJSONPB.parseField parseObj "embedded_error"),
+                               [Hs.Just Hs.. WrappedResponseOrErrorResponse <$>
+                                  (HsJSONPB.parseField parseObj "response"),
+                                Hs.Just Hs.. WrappedResponseOrErrorError <$>
+                                  (HsJSONPB.parseField parseObj "error"),
                                 Hs.pure Hs.Nothing]
                        in
-                       ((obj .: "extra") Hs.>>= (HsJSONPB.withObject "extra" parseExtra))
-                         <|> (parseExtra obj))))
+                       ((obj .: "or_error") Hs.>>=
+                          (HsJSONPB.withObject "or_error" parseOr_error))
+                         <|> (parseOr_error obj))))
  
-instance HsJSONPB.ToJSON RemoteClientError where
+instance HsJSONPB.ToJSON WrappedResponse where
         toJSON = HsJSONPB.toAesonValue
         toEncoding = HsJSONPB.toAesonEncoding
  
-instance HsJSONPB.FromJSON RemoteClientError where
+instance HsJSONPB.FromJSON WrappedResponse where
         parseJSON = HsJSONPB.parseJSONPB
  
-instance HsJSONPB.ToSchema RemoteClientError where
+instance HsJSONPB.ToSchema WrappedResponse where
         declareNamedSchema _
-          = do let declare_error_type = HsJSONPB.declareSchemaRef
-               remoteClientErrorErrorType <- declare_error_type Proxy.Proxy
-               let declare_message = HsJSONPB.declareSchemaRef
-               remoteClientErrorMessage <- declare_message Proxy.Proxy
-               let declare_extra = HsJSONPB.declareSchemaRef
-               remoteClientErrorExtra <- declare_extra Proxy.Proxy
-               let _ = Hs.pure RemoteClientError <*>
-                         HsJSONPB.asProxy declare_error_type
-                         <*> HsJSONPB.asProxy declare_message
-                         <*> HsJSONPB.asProxy declare_extra
+          = do let declare_or_error = HsJSONPB.declareSchemaRef
+               wrappedResponseOrError <- declare_or_error Proxy.Proxy
+               let _ = Hs.pure WrappedResponse <*>
+                         HsJSONPB.asProxy declare_or_error
                Hs.return
                  (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "RemoteClientError",
+                                         Hs.Just "WrappedResponse",
                                        HsJSONPB._namedSchemaSchema =
                                          Hs.mempty{HsJSONPB._schemaParamSchema =
                                                      Hs.mempty{HsJSONPB._paramSchemaType =
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("error_type", remoteClientErrorErrorType),
-                                                        ("message", remoteClientErrorMessage),
-                                                        ("extra", remoteClientErrorExtra)]}})
+                                                       [("or_error", wrappedResponseOrError)]}})
  
-data RemoteClientErrorExtra = RemoteClientErrorExtraStatusCode Hs.Int32
-                            | RemoteClientErrorExtraEmbeddedError Proto.Mqtt.RemoteClientError
+data WrappedResponseOrError = WrappedResponseOrErrorResponse Proto.Mqtt.MQTTResponse
+                            | WrappedResponseOrErrorError Proto.Mqtt.RemoteError
                             deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
-instance HsProtobuf.Named RemoteClientErrorExtra where
-        nameOf _ = (Hs.fromString "RemoteClientErrorExtra")
+instance HsProtobuf.Named WrappedResponseOrError where
+        nameOf _ = (Hs.fromString "WrappedResponseOrError")
  
-instance HsJSONPB.ToSchema RemoteClientErrorExtra where
+instance HsJSONPB.ToSchema WrappedResponseOrError where
         declareNamedSchema _
-          = do let declare_status_code = HsJSONPB.declareSchemaRef
-               remoteClientErrorExtraStatusCode <- declare_status_code Proxy.Proxy
-               let _ = Hs.pure RemoteClientErrorExtraStatusCode <*>
-                         HsJSONPB.asProxy declare_status_code
-               let declare_embedded_error = HsJSONPB.declareSchemaRef
-               remoteClientErrorExtraEmbeddedError <- declare_embedded_error
-                                                        Proxy.Proxy
-               let _ = Hs.pure RemoteClientErrorExtraEmbeddedError <*>
-                         HsJSONPB.asProxy declare_embedded_error
+          = do let declare_response = HsJSONPB.declareSchemaRef
+               wrappedResponseOrErrorResponse <- declare_response Proxy.Proxy
+               let _ = Hs.pure WrappedResponseOrErrorResponse <*>
+                         HsJSONPB.asProxy declare_response
+               let declare_error = HsJSONPB.declareSchemaRef
+               wrappedResponseOrErrorError <- declare_error Proxy.Proxy
+               let _ = Hs.pure WrappedResponseOrErrorError <*>
+                         HsJSONPB.asProxy declare_error
                Hs.return
                  (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "RemoteClientErrorExtra",
+                                         Hs.Just "WrappedResponseOrError",
                                        HsJSONPB._namedSchemaSchema =
                                          Hs.mempty{HsJSONPB._schemaParamSchema =
                                                      Hs.mempty{HsJSONPB._paramSchemaType =
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("status_code",
-                                                         remoteClientErrorExtraStatusCode),
-                                                        ("embedded_error",
-                                                         remoteClientErrorExtraEmbeddedError)],
+                                                       [("response",
+                                                         wrappedResponseOrErrorResponse),
+                                                        ("error", wrappedResponseOrErrorError)],
                                                    HsJSONPB._schemaMinProperties = Hs.Just 1,
                                                    HsJSONPB._schemaMaxProperties = Hs.Just 1}})
- 
-newtype List = List{listValue :: Hs.Vector Hs.ByteString}
-               deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named List where
-        nameOf _ = (Hs.fromString "List")
- 
-instance HsProtobuf.HasDefault List
- 
-instance HsProtobuf.Message List where
-        encodeMessage _ List{listValue = listValue}
-          = (Hs.mconcat
-               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   (Hs.coerce @(Hs.Vector Hs.ByteString)
-                      @(HsProtobuf.UnpackedVec Hs.ByteString)
-                      listValue))])
-        decodeMessage _
-          = (Hs.pure List) <*>
-              (Hs.coerce @(_ (HsProtobuf.UnpackedVec Hs.ByteString))
-                 @(_ (Hs.Vector Hs.ByteString))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 1)))
-        dotProto _
-          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Repeated HsProtobuf.Bytes)
-                (HsProtobuf.Single "value")
-                []
-                "")]
- 
-instance HsJSONPB.ToJSONPB List where
-        toJSONPB (List f1) = (HsJSONPB.object ["value" .= f1])
-        toEncodingPB (List f1) = (HsJSONPB.pairs ["value" .= f1])
- 
-instance HsJSONPB.FromJSONPB List where
-        parseJSONPB
-          = (HsJSONPB.withObject "List"
-               (\ obj -> (Hs.pure List) <*> obj .: "value"))
- 
-instance HsJSONPB.ToJSON List where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON List where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema List where
-        declareNamedSchema _
-          = do let declare_value = HsJSONPB.declareSchemaRef
-               listValue <- declare_value Proxy.Proxy
-               let _ = Hs.pure List <*> HsJSONPB.asProxy declare_value
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName = Hs.Just "List",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("value", listValue)]}})
- 
-newtype MetadataMap = MetadataMap{metadataMapValue ::
-                                  Hs.Map Hs.Text (Hs.Maybe Proto.Mqtt.List)}
-                      deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named MetadataMap where
-        nameOf _ = (Hs.fromString "MetadataMap")
- 
-instance HsProtobuf.HasDefault MetadataMap
- 
-instance HsProtobuf.Message MetadataMap where
-        encodeMessage _ MetadataMap{metadataMapValue = metadataMapValue}
-          = (Hs.mconcat
-               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   (Hs.unsafeCoerce @(Hs.Map Hs.Text (Hs.Maybe Proto.Mqtt.List))
-                      @(Hs.Map Hs.Text (HsProtobuf.Nested Proto.Mqtt.List))
-                      metadataMapValue))])
-        decodeMessage _
-          = (Hs.pure MetadataMap) <*>
-              (Hs.unsafeCoerce
-                 @(_ (Hs.Map Hs.Text (HsProtobuf.Nested Proto.Mqtt.List)))
-                 @(_ (Hs.Map Hs.Text (Hs.Maybe Proto.Mqtt.List)))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 1)))
-        dotProto _
-          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Map HsProtobuf.String
-                   (HsProtobuf.Named (HsProtobuf.Single "List")))
-                (HsProtobuf.Single "value")
-                []
-                "")]
- 
-instance HsJSONPB.ToJSONPB MetadataMap where
-        toJSONPB (MetadataMap f1) = (HsJSONPB.object ["value" .= f1])
-        toEncodingPB (MetadataMap f1) = (HsJSONPB.pairs ["value" .= f1])
- 
-instance HsJSONPB.FromJSONPB MetadataMap where
-        parseJSONPB
-          = (HsJSONPB.withObject "MetadataMap"
-               (\ obj -> (Hs.pure MetadataMap) <*> obj .: "value"))
- 
-instance HsJSONPB.ToJSON MetadataMap where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON MetadataMap where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema MetadataMap where
-        declareNamedSchema _
-          = do let declare_value = HsJSONPB.declareSchemaRef
-               metadataMapValue <- declare_value Proxy.Proxy
-               let _ = Hs.pure MetadataMap <*> HsJSONPB.asProxy declare_value
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "MetadataMap",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("value", metadataMapValue)]}})
  
 newtype WrappedStreamChunk = WrappedStreamChunk{wrappedStreamChunkOrError
                                                 :: Hs.Maybe WrappedStreamChunkOrError}
@@ -625,24 +597,24 @@ instance HsProtobuf.Message WrappedStreamChunk where
                     Hs.Nothing -> Hs.mempty
                     Hs.Just x
                       -> case x of
-                             WrappedStreamChunkOrErrorValue y
+                             WrappedStreamChunkOrErrorChunk y
                                -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
                                      (HsProtobuf.ForceEmit y))
                              WrappedStreamChunkOrErrorError y
                                -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteClientError)
-                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteClientError)
+                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteError)
+                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteError)
                                         (Hs.Just y)))])
         decodeMessage _
           = (Hs.pure WrappedStreamChunk) <*>
               (HsProtobuf.oneof Hs.Nothing
                  [((HsProtobuf.FieldNumber 1),
-                   (Hs.pure (Hs.Just Hs.. WrappedStreamChunkOrErrorValue)) <*>
+                   (Hs.pure (Hs.Just Hs.. WrappedStreamChunkOrErrorChunk)) <*>
                      HsProtobuf.decodeMessageField),
                   ((HsProtobuf.FieldNumber 2),
                    (Hs.pure (Hs.fmap WrappedStreamChunkOrErrorError)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteClientError))
-                        @(_ (Hs.Maybe Proto.Mqtt.RemoteClientError))
+                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteError))
+                        @(_ (Hs.Maybe Proto.Mqtt.RemoteError))
                         HsProtobuf.decodeMessageField))])
         dotProto _ = []
  
@@ -651,8 +623,8 @@ instance HsJSONPB.ToJSONPB WrappedStreamChunk where
           = (HsJSONPB.object
                [(let encodeOr_error
                        = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamChunkOrErrorValue f1)
-                                -> (HsJSONPB.pair "value" f1)
+                              Hs.Just (WrappedStreamChunkOrErrorChunk f1)
+                                -> (HsJSONPB.pair "chunk" f1)
                               Hs.Just (WrappedStreamChunkOrErrorError f2)
                                 -> (HsJSONPB.pair "error" f2)
                               Hs.Nothing -> Hs.mempty)
@@ -666,8 +638,8 @@ instance HsJSONPB.ToJSONPB WrappedStreamChunk where
           = (HsJSONPB.pairs
                [(let encodeOr_error
                        = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamChunkOrErrorValue f1)
-                                -> (HsJSONPB.pair "value" f1)
+                              Hs.Just (WrappedStreamChunkOrErrorChunk f1)
+                                -> (HsJSONPB.pair "chunk" f1)
                               Hs.Just (WrappedStreamChunkOrErrorError f2)
                                 -> (HsJSONPB.pair "error" f2)
                               Hs.Nothing -> Hs.mempty)
@@ -685,8 +657,8 @@ instance HsJSONPB.FromJSONPB WrappedStreamChunk where
                   (Hs.pure WrappedStreamChunk) <*>
                     (let parseOr_error parseObj
                            = Hs.msum
-                               [Hs.Just Hs.. WrappedStreamChunkOrErrorValue <$>
-                                  (HsJSONPB.parseField parseObj "value"),
+                               [Hs.Just Hs.. WrappedStreamChunkOrErrorChunk <$>
+                                  (HsJSONPB.parseField parseObj "chunk"),
                                 Hs.Just Hs.. WrappedStreamChunkOrErrorError <$>
                                   (HsJSONPB.parseField parseObj "error"),
                                 Hs.pure Hs.Nothing]
@@ -719,8 +691,8 @@ instance HsJSONPB.ToSchema WrappedStreamChunk where
                                                      HsJSONPB.insOrdFromList
                                                        [("or_error", wrappedStreamChunkOrError)]}})
  
-data WrappedStreamChunkOrError = WrappedStreamChunkOrErrorValue Hs.ByteString
-                               | WrappedStreamChunkOrErrorError Proto.Mqtt.RemoteClientError
+data WrappedStreamChunkOrError = WrappedStreamChunkOrErrorChunk Hs.ByteString
+                               | WrappedStreamChunkOrErrorError Proto.Mqtt.RemoteError
                                deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
 instance HsProtobuf.Named WrappedStreamChunkOrError where
@@ -728,10 +700,10 @@ instance HsProtobuf.Named WrappedStreamChunkOrError where
  
 instance HsJSONPB.ToSchema WrappedStreamChunkOrError where
         declareNamedSchema _
-          = do let declare_value = HsJSONPB.declareSchemaRef
-               wrappedStreamChunkOrErrorValue <- declare_value Proxy.Proxy
-               let _ = Hs.pure WrappedStreamChunkOrErrorValue <*>
-                         HsJSONPB.asProxy declare_value
+          = do let declare_chunk = HsJSONPB.declareSchemaRef
+               wrappedStreamChunkOrErrorChunk <- declare_chunk Proxy.Proxy
+               let _ = Hs.pure WrappedStreamChunkOrErrorChunk <*>
+                         HsJSONPB.asProxy declare_chunk
                let declare_error = HsJSONPB.declareSchemaRef
                wrappedStreamChunkOrErrorError <- declare_error Proxy.Proxy
                let _ = Hs.pure WrappedStreamChunkOrErrorError <*>
@@ -745,968 +717,153 @@ instance HsJSONPB.ToSchema WrappedStreamChunkOrError where
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("value", wrappedStreamChunkOrErrorValue),
+                                                       [("chunk", wrappedStreamChunkOrErrorChunk),
                                                         ("error", wrappedStreamChunkOrErrorError)],
                                                    HsJSONPB._schemaMinProperties = Hs.Just 1,
                                                    HsJSONPB._schemaMaxProperties = Hs.Just 1}})
  
-newtype WrappedClientStreamResponse = WrappedClientStreamResponse{wrappedClientStreamResponseOrError
-                                                                  ::
-                                                                  Hs.Maybe
-                                                                    WrappedClientStreamResponseOrError}
-                                      deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+newtype MetadataMap = MetadataMap{metadataMapFields ::
+                                  Hs.Vector Proto.Mqtt.MetadataMap_Entry}
+                      deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
-instance HsProtobuf.Named WrappedClientStreamResponse where
-        nameOf _ = (Hs.fromString "WrappedClientStreamResponse")
+instance HsProtobuf.Named MetadataMap where
+        nameOf _ = (Hs.fromString "MetadataMap")
  
-instance HsProtobuf.HasDefault WrappedClientStreamResponse
+instance HsProtobuf.HasDefault MetadataMap
  
-instance HsProtobuf.Message WrappedClientStreamResponse where
-        encodeMessage _
-          WrappedClientStreamResponse{wrappedClientStreamResponseOrError =
-                                        wrappedClientStreamResponseOrError}
-          = (Hs.mconcat
-               [case wrappedClientStreamResponseOrError of
-                    Hs.Nothing -> Hs.mempty
-                    Hs.Just x
-                      -> case x of
-                             WrappedClientStreamResponseOrErrorResponse y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.ClientStreamResponse)
-                                        @(HsProtobuf.Nested Proto.Mqtt.ClientStreamResponse)
-                                        (Hs.Just y)))
-                             WrappedClientStreamResponseOrErrorError y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteClientError)
-                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteClientError)
-                                        (Hs.Just y)))])
-        decodeMessage _
-          = (Hs.pure WrappedClientStreamResponse) <*>
-              (HsProtobuf.oneof Hs.Nothing
-                 [((HsProtobuf.FieldNumber 1),
-                   (Hs.pure (Hs.fmap WrappedClientStreamResponseOrErrorResponse)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.ClientStreamResponse))
-                        @(_ (Hs.Maybe Proto.Mqtt.ClientStreamResponse))
-                        HsProtobuf.decodeMessageField)),
-                  ((HsProtobuf.FieldNumber 2),
-                   (Hs.pure (Hs.fmap WrappedClientStreamResponseOrErrorError)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteClientError))
-                        @(_ (Hs.Maybe Proto.Mqtt.RemoteClientError))
-                        HsProtobuf.decodeMessageField))])
-        dotProto _ = []
- 
-instance HsJSONPB.ToJSONPB WrappedClientStreamResponse where
-        toJSONPB (WrappedClientStreamResponse f1_or_f2)
-          = (HsJSONPB.object
-               [(let encodeOr_error
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedClientStreamResponseOrErrorResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedClientStreamResponseOrErrorError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_error" .= (HsJSONPB.objectOrNull [encodeOr_error] options))
-                         options
-                       else encodeOr_error options)])
-        toEncodingPB (WrappedClientStreamResponse f1_or_f2)
-          = (HsJSONPB.pairs
-               [(let encodeOr_error
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedClientStreamResponseOrErrorResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedClientStreamResponseOrErrorError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_error" .= (HsJSONPB.pairsOrNull [encodeOr_error] options))
-                         options
-                       else encodeOr_error options)])
- 
-instance HsJSONPB.FromJSONPB WrappedClientStreamResponse where
-        parseJSONPB
-          = (HsJSONPB.withObject "WrappedClientStreamResponse"
-               (\ obj ->
-                  (Hs.pure WrappedClientStreamResponse) <*>
-                    (let parseOr_error parseObj
-                           = Hs.msum
-                               [Hs.Just Hs.. WrappedClientStreamResponseOrErrorResponse <$>
-                                  (HsJSONPB.parseField parseObj "response"),
-                                Hs.Just Hs.. WrappedClientStreamResponseOrErrorError <$>
-                                  (HsJSONPB.parseField parseObj "error"),
-                                Hs.pure Hs.Nothing]
-                       in
-                       ((obj .: "or_error") Hs.>>=
-                          (HsJSONPB.withObject "or_error" parseOr_error))
-                         <|> (parseOr_error obj))))
- 
-instance HsJSONPB.ToJSON WrappedClientStreamResponse where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON WrappedClientStreamResponse where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema WrappedClientStreamResponse where
-        declareNamedSchema _
-          = do let declare_or_error = HsJSONPB.declareSchemaRef
-               wrappedClientStreamResponseOrError <- declare_or_error Proxy.Proxy
-               let _ = Hs.pure WrappedClientStreamResponse <*>
-                         HsJSONPB.asProxy declare_or_error
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedClientStreamResponse",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("or_error",
-                                                         wrappedClientStreamResponseOrError)]}})
- 
-data WrappedClientStreamResponseOrError = WrappedClientStreamResponseOrErrorResponse Proto.Mqtt.ClientStreamResponse
-                                        | WrappedClientStreamResponseOrErrorError Proto.Mqtt.RemoteClientError
-                                        deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named WrappedClientStreamResponseOrError where
-        nameOf _ = (Hs.fromString "WrappedClientStreamResponseOrError")
- 
-instance HsJSONPB.ToSchema WrappedClientStreamResponseOrError where
-        declareNamedSchema _
-          = do let declare_response = HsJSONPB.declareSchemaRef
-               wrappedClientStreamResponseOrErrorResponse <- declare_response
-                                                               Proxy.Proxy
-               let _ = Hs.pure WrappedClientStreamResponseOrErrorResponse <*>
-                         HsJSONPB.asProxy declare_response
-               let declare_error = HsJSONPB.declareSchemaRef
-               wrappedClientStreamResponseOrErrorError <- declare_error
-                                                            Proxy.Proxy
-               let _ = Hs.pure WrappedClientStreamResponseOrErrorError <*>
-                         HsJSONPB.asProxy declare_error
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedClientStreamResponseOrError",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("response",
-                                                         wrappedClientStreamResponseOrErrorResponse),
-                                                        ("error",
-                                                         wrappedClientStreamResponseOrErrorError)],
-                                                   HsJSONPB._schemaMinProperties = Hs.Just 1,
-                                                   HsJSONPB._schemaMaxProperties = Hs.Just 1}})
- 
-data ClientStreamResponse = ClientStreamResponse{clientStreamResponseBody
-                                                 :: Hs.ByteString,
-                                                 clientStreamResponseInitMetamap ::
-                                                 Hs.Maybe Proto.Mqtt.MetadataMap,
-                                                 clientStreamResponseTrailMetamap ::
-                                                 Hs.Maybe Proto.Mqtt.MetadataMap,
-                                                 clientStreamResponseResponseCode :: Hs.Int32,
-                                                 clientStreamResponseDetails :: Hs.Text}
-                          deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named ClientStreamResponse where
-        nameOf _ = (Hs.fromString "ClientStreamResponse")
- 
-instance HsProtobuf.HasDefault ClientStreamResponse
- 
-instance HsProtobuf.Message ClientStreamResponse where
-        encodeMessage _
-          ClientStreamResponse{clientStreamResponseBody =
-                                 clientStreamResponseBody,
-                               clientStreamResponseInitMetamap = clientStreamResponseInitMetamap,
-                               clientStreamResponseTrailMetamap =
-                                 clientStreamResponseTrailMetamap,
-                               clientStreamResponseResponseCode =
-                                 clientStreamResponseResponseCode,
-                               clientStreamResponseDetails = clientStreamResponseDetails}
+instance HsProtobuf.Message MetadataMap where
+        encodeMessage _ MetadataMap{metadataMapFields = metadataMapFields}
           = (Hs.mconcat
                [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   clientStreamResponseBody),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      clientStreamResponseInitMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      clientStreamResponseTrailMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
-                   clientStreamResponseResponseCode),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 5)
-                   clientStreamResponseDetails)])
+                   (Hs.coerce @(Hs.Vector Proto.Mqtt.MetadataMap_Entry)
+                      @(HsProtobuf.NestedVec Proto.Mqtt.MetadataMap_Entry)
+                      metadataMapFields))])
         decodeMessage _
-          = (Hs.pure ClientStreamResponse) <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 1))
-              <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 2)))
-              <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 3)))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 4))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 5))
-        dotProto _
-          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim HsProtobuf.Bytes)
-                (HsProtobuf.Single "body")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "init_metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "trail_metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 4)
-                (HsProtobuf.Prim HsProtobuf.Int32)
-                (HsProtobuf.Single "response_code")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 5)
-                (HsProtobuf.Prim HsProtobuf.String)
-                (HsProtobuf.Single "details")
-                []
-                "")]
- 
-instance HsJSONPB.ToJSONPB ClientStreamResponse where
-        toJSONPB (ClientStreamResponse f1 f2 f3 f4 f5)
-          = (HsJSONPB.object
-               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
-                "response_code" .= f4, "details" .= f5])
-        toEncodingPB (ClientStreamResponse f1 f2 f3 f4 f5)
-          = (HsJSONPB.pairs
-               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
-                "response_code" .= f4, "details" .= f5])
- 
-instance HsJSONPB.FromJSONPB ClientStreamResponse where
-        parseJSONPB
-          = (HsJSONPB.withObject "ClientStreamResponse"
-               (\ obj ->
-                  (Hs.pure ClientStreamResponse) <*> obj .: "body" <*>
-                    obj .: "init_metamap"
-                    <*> obj .: "trail_metamap"
-                    <*> obj .: "response_code"
-                    <*> obj .: "details"))
- 
-instance HsJSONPB.ToJSON ClientStreamResponse where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON ClientStreamResponse where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema ClientStreamResponse where
-        declareNamedSchema _
-          = do let declare_body = HsJSONPB.declareSchemaRef
-               clientStreamResponseBody <- declare_body Proxy.Proxy
-               let declare_init_metamap = HsJSONPB.declareSchemaRef
-               clientStreamResponseInitMetamap <- declare_init_metamap Proxy.Proxy
-               let declare_trail_metamap = HsJSONPB.declareSchemaRef
-               clientStreamResponseTrailMetamap <- declare_trail_metamap
-                                                     Proxy.Proxy
-               let declare_response_code = HsJSONPB.declareSchemaRef
-               clientStreamResponseResponseCode <- declare_response_code
-                                                     Proxy.Proxy
-               let declare_details = HsJSONPB.declareSchemaRef
-               clientStreamResponseDetails <- declare_details Proxy.Proxy
-               let _ = Hs.pure ClientStreamResponse <*>
-                         HsJSONPB.asProxy declare_body
-                         <*> HsJSONPB.asProxy declare_init_metamap
-                         <*> HsJSONPB.asProxy declare_trail_metamap
-                         <*> HsJSONPB.asProxy declare_response_code
-                         <*> HsJSONPB.asProxy declare_details
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "ClientStreamResponse",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("body", clientStreamResponseBody),
-                                                        ("init_metamap",
-                                                         clientStreamResponseInitMetamap),
-                                                        ("trail_metamap",
-                                                         clientStreamResponseTrailMetamap),
-                                                        ("response_code",
-                                                         clientStreamResponseResponseCode),
-                                                        ("details", clientStreamResponseDetails)]}})
- 
-newtype WrappedStreamResponse = WrappedStreamResponse{wrappedStreamResponseOrError
-                                                      :: Hs.Maybe WrappedStreamResponseOrError}
-                                deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named WrappedStreamResponse where
-        nameOf _ = (Hs.fromString "WrappedStreamResponse")
- 
-instance HsProtobuf.HasDefault WrappedStreamResponse
- 
-instance HsProtobuf.Message WrappedStreamResponse where
-        encodeMessage _
-          WrappedStreamResponse{wrappedStreamResponseOrError =
-                                  wrappedStreamResponseOrError}
-          = (Hs.mconcat
-               [case wrappedStreamResponseOrError of
-                    Hs.Nothing -> Hs.mempty
-                    Hs.Just x
-                      -> case x of
-                             WrappedStreamResponseOrErrorResponse y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.StreamResponse)
-                                        @(HsProtobuf.Nested Proto.Mqtt.StreamResponse)
-                                        (Hs.Just y)))
-                             WrappedStreamResponseOrErrorError y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteClientError)
-                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteClientError)
-                                        (Hs.Just y)))])
-        decodeMessage _
-          = (Hs.pure WrappedStreamResponse) <*>
-              (HsProtobuf.oneof Hs.Nothing
-                 [((HsProtobuf.FieldNumber 1),
-                   (Hs.pure (Hs.fmap WrappedStreamResponseOrErrorResponse)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.StreamResponse))
-                        @(_ (Hs.Maybe Proto.Mqtt.StreamResponse))
-                        HsProtobuf.decodeMessageField)),
-                  ((HsProtobuf.FieldNumber 2),
-                   (Hs.pure (Hs.fmap WrappedStreamResponseOrErrorError)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteClientError))
-                        @(_ (Hs.Maybe Proto.Mqtt.RemoteClientError))
-                        HsProtobuf.decodeMessageField))])
-        dotProto _ = []
- 
-instance HsJSONPB.ToJSONPB WrappedStreamResponse where
-        toJSONPB (WrappedStreamResponse f1_or_f2)
-          = (HsJSONPB.object
-               [(let encodeOr_error
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamResponseOrErrorResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedStreamResponseOrErrorError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_error" .= (HsJSONPB.objectOrNull [encodeOr_error] options))
-                         options
-                       else encodeOr_error options)])
-        toEncodingPB (WrappedStreamResponse f1_or_f2)
-          = (HsJSONPB.pairs
-               [(let encodeOr_error
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamResponseOrErrorResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedStreamResponseOrErrorError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_error" .= (HsJSONPB.pairsOrNull [encodeOr_error] options))
-                         options
-                       else encodeOr_error options)])
- 
-instance HsJSONPB.FromJSONPB WrappedStreamResponse where
-        parseJSONPB
-          = (HsJSONPB.withObject "WrappedStreamResponse"
-               (\ obj ->
-                  (Hs.pure WrappedStreamResponse) <*>
-                    (let parseOr_error parseObj
-                           = Hs.msum
-                               [Hs.Just Hs.. WrappedStreamResponseOrErrorResponse <$>
-                                  (HsJSONPB.parseField parseObj "response"),
-                                Hs.Just Hs.. WrappedStreamResponseOrErrorError <$>
-                                  (HsJSONPB.parseField parseObj "error"),
-                                Hs.pure Hs.Nothing]
-                       in
-                       ((obj .: "or_error") Hs.>>=
-                          (HsJSONPB.withObject "or_error" parseOr_error))
-                         <|> (parseOr_error obj))))
- 
-instance HsJSONPB.ToJSON WrappedStreamResponse where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON WrappedStreamResponse where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema WrappedStreamResponse where
-        declareNamedSchema _
-          = do let declare_or_error = HsJSONPB.declareSchemaRef
-               wrappedStreamResponseOrError <- declare_or_error Proxy.Proxy
-               let _ = Hs.pure WrappedStreamResponse <*>
-                         HsJSONPB.asProxy declare_or_error
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedStreamResponse",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("or_error",
-                                                         wrappedStreamResponseOrError)]}})
- 
-data WrappedStreamResponseOrError = WrappedStreamResponseOrErrorResponse Proto.Mqtt.StreamResponse
-                                  | WrappedStreamResponseOrErrorError Proto.Mqtt.RemoteClientError
-                                  deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named WrappedStreamResponseOrError where
-        nameOf _ = (Hs.fromString "WrappedStreamResponseOrError")
- 
-instance HsJSONPB.ToSchema WrappedStreamResponseOrError where
-        declareNamedSchema _
-          = do let declare_response = HsJSONPB.declareSchemaRef
-               wrappedStreamResponseOrErrorResponse <- declare_response
-                                                         Proxy.Proxy
-               let _ = Hs.pure WrappedStreamResponseOrErrorResponse <*>
-                         HsJSONPB.asProxy declare_response
-               let declare_error = HsJSONPB.declareSchemaRef
-               wrappedStreamResponseOrErrorError <- declare_error Proxy.Proxy
-               let _ = Hs.pure WrappedStreamResponseOrErrorError <*>
-                         HsJSONPB.asProxy declare_error
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedStreamResponseOrError",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("response",
-                                                         wrappedStreamResponseOrErrorResponse),
-                                                        ("error",
-                                                         wrappedStreamResponseOrErrorError)],
-                                                   HsJSONPB._schemaMinProperties = Hs.Just 1,
-                                                   HsJSONPB._schemaMaxProperties = Hs.Just 1}})
- 
-data StreamResponse = StreamResponse{streamResponseMetamap ::
-                                     Hs.Maybe Proto.Mqtt.MetadataMap,
-                                     streamResponseResponseCode :: Hs.Int32,
-                                     streamResponseDetails :: Hs.Text}
-                    deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named StreamResponse where
-        nameOf _ = (Hs.fromString "StreamResponse")
- 
-instance HsProtobuf.HasDefault StreamResponse
- 
-instance HsProtobuf.Message StreamResponse where
-        encodeMessage _
-          StreamResponse{streamResponseMetamap = streamResponseMetamap,
-                         streamResponseResponseCode = streamResponseResponseCode,
-                         streamResponseDetails = streamResponseDetails}
-          = (Hs.mconcat
-               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      streamResponseMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   streamResponseResponseCode),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
-                   streamResponseDetails)])
-        decodeMessage _
-          = (Hs.pure StreamResponse) <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
+          = (Hs.pure MetadataMap) <*>
+              (Hs.coerce @(_ (HsProtobuf.NestedVec Proto.Mqtt.MetadataMap_Entry))
+                 @(_ (Hs.Vector Proto.Mqtt.MetadataMap_Entry))
                  (HsProtobuf.at HsProtobuf.decodeMessageField
                     (HsProtobuf.FieldNumber 1)))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 2))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 3))
         dotProto _
           = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim HsProtobuf.Int32)
-                (HsProtobuf.Single "response_code")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
-                (HsProtobuf.Prim HsProtobuf.String)
-                (HsProtobuf.Single "details")
+                (HsProtobuf.Repeated
+                   (HsProtobuf.Named (HsProtobuf.Single "Entry")))
+                (HsProtobuf.Single "fields")
                 []
                 "")]
  
-instance HsJSONPB.ToJSONPB StreamResponse where
-        toJSONPB (StreamResponse f1 f2 f3)
-          = (HsJSONPB.object
-               ["metamap" .= f1, "response_code" .= f2, "details" .= f3])
-        toEncodingPB (StreamResponse f1 f2 f3)
-          = (HsJSONPB.pairs
-               ["metamap" .= f1, "response_code" .= f2, "details" .= f3])
+instance HsJSONPB.ToJSONPB MetadataMap where
+        toJSONPB (MetadataMap f1) = (HsJSONPB.object ["fields" .= f1])
+        toEncodingPB (MetadataMap f1) = (HsJSONPB.pairs ["fields" .= f1])
  
-instance HsJSONPB.FromJSONPB StreamResponse where
+instance HsJSONPB.FromJSONPB MetadataMap where
         parseJSONPB
-          = (HsJSONPB.withObject "StreamResponse"
-               (\ obj ->
-                  (Hs.pure StreamResponse) <*> obj .: "metamap" <*>
-                    obj .: "response_code"
-                    <*> obj .: "details"))
+          = (HsJSONPB.withObject "MetadataMap"
+               (\ obj -> (Hs.pure MetadataMap) <*> obj .: "fields"))
  
-instance HsJSONPB.ToJSON StreamResponse where
+instance HsJSONPB.ToJSON MetadataMap where
         toJSON = HsJSONPB.toAesonValue
         toEncoding = HsJSONPB.toAesonEncoding
  
-instance HsJSONPB.FromJSON StreamResponse where
+instance HsJSONPB.FromJSON MetadataMap where
         parseJSON = HsJSONPB.parseJSONPB
  
-instance HsJSONPB.ToSchema StreamResponse where
+instance HsJSONPB.ToSchema MetadataMap where
         declareNamedSchema _
-          = do let declare_metamap = HsJSONPB.declareSchemaRef
-               streamResponseMetamap <- declare_metamap Proxy.Proxy
-               let declare_response_code = HsJSONPB.declareSchemaRef
-               streamResponseResponseCode <- declare_response_code Proxy.Proxy
-               let declare_details = HsJSONPB.declareSchemaRef
-               streamResponseDetails <- declare_details Proxy.Proxy
-               let _ = Hs.pure StreamResponse <*> HsJSONPB.asProxy declare_metamap
-                         <*> HsJSONPB.asProxy declare_response_code
-                         <*> HsJSONPB.asProxy declare_details
+          = do let declare_fields = HsJSONPB.declareSchemaRef
+               metadataMapFields <- declare_fields Proxy.Proxy
+               let _ = Hs.pure MetadataMap <*> HsJSONPB.asProxy declare_fields
                Hs.return
                  (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "StreamResponse",
+                                         Hs.Just "MetadataMap",
                                        HsJSONPB._namedSchemaSchema =
                                          Hs.mempty{HsJSONPB._schemaParamSchema =
                                                      Hs.mempty{HsJSONPB._paramSchemaType =
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("metamap", streamResponseMetamap),
-                                                        ("response_code",
-                                                         streamResponseResponseCode),
-                                                        ("details", streamResponseDetails)]}})
+                                                       [("fields", metadataMapFields)]}})
  
-data WrappedMQTTRequest = WrappedMQTTRequest{wrappedMQTTRequestTimeout
-                                             :: Hs.Int64,
-                                             wrappedMQTTRequestMetamap ::
-                                             Hs.Maybe Proto.Mqtt.MetadataMap,
-                                             wrappedMQTTRequestPayload :: Hs.ByteString}
-                        deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+data MetadataMap_Entry = MetadataMap_Entry{metadataMap_EntryKey ::
+                                           Hs.ByteString,
+                                           metadataMap_EntryValue :: Hs.Vector Hs.ByteString}
+                       deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
-instance HsProtobuf.Named WrappedMQTTRequest where
-        nameOf _ = (Hs.fromString "WrappedMQTTRequest")
+instance HsProtobuf.Named MetadataMap_Entry where
+        nameOf _ = (Hs.fromString "MetadataMap_Entry")
  
-instance HsProtobuf.HasDefault WrappedMQTTRequest
+instance HsProtobuf.HasDefault MetadataMap_Entry
  
-instance HsProtobuf.Message WrappedMQTTRequest where
+instance HsProtobuf.Message MetadataMap_Entry where
         encodeMessage _
-          WrappedMQTTRequest{wrappedMQTTRequestTimeout =
-                               wrappedMQTTRequestTimeout,
-                             wrappedMQTTRequestMetamap = wrappedMQTTRequestMetamap,
-                             wrappedMQTTRequestPayload = wrappedMQTTRequestPayload}
+          MetadataMap_Entry{metadataMap_EntryKey = metadataMap_EntryKey,
+                            metadataMap_EntryValue = metadataMap_EntryValue}
           = (Hs.mconcat
                [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   wrappedMQTTRequestTimeout),
+                   metadataMap_EntryKey),
                 (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      wrappedMQTTRequestMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
-                   wrappedMQTTRequestPayload)])
+                   (Hs.coerce @(Hs.Vector Hs.ByteString)
+                      @(HsProtobuf.UnpackedVec Hs.ByteString)
+                      metadataMap_EntryValue))])
         decodeMessage _
-          = (Hs.pure WrappedMQTTRequest) <*>
+          = (Hs.pure MetadataMap_Entry) <*>
               (HsProtobuf.at HsProtobuf.decodeMessageField
                  (HsProtobuf.FieldNumber 1))
               <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
+              (Hs.coerce @(_ (HsProtobuf.UnpackedVec Hs.ByteString))
+                 @(_ (Hs.Vector Hs.ByteString))
                  (HsProtobuf.at HsProtobuf.decodeMessageField
                     (HsProtobuf.FieldNumber 2)))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 3))
-        dotProto _
-          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
-                (HsProtobuf.Prim HsProtobuf.Int64)
-                (HsProtobuf.Single "timeout")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
-                (HsProtobuf.Prim HsProtobuf.Bytes)
-                (HsProtobuf.Single "payload")
-                []
-                "")]
- 
-instance HsJSONPB.ToJSONPB WrappedMQTTRequest where
-        toJSONPB (WrappedMQTTRequest f1 f2 f3)
-          = (HsJSONPB.object
-               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
-        toEncodingPB (WrappedMQTTRequest f1 f2 f3)
-          = (HsJSONPB.pairs
-               ["timeout" .= f1, "metamap" .= f2, "payload" .= f3])
- 
-instance HsJSONPB.FromJSONPB WrappedMQTTRequest where
-        parseJSONPB
-          = (HsJSONPB.withObject "WrappedMQTTRequest"
-               (\ obj ->
-                  (Hs.pure WrappedMQTTRequest) <*> obj .: "timeout" <*>
-                    obj .: "metamap"
-                    <*> obj .: "payload"))
- 
-instance HsJSONPB.ToJSON WrappedMQTTRequest where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON WrappedMQTTRequest where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema WrappedMQTTRequest where
-        declareNamedSchema _
-          = do let declare_timeout = HsJSONPB.declareSchemaRef
-               wrappedMQTTRequestTimeout <- declare_timeout Proxy.Proxy
-               let declare_metamap = HsJSONPB.declareSchemaRef
-               wrappedMQTTRequestMetamap <- declare_metamap Proxy.Proxy
-               let declare_payload = HsJSONPB.declareSchemaRef
-               wrappedMQTTRequestPayload <- declare_payload Proxy.Proxy
-               let _ = Hs.pure WrappedMQTTRequest <*>
-                         HsJSONPB.asProxy declare_timeout
-                         <*> HsJSONPB.asProxy declare_metamap
-                         <*> HsJSONPB.asProxy declare_payload
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedMQTTRequest",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("timeout", wrappedMQTTRequestTimeout),
-                                                        ("metamap", wrappedMQTTRequestMetamap),
-                                                        ("payload", wrappedMQTTRequestPayload)]}})
- 
-newtype WrappedUnaryResponse = WrappedUnaryResponse{wrappedUnaryResponseOrErr
-                                                    :: Hs.Maybe WrappedUnaryResponseOrErr}
-                               deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named WrappedUnaryResponse where
-        nameOf _ = (Hs.fromString "WrappedUnaryResponse")
- 
-instance HsProtobuf.HasDefault WrappedUnaryResponse
- 
-instance HsProtobuf.Message WrappedUnaryResponse where
-        encodeMessage _
-          WrappedUnaryResponse{wrappedUnaryResponseOrErr =
-                                 wrappedUnaryResponseOrErr}
-          = (Hs.mconcat
-               [case wrappedUnaryResponseOrErr of
-                    Hs.Nothing -> Hs.mempty
-                    Hs.Just x
-                      -> case x of
-                             WrappedUnaryResponseOrErrResponse y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.UnaryResponse)
-                                        @(HsProtobuf.Nested Proto.Mqtt.UnaryResponse)
-                                        (Hs.Just y)))
-                             WrappedUnaryResponseOrErrError y
-                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteClientError)
-                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteClientError)
-                                        (Hs.Just y)))])
-        decodeMessage _
-          = (Hs.pure WrappedUnaryResponse) <*>
-              (HsProtobuf.oneof Hs.Nothing
-                 [((HsProtobuf.FieldNumber 1),
-                   (Hs.pure (Hs.fmap WrappedUnaryResponseOrErrResponse)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.UnaryResponse))
-                        @(_ (Hs.Maybe Proto.Mqtt.UnaryResponse))
-                        HsProtobuf.decodeMessageField)),
-                  ((HsProtobuf.FieldNumber 2),
-                   (Hs.pure (Hs.fmap WrappedUnaryResponseOrErrError)) <*>
-                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteClientError))
-                        @(_ (Hs.Maybe Proto.Mqtt.RemoteClientError))
-                        HsProtobuf.decodeMessageField))])
-        dotProto _ = []
- 
-instance HsJSONPB.ToJSONPB WrappedUnaryResponse where
-        toJSONPB (WrappedUnaryResponse f1_or_f2)
-          = (HsJSONPB.object
-               [(let encodeOr_err
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedUnaryResponseOrErrResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedUnaryResponseOrErrError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_err" .= (HsJSONPB.objectOrNull [encodeOr_err] options))
-                         options
-                       else encodeOr_err options)])
-        toEncodingPB (WrappedUnaryResponse f1_or_f2)
-          = (HsJSONPB.pairs
-               [(let encodeOr_err
-                       = (case f1_or_f2 of
-                              Hs.Just (WrappedUnaryResponseOrErrResponse f1)
-                                -> (HsJSONPB.pair "response" f1)
-                              Hs.Just (WrappedUnaryResponseOrErrError f2)
-                                -> (HsJSONPB.pair "error" f2)
-                              Hs.Nothing -> Hs.mempty)
-                   in
-                   \ options ->
-                     if HsJSONPB.optEmitNamedOneof options then
-                       ("or_err" .= (HsJSONPB.pairsOrNull [encodeOr_err] options)) options
-                       else encodeOr_err options)])
- 
-instance HsJSONPB.FromJSONPB WrappedUnaryResponse where
-        parseJSONPB
-          = (HsJSONPB.withObject "WrappedUnaryResponse"
-               (\ obj ->
-                  (Hs.pure WrappedUnaryResponse) <*>
-                    (let parseOr_err parseObj
-                           = Hs.msum
-                               [Hs.Just Hs.. WrappedUnaryResponseOrErrResponse <$>
-                                  (HsJSONPB.parseField parseObj "response"),
-                                Hs.Just Hs.. WrappedUnaryResponseOrErrError <$>
-                                  (HsJSONPB.parseField parseObj "error"),
-                                Hs.pure Hs.Nothing]
-                       in
-                       ((obj .: "or_err") Hs.>>=
-                          (HsJSONPB.withObject "or_err" parseOr_err))
-                         <|> (parseOr_err obj))))
- 
-instance HsJSONPB.ToJSON WrappedUnaryResponse where
-        toJSON = HsJSONPB.toAesonValue
-        toEncoding = HsJSONPB.toAesonEncoding
- 
-instance HsJSONPB.FromJSON WrappedUnaryResponse where
-        parseJSON = HsJSONPB.parseJSONPB
- 
-instance HsJSONPB.ToSchema WrappedUnaryResponse where
-        declareNamedSchema _
-          = do let declare_or_err = HsJSONPB.declareSchemaRef
-               wrappedUnaryResponseOrErr <- declare_or_err Proxy.Proxy
-               let _ = Hs.pure WrappedUnaryResponse <*>
-                         HsJSONPB.asProxy declare_or_err
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedUnaryResponse",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("or_err", wrappedUnaryResponseOrErr)]}})
- 
-data WrappedUnaryResponseOrErr = WrappedUnaryResponseOrErrResponse Proto.Mqtt.UnaryResponse
-                               | WrappedUnaryResponseOrErrError Proto.Mqtt.RemoteClientError
-                               deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named WrappedUnaryResponseOrErr where
-        nameOf _ = (Hs.fromString "WrappedUnaryResponseOrErr")
- 
-instance HsJSONPB.ToSchema WrappedUnaryResponseOrErr where
-        declareNamedSchema _
-          = do let declare_response = HsJSONPB.declareSchemaRef
-               wrappedUnaryResponseOrErrResponse <- declare_response Proxy.Proxy
-               let _ = Hs.pure WrappedUnaryResponseOrErrResponse <*>
-                         HsJSONPB.asProxy declare_response
-               let declare_error = HsJSONPB.declareSchemaRef
-               wrappedUnaryResponseOrErrError <- declare_error Proxy.Proxy
-               let _ = Hs.pure WrappedUnaryResponseOrErrError <*>
-                         HsJSONPB.asProxy declare_error
-               Hs.return
-                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "WrappedUnaryResponseOrErr",
-                                       HsJSONPB._namedSchemaSchema =
-                                         Hs.mempty{HsJSONPB._schemaParamSchema =
-                                                     Hs.mempty{HsJSONPB._paramSchemaType =
-                                                                 Hs.Just HsJSONPB.SwaggerObject},
-                                                   HsJSONPB._schemaProperties =
-                                                     HsJSONPB.insOrdFromList
-                                                       [("response",
-                                                         wrappedUnaryResponseOrErrResponse),
-                                                        ("error", wrappedUnaryResponseOrErrError)],
-                                                   HsJSONPB._schemaMinProperties = Hs.Just 1,
-                                                   HsJSONPB._schemaMaxProperties = Hs.Just 1}})
- 
-data UnaryResponse = UnaryResponse{unaryResponseBody ::
-                                   Hs.ByteString,
-                                   unaryResponseInitMetamap :: Hs.Maybe Proto.Mqtt.MetadataMap,
-                                   unaryResponseTrailMetamap :: Hs.Maybe Proto.Mqtt.MetadataMap,
-                                   unaryResponseResponseCode :: Hs.Int32,
-                                   unaryResponseDetails :: Hs.Text}
-                   deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
- 
-instance HsProtobuf.Named UnaryResponse where
-        nameOf _ = (Hs.fromString "UnaryResponse")
- 
-instance HsProtobuf.HasDefault UnaryResponse
- 
-instance HsProtobuf.Message UnaryResponse where
-        encodeMessage _
-          UnaryResponse{unaryResponseBody = unaryResponseBody,
-                        unaryResponseInitMetamap = unaryResponseInitMetamap,
-                        unaryResponseTrailMetamap = unaryResponseTrailMetamap,
-                        unaryResponseResponseCode = unaryResponseResponseCode,
-                        unaryResponseDetails = unaryResponseDetails}
-          = (Hs.mconcat
-               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                   unaryResponseBody),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      unaryResponseInitMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
-                   (Hs.coerce @(Hs.Maybe Proto.Mqtt.MetadataMap)
-                      @(HsProtobuf.Nested Proto.Mqtt.MetadataMap)
-                      unaryResponseTrailMetamap)),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
-                   unaryResponseResponseCode),
-                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 5)
-                   unaryResponseDetails)])
-        decodeMessage _
-          = (Hs.pure UnaryResponse) <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 1))
-              <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 2)))
-              <*>
-              (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.MetadataMap))
-                 @(_ (Hs.Maybe Proto.Mqtt.MetadataMap))
-                 (HsProtobuf.at HsProtobuf.decodeMessageField
-                    (HsProtobuf.FieldNumber 3)))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 4))
-              <*>
-              (HsProtobuf.at HsProtobuf.decodeMessageField
-                 (HsProtobuf.FieldNumber 5))
         dotProto _
           = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
                 (HsProtobuf.Prim HsProtobuf.Bytes)
-                (HsProtobuf.Single "body")
+                (HsProtobuf.Single "key")
                 []
                 ""),
              (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "init_metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 3)
-                (HsProtobuf.Prim
-                   (HsProtobuf.Named (HsProtobuf.Single "MetadataMap")))
-                (HsProtobuf.Single "trail_metamap")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 4)
-                (HsProtobuf.Prim HsProtobuf.Int32)
-                (HsProtobuf.Single "response_code")
-                []
-                ""),
-             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 5)
-                (HsProtobuf.Prim HsProtobuf.String)
-                (HsProtobuf.Single "details")
+                (HsProtobuf.Repeated HsProtobuf.Bytes)
+                (HsProtobuf.Single "value")
                 []
                 "")]
  
-instance HsJSONPB.ToJSONPB UnaryResponse where
-        toJSONPB (UnaryResponse f1 f2 f3 f4 f5)
-          = (HsJSONPB.object
-               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
-                "response_code" .= f4, "details" .= f5])
-        toEncodingPB (UnaryResponse f1 f2 f3 f4 f5)
-          = (HsJSONPB.pairs
-               ["body" .= f1, "init_metamap" .= f2, "trail_metamap" .= f3,
-                "response_code" .= f4, "details" .= f5])
+instance HsJSONPB.ToJSONPB MetadataMap_Entry where
+        toJSONPB (MetadataMap_Entry f1 f2)
+          = (HsJSONPB.object ["key" .= f1, "value" .= f2])
+        toEncodingPB (MetadataMap_Entry f1 f2)
+          = (HsJSONPB.pairs ["key" .= f1, "value" .= f2])
  
-instance HsJSONPB.FromJSONPB UnaryResponse where
+instance HsJSONPB.FromJSONPB MetadataMap_Entry where
         parseJSONPB
-          = (HsJSONPB.withObject "UnaryResponse"
+          = (HsJSONPB.withObject "MetadataMap_Entry"
                (\ obj ->
-                  (Hs.pure UnaryResponse) <*> obj .: "body" <*> obj .: "init_metamap"
-                    <*> obj .: "trail_metamap"
-                    <*> obj .: "response_code"
-                    <*> obj .: "details"))
+                  (Hs.pure MetadataMap_Entry) <*> obj .: "key" <*> obj .: "value"))
  
-instance HsJSONPB.ToJSON UnaryResponse where
+instance HsJSONPB.ToJSON MetadataMap_Entry where
         toJSON = HsJSONPB.toAesonValue
         toEncoding = HsJSONPB.toAesonEncoding
  
-instance HsJSONPB.FromJSON UnaryResponse where
+instance HsJSONPB.FromJSON MetadataMap_Entry where
         parseJSON = HsJSONPB.parseJSONPB
  
-instance HsJSONPB.ToSchema UnaryResponse where
+instance HsJSONPB.ToSchema MetadataMap_Entry where
         declareNamedSchema _
-          = do let declare_body = HsJSONPB.declareSchemaRef
-               unaryResponseBody <- declare_body Proxy.Proxy
-               let declare_init_metamap = HsJSONPB.declareSchemaRef
-               unaryResponseInitMetamap <- declare_init_metamap Proxy.Proxy
-               let declare_trail_metamap = HsJSONPB.declareSchemaRef
-               unaryResponseTrailMetamap <- declare_trail_metamap Proxy.Proxy
-               let declare_response_code = HsJSONPB.declareSchemaRef
-               unaryResponseResponseCode <- declare_response_code Proxy.Proxy
-               let declare_details = HsJSONPB.declareSchemaRef
-               unaryResponseDetails <- declare_details Proxy.Proxy
-               let _ = Hs.pure UnaryResponse <*> HsJSONPB.asProxy declare_body <*>
-                         HsJSONPB.asProxy declare_init_metamap
-                         <*> HsJSONPB.asProxy declare_trail_metamap
-                         <*> HsJSONPB.asProxy declare_response_code
-                         <*> HsJSONPB.asProxy declare_details
+          = do let declare_key = HsJSONPB.declareSchemaRef
+               metadataMap_EntryKey <- declare_key Proxy.Proxy
+               let declare_value = HsJSONPB.declareSchemaRef
+               metadataMap_EntryValue <- declare_value Proxy.Proxy
+               let _ = Hs.pure MetadataMap_Entry <*> HsJSONPB.asProxy declare_key
+                         <*> HsJSONPB.asProxy declare_value
                Hs.return
                  (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
-                                         Hs.Just "UnaryResponse",
+                                         Hs.Just "MetadataMap_Entry",
                                        HsJSONPB._namedSchemaSchema =
                                          Hs.mempty{HsJSONPB._schemaParamSchema =
                                                      Hs.mempty{HsJSONPB._paramSchemaType =
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("body", unaryResponseBody),
-                                                        ("init_metamap", unaryResponseInitMetamap),
-                                                        ("trail_metamap",
-                                                         unaryResponseTrailMetamap),
-                                                        ("response_code",
-                                                         unaryResponseResponseCode),
-                                                        ("details", unaryResponseDetails)]}})
+                                                       [("key", metadataMap_EntryKey),
+                                                        ("value", metadataMap_EntryValue)]}})
  
 data AuxControl = AuxControlUnknown
                 | AuxControlAlive
@@ -1816,3 +973,353 @@ instance HsJSONPB.ToSchema AuxControlMessage where
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
                                                        [("value", auxControlMessageValue)]}})
+ 
+data RError = RErrorUnknownError
+            | RErrorNoParseWireType
+            | RErrorNoParseBinary
+            | RErrorNoParseEmbedded
+            | RErrorIOGRPCCallOk
+            | RErrorIOGRPCCallError
+            | RErrorIOGRPCCallNotOnServer
+            | RErrorIOGRPCCallNotOnClient
+            | RErrorIOGRPCCallAlreadyAccepted
+            | RErrorIOGRPCCallAlreadyInvoked
+            | RErrorIOGRPCCallNotInvoked
+            | RErrorIOGRPCCallAlreadyFinished
+            | RErrorIOGRPCCallTooManyOperations
+            | RErrorIOGRPCCallInvalidFlags
+            | RErrorIOGRPCCallInvalidMetadata
+            | RErrorIOGRPCCallInvalidMessage
+            | RErrorIOGRPCCallNotServerCompletionQueue
+            | RErrorIOGRPCCallBatchTooBig
+            | RErrorIOGRPCCallPayloadTypeMismatch
+            | RErrorIOGRPCCallCompletionQueueShutdown
+            | RErrorIOGRPCTimeout
+            | RErrorIOGRPCShutdown
+            | RErrorIOGRPCShutdownFailure
+            | RErrorIOGRPCBadStatusCode
+            | RErrorIOGRPCDecode
+            | RErrorIOGRPCInternalUnexpectedRecv
+            | RErrorIOGRPCHandlerException
+            | RErrorMQTTFailure
+            deriving (Hs.Show, Hs.Eq, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named RError where
+        nameOf _ = (Hs.fromString "RError")
+ 
+instance HsProtobuf.HasDefault RError
+ 
+instance Hs.Bounded RError where
+        minBound = RErrorUnknownError
+        maxBound = RErrorMQTTFailure
+ 
+instance Hs.Ord RError where
+        compare x y
+          = Hs.compare (HsProtobuf.fromProtoEnum x)
+              (HsProtobuf.fromProtoEnum y)
+ 
+instance HsProtobuf.ProtoEnum RError where
+        toProtoEnumMay 0 = Hs.Just RErrorUnknownError
+        toProtoEnumMay 1 = Hs.Just RErrorNoParseWireType
+        toProtoEnumMay 2 = Hs.Just RErrorNoParseBinary
+        toProtoEnumMay 3 = Hs.Just RErrorNoParseEmbedded
+        toProtoEnumMay 4 = Hs.Just RErrorIOGRPCCallOk
+        toProtoEnumMay 5 = Hs.Just RErrorIOGRPCCallError
+        toProtoEnumMay 6 = Hs.Just RErrorIOGRPCCallNotOnServer
+        toProtoEnumMay 7 = Hs.Just RErrorIOGRPCCallNotOnClient
+        toProtoEnumMay 8 = Hs.Just RErrorIOGRPCCallAlreadyAccepted
+        toProtoEnumMay 9 = Hs.Just RErrorIOGRPCCallAlreadyInvoked
+        toProtoEnumMay 10 = Hs.Just RErrorIOGRPCCallNotInvoked
+        toProtoEnumMay 11 = Hs.Just RErrorIOGRPCCallAlreadyFinished
+        toProtoEnumMay 12 = Hs.Just RErrorIOGRPCCallTooManyOperations
+        toProtoEnumMay 13 = Hs.Just RErrorIOGRPCCallInvalidFlags
+        toProtoEnumMay 14 = Hs.Just RErrorIOGRPCCallInvalidMetadata
+        toProtoEnumMay 15 = Hs.Just RErrorIOGRPCCallInvalidMessage
+        toProtoEnumMay 16
+          = Hs.Just RErrorIOGRPCCallNotServerCompletionQueue
+        toProtoEnumMay 17 = Hs.Just RErrorIOGRPCCallBatchTooBig
+        toProtoEnumMay 18 = Hs.Just RErrorIOGRPCCallPayloadTypeMismatch
+        toProtoEnumMay 19 = Hs.Just RErrorIOGRPCCallCompletionQueueShutdown
+        toProtoEnumMay 20 = Hs.Just RErrorIOGRPCTimeout
+        toProtoEnumMay 21 = Hs.Just RErrorIOGRPCShutdown
+        toProtoEnumMay 22 = Hs.Just RErrorIOGRPCShutdownFailure
+        toProtoEnumMay 23 = Hs.Just RErrorIOGRPCBadStatusCode
+        toProtoEnumMay 24 = Hs.Just RErrorIOGRPCDecode
+        toProtoEnumMay 25 = Hs.Just RErrorIOGRPCInternalUnexpectedRecv
+        toProtoEnumMay 26 = Hs.Just RErrorIOGRPCHandlerException
+        toProtoEnumMay 27 = Hs.Just RErrorMQTTFailure
+        toProtoEnumMay _ = Hs.Nothing
+        fromProtoEnum (RErrorUnknownError) = 0
+        fromProtoEnum (RErrorNoParseWireType) = 1
+        fromProtoEnum (RErrorNoParseBinary) = 2
+        fromProtoEnum (RErrorNoParseEmbedded) = 3
+        fromProtoEnum (RErrorIOGRPCCallOk) = 4
+        fromProtoEnum (RErrorIOGRPCCallError) = 5
+        fromProtoEnum (RErrorIOGRPCCallNotOnServer) = 6
+        fromProtoEnum (RErrorIOGRPCCallNotOnClient) = 7
+        fromProtoEnum (RErrorIOGRPCCallAlreadyAccepted) = 8
+        fromProtoEnum (RErrorIOGRPCCallAlreadyInvoked) = 9
+        fromProtoEnum (RErrorIOGRPCCallNotInvoked) = 10
+        fromProtoEnum (RErrorIOGRPCCallAlreadyFinished) = 11
+        fromProtoEnum (RErrorIOGRPCCallTooManyOperations) = 12
+        fromProtoEnum (RErrorIOGRPCCallInvalidFlags) = 13
+        fromProtoEnum (RErrorIOGRPCCallInvalidMetadata) = 14
+        fromProtoEnum (RErrorIOGRPCCallInvalidMessage) = 15
+        fromProtoEnum (RErrorIOGRPCCallNotServerCompletionQueue) = 16
+        fromProtoEnum (RErrorIOGRPCCallBatchTooBig) = 17
+        fromProtoEnum (RErrorIOGRPCCallPayloadTypeMismatch) = 18
+        fromProtoEnum (RErrorIOGRPCCallCompletionQueueShutdown) = 19
+        fromProtoEnum (RErrorIOGRPCTimeout) = 20
+        fromProtoEnum (RErrorIOGRPCShutdown) = 21
+        fromProtoEnum (RErrorIOGRPCShutdownFailure) = 22
+        fromProtoEnum (RErrorIOGRPCBadStatusCode) = 23
+        fromProtoEnum (RErrorIOGRPCDecode) = 24
+        fromProtoEnum (RErrorIOGRPCInternalUnexpectedRecv) = 25
+        fromProtoEnum (RErrorIOGRPCHandlerException) = 26
+        fromProtoEnum (RErrorMQTTFailure) = 27
+ 
+instance HsJSONPB.ToJSONPB RError where
+        toJSONPB x _ = HsJSONPB.enumFieldString x
+        toEncodingPB x _ = HsJSONPB.enumFieldEncoding x
+ 
+instance HsJSONPB.FromJSONPB RError where
+        parseJSONPB (HsJSONPB.String "UnknownError")
+          = Hs.pure RErrorUnknownError
+        parseJSONPB (HsJSONPB.String "NoParseWireType")
+          = Hs.pure RErrorNoParseWireType
+        parseJSONPB (HsJSONPB.String "NoParseBinary")
+          = Hs.pure RErrorNoParseBinary
+        parseJSONPB (HsJSONPB.String "NoParseEmbedded")
+          = Hs.pure RErrorNoParseEmbedded
+        parseJSONPB (HsJSONPB.String "IOGRPCCallOk")
+          = Hs.pure RErrorIOGRPCCallOk
+        parseJSONPB (HsJSONPB.String "IOGRPCCallError")
+          = Hs.pure RErrorIOGRPCCallError
+        parseJSONPB (HsJSONPB.String "IOGRPCCallNotOnServer")
+          = Hs.pure RErrorIOGRPCCallNotOnServer
+        parseJSONPB (HsJSONPB.String "IOGRPCCallNotOnClient")
+          = Hs.pure RErrorIOGRPCCallNotOnClient
+        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyAccepted")
+          = Hs.pure RErrorIOGRPCCallAlreadyAccepted
+        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyInvoked")
+          = Hs.pure RErrorIOGRPCCallAlreadyInvoked
+        parseJSONPB (HsJSONPB.String "IOGRPCCallNotInvoked")
+          = Hs.pure RErrorIOGRPCCallNotInvoked
+        parseJSONPB (HsJSONPB.String "IOGRPCCallAlreadyFinished")
+          = Hs.pure RErrorIOGRPCCallAlreadyFinished
+        parseJSONPB (HsJSONPB.String "IOGRPCCallTooManyOperations")
+          = Hs.pure RErrorIOGRPCCallTooManyOperations
+        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidFlags")
+          = Hs.pure RErrorIOGRPCCallInvalidFlags
+        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidMetadata")
+          = Hs.pure RErrorIOGRPCCallInvalidMetadata
+        parseJSONPB (HsJSONPB.String "IOGRPCCallInvalidMessage")
+          = Hs.pure RErrorIOGRPCCallInvalidMessage
+        parseJSONPB (HsJSONPB.String "IOGRPCCallNotServerCompletionQueue")
+          = Hs.pure RErrorIOGRPCCallNotServerCompletionQueue
+        parseJSONPB (HsJSONPB.String "IOGRPCCallBatchTooBig")
+          = Hs.pure RErrorIOGRPCCallBatchTooBig
+        parseJSONPB (HsJSONPB.String "IOGRPCCallPayloadTypeMismatch")
+          = Hs.pure RErrorIOGRPCCallPayloadTypeMismatch
+        parseJSONPB (HsJSONPB.String "IOGRPCCallCompletionQueueShutdown")
+          = Hs.pure RErrorIOGRPCCallCompletionQueueShutdown
+        parseJSONPB (HsJSONPB.String "IOGRPCTimeout")
+          = Hs.pure RErrorIOGRPCTimeout
+        parseJSONPB (HsJSONPB.String "IOGRPCShutdown")
+          = Hs.pure RErrorIOGRPCShutdown
+        parseJSONPB (HsJSONPB.String "IOGRPCShutdownFailure")
+          = Hs.pure RErrorIOGRPCShutdownFailure
+        parseJSONPB (HsJSONPB.String "IOGRPCBadStatusCode")
+          = Hs.pure RErrorIOGRPCBadStatusCode
+        parseJSONPB (HsJSONPB.String "IOGRPCDecode")
+          = Hs.pure RErrorIOGRPCDecode
+        parseJSONPB (HsJSONPB.String "IOGRPCInternalUnexpectedRecv")
+          = Hs.pure RErrorIOGRPCInternalUnexpectedRecv
+        parseJSONPB (HsJSONPB.String "IOGRPCHandlerException")
+          = Hs.pure RErrorIOGRPCHandlerException
+        parseJSONPB (HsJSONPB.String "MQTTFailure")
+          = Hs.pure RErrorMQTTFailure
+        parseJSONPB v = (HsJSONPB.typeMismatch "RError" v)
+ 
+instance HsJSONPB.ToJSON RError where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON RError where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsProtobuf.Finite RError
+ 
+data RemoteError = RemoteError{remoteErrorErrorType ::
+                               HsProtobuf.Enumerated Proto.Mqtt.RError,
+                               remoteErrorMessage :: Hs.Text,
+                               remoteErrorExtra :: Hs.Maybe RemoteErrorExtra}
+                 deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named RemoteError where
+        nameOf _ = (Hs.fromString "RemoteError")
+ 
+instance HsProtobuf.HasDefault RemoteError
+ 
+instance HsProtobuf.Message RemoteError where
+        encodeMessage _
+          RemoteError{remoteErrorErrorType = remoteErrorErrorType,
+                      remoteErrorMessage = remoteErrorMessage,
+                      remoteErrorExtra = remoteErrorExtra}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   remoteErrorErrorType),
+                (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
+                   remoteErrorMessage),
+                case remoteErrorExtra of
+                    Hs.Nothing -> Hs.mempty
+                    Hs.Just x
+                      -> case x of
+                             RemoteErrorExtraStatusCode y
+                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 3)
+                                     (HsProtobuf.ForceEmit y))
+                             RemoteErrorExtraEmbeddedError y
+                               -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 4)
+                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteError)
+                                        @(HsProtobuf.Nested Proto.Mqtt.RemoteError)
+                                        (Hs.Just y)))])
+        decodeMessage _
+          = (Hs.pure RemoteError) <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 1))
+              <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 2))
+              <*>
+              (HsProtobuf.oneof Hs.Nothing
+                 [((HsProtobuf.FieldNumber 3),
+                   (Hs.pure (Hs.Just Hs.. RemoteErrorExtraStatusCode)) <*>
+                     HsProtobuf.decodeMessageField),
+                  ((HsProtobuf.FieldNumber 4),
+                   (Hs.pure (Hs.fmap RemoteErrorExtraEmbeddedError)) <*>
+                     (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteError))
+                        @(_ (Hs.Maybe Proto.Mqtt.RemoteError))
+                        HsProtobuf.decodeMessageField))])
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Prim (HsProtobuf.Named (HsProtobuf.Single "RError")))
+                (HsProtobuf.Single "error_type")
+                []
+                ""),
+             (HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 2)
+                (HsProtobuf.Prim HsProtobuf.String)
+                (HsProtobuf.Single "message")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB RemoteError where
+        toJSONPB (RemoteError f1 f2 f3_or_f4)
+          = (HsJSONPB.object
+               ["error_type" .= f1, "message" .= f2,
+                (let encodeExtra
+                       = (case f3_or_f4 of
+                              Hs.Just (RemoteErrorExtraStatusCode f3)
+                                -> (HsJSONPB.pair "status_code" f3)
+                              Hs.Just (RemoteErrorExtraEmbeddedError f4)
+                                -> (HsJSONPB.pair "embedded_error" f4)
+                              Hs.Nothing -> Hs.mempty)
+                   in
+                   \ options ->
+                     if HsJSONPB.optEmitNamedOneof options then
+                       ("extra" .= (HsJSONPB.objectOrNull [encodeExtra] options)) options
+                       else encodeExtra options)])
+        toEncodingPB (RemoteError f1 f2 f3_or_f4)
+          = (HsJSONPB.pairs
+               ["error_type" .= f1, "message" .= f2,
+                (let encodeExtra
+                       = (case f3_or_f4 of
+                              Hs.Just (RemoteErrorExtraStatusCode f3)
+                                -> (HsJSONPB.pair "status_code" f3)
+                              Hs.Just (RemoteErrorExtraEmbeddedError f4)
+                                -> (HsJSONPB.pair "embedded_error" f4)
+                              Hs.Nothing -> Hs.mempty)
+                   in
+                   \ options ->
+                     if HsJSONPB.optEmitNamedOneof options then
+                       ("extra" .= (HsJSONPB.pairsOrNull [encodeExtra] options)) options
+                       else encodeExtra options)])
+ 
+instance HsJSONPB.FromJSONPB RemoteError where
+        parseJSONPB
+          = (HsJSONPB.withObject "RemoteError"
+               (\ obj ->
+                  (Hs.pure RemoteError) <*> obj .: "error_type" <*> obj .: "message"
+                    <*>
+                    (let parseExtra parseObj
+                           = Hs.msum
+                               [Hs.Just Hs.. RemoteErrorExtraStatusCode <$>
+                                  (HsJSONPB.parseField parseObj "status_code"),
+                                Hs.Just Hs.. RemoteErrorExtraEmbeddedError <$>
+                                  (HsJSONPB.parseField parseObj "embedded_error"),
+                                Hs.pure Hs.Nothing]
+                       in
+                       ((obj .: "extra") Hs.>>= (HsJSONPB.withObject "extra" parseExtra))
+                         <|> (parseExtra obj))))
+ 
+instance HsJSONPB.ToJSON RemoteError where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON RemoteError where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema RemoteError where
+        declareNamedSchema _
+          = do let declare_error_type = HsJSONPB.declareSchemaRef
+               remoteErrorErrorType <- declare_error_type Proxy.Proxy
+               let declare_message = HsJSONPB.declareSchemaRef
+               remoteErrorMessage <- declare_message Proxy.Proxy
+               let declare_extra = HsJSONPB.declareSchemaRef
+               remoteErrorExtra <- declare_extra Proxy.Proxy
+               let _ = Hs.pure RemoteError <*> HsJSONPB.asProxy declare_error_type
+                         <*> HsJSONPB.asProxy declare_message
+                         <*> HsJSONPB.asProxy declare_extra
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "RemoteError",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("error_type", remoteErrorErrorType),
+                                                        ("message", remoteErrorMessage),
+                                                        ("extra", remoteErrorExtra)]}})
+ 
+data RemoteErrorExtra = RemoteErrorExtraStatusCode Hs.Int32
+                      | RemoteErrorExtraEmbeddedError Proto.Mqtt.RemoteError
+                      deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named RemoteErrorExtra where
+        nameOf _ = (Hs.fromString "RemoteErrorExtra")
+ 
+instance HsJSONPB.ToSchema RemoteErrorExtra where
+        declareNamedSchema _
+          = do let declare_status_code = HsJSONPB.declareSchemaRef
+               remoteErrorExtraStatusCode <- declare_status_code Proxy.Proxy
+               let _ = Hs.pure RemoteErrorExtraStatusCode <*>
+                         HsJSONPB.asProxy declare_status_code
+               let declare_embedded_error = HsJSONPB.declareSchemaRef
+               remoteErrorExtraEmbeddedError <- declare_embedded_error Proxy.Proxy
+               let _ = Hs.pure RemoteErrorExtraEmbeddedError <*>
+                         HsJSONPB.asProxy declare_embedded_error
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "RemoteErrorExtra",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("status_code", remoteErrorExtraStatusCode),
+                                                        ("embedded_error",
+                                                         remoteErrorExtraEmbeddedError)],
+                                                   HsJSONPB._schemaMinProperties = Hs.Just 1,
+                                                   HsJSONPB._schemaMaxProperties = Hs.Just 1}})

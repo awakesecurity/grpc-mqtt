@@ -48,7 +48,7 @@ withGRPCClient myGRPCClientConfig $ \grpcClient -> do
 Using multiple servers:
 ```
 methodMapAH <- addHelloRemoteClientMethodMap grpcClient1
-methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2s
+methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2
 let methodMap = methodMapAH <> methodMapMG
 runRemoteClient myMQTTConfig baseTopic methodMap
 ```

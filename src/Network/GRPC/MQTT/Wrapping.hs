@@ -23,13 +23,15 @@ module Network.GRPC.MQTT.Wrapping
     wrapUnaryClientHandler,
     wrapClientStreamingClientHandler,
     wrapServerStreamingClientHandler,
+    wrapBiDiStreamingClientHandler,
+    unwrapBiDiStreamResponse,
   )
 where
 
 import Relude
 
 import Network.GRPC.MQTT.Types
-  ( ClientHandler (ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+  ( ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
     MQTTResult (..),
   )
 
@@ -65,14 +67,15 @@ import Network.GRPC.HighLevel as HL
   )
 import Network.GRPC.HighLevel.Client
   ( ClientError (..),
-    ClientRequest (ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
+    ClientRequest (ClientBiDiRequest, ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
     ClientResult
-      ( ClientErrorResponse,
+      ( ClientBiDiResponse,
+        ClientErrorResponse,
         ClientNormalResponse,
         ClientReaderResponse,
         ClientWriterResponse
       ),
-    GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
+    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.Unsafe (CallError (..))
@@ -112,6 +115,14 @@ wrapClientStreamingClientHandler handler =
   ClientClientStreamHandler $ \timeout metadata send -> do
     handler (ClientWriterRequest timeout metadata send)
 
+wrapBiDiStreamingClientHandler ::
+  (Message request, Message response) =>
+  (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
+  ClientHandler
+wrapBiDiStreamingClientHandler handler =
+  ClientBiDiStreamHandler $ \timeout metadata bidi -> do
+    handler (ClientBiDiRequest timeout metadata bidi)
+
 -- Responses
 wrapResponse :: (Message response) => ClientResult streamType response -> WrappedResponse
 wrapResponse res =
@@ -141,9 +152,16 @@ wrapResponse res =
             (Just $ fromMetadataMap rspMetadata)
             (fromStatusCode statusCode)
             (fromStatusDetails details)
+      ClientBiDiResponse rspMetadata statusCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
+            (Just $ fromMetadataMap rspMetadata)
+            (fromStatusCode statusCode)
+            (fromStatusDetails details)
       ClientErrorResponse err ->
         WrappedResponseOrErrorError $ toRemoteError err
-      _ -> error "BiDi not supported"
 
 data ParsedMQTTResponse response = ParsedMQTTResponse
   { responseBody :: Maybe response
@@ -208,6 +226,13 @@ unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapRespo
     toServerStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ServerStreaming response
     toServerStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientReaderResponse trailMetadata statusCode statusDetails
+
+unwrapBiDiStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'BiDiStreaming response)
+unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toBiDiStreamResult :: ParsedMQTTResponse response -> MQTTResult 'BiDiStreaming response
+    toBiDiStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
 
 -- Stream Chunks
 wrapStreamChunk :: (Message a) => Maybe a -> WrappedStreamChunk

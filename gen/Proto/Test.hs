@@ -55,7 +55,13 @@ data AddHello request response = AddHello{addHelloAdd ::
                                             Proto.Test.OneInt
                                             ->
                                             Hs.IO
-                                              (response 'HsGRPC.ClientStreaming Proto.Test.OneInt)}
+                                              (response 'HsGRPC.ClientStreaming Proto.Test.OneInt),
+                                          addHelloHelloBi ::
+                                          request 'HsGRPC.BiDiStreaming Proto.Test.BiRqtRpy
+                                            Proto.Test.BiRqtRpy
+                                            ->
+                                            Hs.IO
+                                              (response 'HsGRPC.BiDiStreaming Proto.Test.BiRqtRpy)}
                                deriving Hs.Generic
  
 addHelloServer ::
@@ -64,7 +70,8 @@ addHelloServer ::
 addHelloServer
   AddHello{addHelloAdd = addHelloAdd,
            addHelloHelloSS = addHelloHelloSS,
-           addHelloRunningSum = addHelloRunningSum}
+           addHelloRunningSum = addHelloRunningSum,
+           addHelloHelloBi = addHelloHelloBi}
   (ServiceOptions serverHost serverPort useCompression
      userAgentPrefix userAgentSuffix initialMetadata sslConfig logger
      serverMaxReceiveMessageLength)
@@ -81,8 +88,12 @@ addHelloServer
                                [(HsGRPC.ServerStreamHandler
                                    (HsGRPC.MethodName "/test.AddHello/HelloSS")
                                    (HsGRPC.convertGeneratedServerWriterHandler addHelloHelloSS))],
-                             HsGRPC.optBiDiStreamHandlers = [], optServerHost = serverHost,
-                             optServerPort = serverPort, optUseCompression = useCompression,
+                             HsGRPC.optBiDiStreamHandlers =
+                               [(HsGRPC.BiDiStreamHandler
+                                   (HsGRPC.MethodName "/test.AddHello/HelloBi")
+                                   (HsGRPC.convertGeneratedServerRWHandler addHelloHelloBi))],
+                             optServerHost = serverHost, optServerPort = serverPort,
+                             optUseCompression = useCompression,
                              optUserAgentPrefix = userAgentPrefix,
                              optUserAgentSuffix = userAgentSuffix,
                              optInitialMetadata = initialMetadata, optSSLConfig = sslConfig,
@@ -105,6 +116,10 @@ addHelloClient client
       ((Hs.pure (HsGRPC.clientRequest client)) <*>
          (HsGRPC.clientRegisterMethod client
             (HsGRPC.MethodName "/test.AddHello/RunningSum")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.AddHello/HelloBi")))
  
 data MultGoodbye request response = MultGoodbye{multGoodbyeMult ::
                                                 request 'HsGRPC.Normal Proto.Test.TwoInts
@@ -429,3 +444,59 @@ instance HsJSONPB.ToSchema SSRpy where
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
                                                        [("greeting", ssrpyGreeting)]}})
+ 
+newtype BiRqtRpy = BiRqtRpy{biRqtRpyMessage :: Hs.Text}
+                   deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named BiRqtRpy where
+        nameOf _ = (Hs.fromString "BiRqtRpy")
+ 
+instance HsProtobuf.HasDefault BiRqtRpy
+ 
+instance HsProtobuf.Message BiRqtRpy where
+        encodeMessage _ BiRqtRpy{biRqtRpyMessage = biRqtRpyMessage}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   biRqtRpyMessage)])
+        decodeMessage _
+          = (Hs.pure BiRqtRpy) <*>
+              (HsProtobuf.at HsProtobuf.decodeMessageField
+                 (HsProtobuf.FieldNumber 1))
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Prim HsProtobuf.String)
+                (HsProtobuf.Single "message")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB BiRqtRpy where
+        toJSONPB (BiRqtRpy f1) = (HsJSONPB.object ["message" .= f1])
+        toEncodingPB (BiRqtRpy f1) = (HsJSONPB.pairs ["message" .= f1])
+ 
+instance HsJSONPB.FromJSONPB BiRqtRpy where
+        parseJSONPB
+          = (HsJSONPB.withObject "BiRqtRpy"
+               (\ obj -> (Hs.pure BiRqtRpy) <*> obj .: "message"))
+ 
+instance HsJSONPB.ToJSON BiRqtRpy where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON BiRqtRpy where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema BiRqtRpy where
+        declareNamedSchema _
+          = do let declare_message = HsJSONPB.declareSchemaRef
+               biRqtRpyMessage <- declare_message Proxy.Proxy
+               let _ = Hs.pure BiRqtRpy <*> HsJSONPB.asProxy declare_message
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "BiRqtRpy",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("message", biRqtRpyMessage)]}})

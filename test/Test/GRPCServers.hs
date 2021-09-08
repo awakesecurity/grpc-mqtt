@@ -11,6 +11,7 @@ import Relude
 
 import Proto.Test
   ( AddHello (..),
+    BiRqtRpy,
     MultGoodbye (..),
     OneInt (OneInt),
     SSRpy (SSRpy),
@@ -23,11 +24,12 @@ import Proto.Test
 import Network.GRPC.HighLevel
   ( ServiceOptions,
     StatusCode (StatusOk),
+    StatusDetails (..),
   )
 import Network.GRPC.HighLevel.Generated
-  ( GRPCMethodType (ClientStreaming, Normal, ServerStreaming),
-    ServerRequest (ServerNormalRequest, ServerReaderRequest, ServerWriterRequest),
-    ServerResponse (ServerNormalResponse, ServerReaderResponse, ServerWriterResponse),
+  ( GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
+    ServerRequest (ServerBiDiRequest, ServerNormalRequest, ServerReaderRequest, ServerWriterRequest),
+    ServerResponse (ServerBiDiResponse, ServerNormalResponse, ServerReaderResponse, ServerWriterResponse),
     StatusCode (StatusUnknown),
   )
 import Turtle (sleep)
@@ -41,6 +43,7 @@ addHelloHandlers =
     { addHelloAdd = addHandler
     , addHelloHelloSS = helloSSHandler
     , addHelloRunningSum = runningSumHandler
+    , addHelloHelloBi = helloBiHandler
     }
 
 addHandler ::
@@ -107,6 +110,16 @@ runningSumHandler (ServerReaderRequest _metadata recv) = loop 0
                 StatusOk
                 ""
             )
+
+helloBiHandler :: ServerRequest 'BiDiStreaming BiRqtRpy BiRqtRpy -> IO (ServerResponse 'BiDiStreaming BiRqtRpy)
+helloBiHandler (ServerBiDiRequest _metadata recv send) = fix $ \go ->
+  recv >>= \case
+    Left e -> fail $ "helloBi recv error: " ++ show e
+    Right Nothing -> return $ ServerBiDiResponse mempty StatusOk (StatusDetails "helloBi details")
+    Right (Just rqt) -> do
+      send rqt >>= \case
+        Left e -> fail $ "helloBi send error: " ++ show e
+        _ -> go
 
 multGoodbyeService :: ServiceOptions -> IO ()
 multGoodbyeService = multGoodbyeServer multGoodbyeHandlers

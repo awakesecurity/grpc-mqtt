@@ -320,7 +320,7 @@ packetizedMesssages = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorPacketized", mqttMsgSizeLimit = 10} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        testAddCall awsConfig{_connID = testClientId <> "Packetized"}
+        -- testAddCall awsConfig{_connID = testClientId <> "Packetized"}
         testHelloCall awsConfig{_connID = testClientId <> "Packetized"}
 
 missingClientError :: Assertion
@@ -385,7 +385,7 @@ testHelloCall :: MQTTGRPCConfig -> Assertion
 testHelloCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
   let AddHello _ mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
       testInput = SSRqt "Alice" 2
-      request = MQTTReaderRequest testInput 5 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
+      request = MQTTReaderRequest testInput 10 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
 
   mqttHelloSS request >>= \case
     GRPCResult (ClientReaderResponse _ status _) -> status @?= StatusOk

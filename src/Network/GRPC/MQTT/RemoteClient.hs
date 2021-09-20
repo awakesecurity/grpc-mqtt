@@ -22,7 +22,7 @@ import Network.GRPC.MQTT.Logging
     logInfo,
     logWarn,
   )
-import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
+import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
 import Network.GRPC.MQTT.Types
   ( ClientHandler (..),
     MethodMap,
@@ -33,9 +33,7 @@ import Network.GRPC.MQTT.Wrapping
     fromMetadataMap,
     remoteError,
     toMetadataMap,
-    unwrapStreamChunk,
     wrapResponse,
-    wrapStreamChunk,
   )
 import Proto.Mqtt
   ( AuxControl (AuxControlAlive, AuxControlTerminate),
@@ -220,12 +218,6 @@ requestHandler SessionArgs{..} reqChan = do
         `whenNothing` throwError (remoteError $ "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod)
 
     readRequest <- liftIO $ mkPacketizedRead reqChan
-    let readStreamChunk :: (Message request) => MaybeT IO request
-        readStreamChunk = do
-          res <- exceptToMaybeT readRequest
-          case unwrapStreamChunk res of
-            Left _ -> empty
-            Right c -> hoistMaybe c
 
     mqttMessage <- readRequest
 
@@ -246,17 +238,19 @@ requestHandler SessionArgs{..} reqChan = do
 
       -- Run Client Streaming Request
       ClientClientStreamHandler handler -> do
+        readStreamChunk <- mkStreamRead readRequest
         response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSender readStreamChunk)
         publishToResponseTopic $ wrapResponse response
 
       -- Run Server Streaming Request
       ClientServerStreamHandler handler -> do
-        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic)
+        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic maxMsgSize)
         publishToResponseTopic $ wrapResponse response
 
       -- Run BiDirectional Streaming Request
       ClientBiDiStreamHandler handler -> do
-        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic)
+        readStreamChunk <- mkStreamRead readRequest
+        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic maxMsgSize)
         publishToResponseTopic $ wrapResponse response
   where
     publishErrors :: (RemoteError -> IO ()) -> IO (Either RemoteError ()) -> IO ()
@@ -283,44 +277,55 @@ streamReader ::
   forall response clientcall.
   (Message response) =>
   (forall r. (Message r) => r -> IO ()) ->
+  Int64 ->
   clientcall ->
   HL.MetadataMap ->
   StreamRecv response ->
   IO ()
-streamReader publish _cc initMetadata recv = do
+streamReader publish maxMsgSize _cc initMetadata recv = do
+  PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish maxMsgSize publish
+
+  let readLoop :: IO ()
+      readLoop =
+        recv >>= \case
+          Left err -> publish $ wrapResponse @response (ClientErrorResponse $ ClientIOError err)
+          Right (Just resp) -> do
+            publishToStream resp
+            readLoop
+          Right Nothing ->
+            publishToStreamCompleted
+
   publish $ fromMetadataMap initMetadata
   readLoop
-  where
-    readLoop =
-      recv >>= \case
-        Left err -> publish $ wrapResponse @response (ClientErrorResponse $ ClientIOError err)
-        Right chunk -> do
-          publish $ wrapStreamChunk chunk
-          when (isJust chunk) readLoop
 
 -- | Reads chunks from MQTT and send them on to the gRPC stream
-streamSender :: forall request. MaybeT IO request -> StreamSend request -> IO ()
-streamSender readChunk send = void $ runMaybeT loop
+streamSender :: forall request. ExceptT RemoteError IO (Maybe request) -> StreamSend request -> IO ()
+streamSender readChunk send = void $ runExceptT loop
   where
-    loop = do
-      chunk <- readChunk
-      _ <- liftIO $ send chunk
-      loop
+    -- TODO: handle any errors in read/send
+    loop :: ExceptT RemoteError IO ()
+    loop =
+      readChunk >>= \case
+        Nothing -> return ()
+        Just chunk -> do
+          void $ liftIO $ send chunk
+          loop
 
 bidiHandler ::
   (Message response) =>
-  MaybeT IO request ->
+  ExceptT RemoteError IO (Maybe request) ->
   (forall r. (Message r) => r -> IO ()) ->
+  Int64 ->
   clientcall ->
   HL.MetadataMap ->
   StreamRecv response ->
   StreamSend request ->
   WritesDone ->
   IO ()
-bidiHandler readChunk publish cc initMetadata recv send writesDone = do
+bidiHandler readChunk publish maxMsgSize cc initMetadata recv send writesDone = do
   concurrently_
     (streamSender readChunk send >> writesDone)
-    (streamReader publish cc initMetadata recv)
+    (streamReader publish maxMsgSize cc initMetadata recv)
 
 -- | Handles AuxControl signals from the "/control" topic
 controlMsgHandler :: Logger -> Session -> LByteString -> IO ()

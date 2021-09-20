@@ -33,8 +33,11 @@ message WrappedResponse {
 }
 
 message WrappedStreamChunk {
+  message Elems {
+    repeated bytes chunks = 1;
+  }
   oneof or_error {
-    bytes chunk = 1;
+    Elems elems = 1;
     RemoteError error = 2;
   }
 }

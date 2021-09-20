@@ -50,13 +50,15 @@ import Proto.Mqtt as Proto
       ),
     WrappedStreamChunk (WrappedStreamChunk),
     WrappedStreamChunkOrError
-      ( WrappedStreamChunkOrErrorChunk,
+      ( WrappedStreamChunkOrErrorElems,
         WrappedStreamChunkOrErrorError
       ),
+    WrappedStreamChunk_Elems (WrappedStreamChunk_Elems),
   )
 
 import Control.Exception (ErrorCall, try)
 import qualified Data.Map as M
+import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL
@@ -235,20 +237,22 @@ unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse 
       GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
 
 -- Stream Chunks
-wrapStreamChunk :: (Message a) => Maybe a -> WrappedStreamChunk
-wrapStreamChunk chunk =
+wrapStreamChunk :: Maybe (Vector ByteString) -> WrappedStreamChunk
+wrapStreamChunk chunks =
   WrappedStreamChunk
-    (WrappedStreamChunkOrErrorChunk . toBS <$> chunk)
+    (WrappedStreamChunkOrErrorElems . WrappedStreamChunk_Elems <$> chunks)
 
-unwrapStreamChunk :: (Message a) => LByteString -> Either RemoteError (Maybe a)
+unwrapStreamChunk :: forall a. (Message a) => LByteString -> Either RemoteError (Maybe (Vector a))
 unwrapStreamChunk msg =
   fromLazyByteString msg >>= \case
     WrappedStreamChunk Nothing -> Right Nothing
     WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
-    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorChunk chunk)) ->
-      case fromByteString chunk of
-        Left err -> Left $ parseErrorToRCE err
-        Right rsp -> Right (Just rsp)
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorElems (WrappedStreamChunk_Elems chunks))) -> do
+      let parse :: ByteString -> Either RemoteError a
+          parse chunk = case fromByteString chunk of
+            Left err -> Left $ parseErrorToRCE err
+            Right rsp -> Right rsp
+      Just <$> mapM parse chunks
 
 -- Utilities
 remoteError :: LText -> RemoteError

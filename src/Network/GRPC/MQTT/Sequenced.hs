@@ -12,12 +12,16 @@ import Relude
 
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as LBS
+import Data.Sequence ((|>))
+import qualified Data.Sequence as Seq
 import qualified Data.SortedList as SL
-import Network.GRPC.MQTT.Wrapping (fromLazyByteString)
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
+import Network.GRPC.MQTT.Wrapping (fromLazyByteString, unwrapStreamChunk, wrapStreamChunk)
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
 import Proto.Mqtt (Packet (..), RemoteError)
-import Proto3.Suite (toLazyByteString)
+import Proto3.Suite (Message, toLazyByteString)
 import UnliftIO.STM (TChan, readTChan)
 
 data SequenceIdx = Unsequenced | SequencedIdx Natural
@@ -104,11 +108,32 @@ mkSequencedRead read = do
 
   return $ atomically orderedRead
 
-mkPacketizedPublish :: forall io io'. (MonadIO io, MonadIO io') => MQTTClient -> Int64 -> Topic -> io (LByteString -> io' ())
+mkStreamRead :: forall r io. (Message r, MonadIO io) => ExceptT RemoteError IO LByteString -> io (ExceptT RemoteError IO (Maybe r))
+mkStreamRead readRequest = do
+  reqsRef :: IORef (Maybe (Vector r)) <- newIORef (Just Vector.empty)
+
+  let readNextChunk :: ExceptT RemoteError IO ()
+      readNextChunk = do
+        res <- readRequest
+        cs <- hoistEither $ unwrapStreamChunk res
+        writeIORef reqsRef cs
+
+  let readStreamChunk :: ExceptT RemoteError IO (Maybe r)
+      readStreamChunk =
+        readIORef reqsRef >>= \case
+          Nothing -> pure Nothing
+          Just reqs ->
+            if Vector.null reqs
+              then readNextChunk >> readStreamChunk
+              else writeIORef reqsRef (Just $ Vector.tail reqs) >> return (Just $ Vector.head reqs)
+
+  return readStreamChunk
+
+mkPacketizedPublish :: (MonadIO io) => MQTTClient -> Int64 -> Topic -> io (LByteString -> IO ())
 mkPacketizedPublish client msgLimit topic = do
   seqVar <- newTVarIO 0
 
-  let packetizedPublish :: LByteString -> io' ()
+  let packetizedPublish :: LByteString -> IO ()
       packetizedPublish bs = do
         let (chunk, rest) = LBS.splitAt msgLimit bs
         let isLastPacket = LBS.null rest
@@ -118,8 +143,46 @@ mkPacketizedPublish client msgLimit topic = do
           modifyTVar' seqVar (+ 1)
           return $ toLazyByteString $ Packet isLastPacket curSeq (toStrict chunk)
 
-        liftIO $ publishq client topic rawPacket False QoS1 []
+        publishq client topic rawPacket False QoS1 []
 
         unless isLastPacket $ packetizedPublish rest
 
   return packetizedPublish
+
+data PublishToStream a = PublishToStream
+  { -- | A function to publish one data element.
+    publishToStream :: a -> IO ()
+  , -- | This function should be called to indicate that streaming is
+    -- completed.
+    publishToStreamCompleted :: IO ()
+  }
+
+mkStreamPublish :: forall r io. (Message r, MonadIO io) => Int64 -> (forall t. Message t => t -> IO ()) -> io (PublishToStream r)
+mkStreamPublish msgLimit publish = do
+  chunksRef <- newIORef ((Seq.empty, 0) :: (Seq ByteString, Int64))
+
+  let seqToVector :: Seq t -> Vector t
+      seqToVector = fromList . toList
+
+  let accumulatedSend :: r -> IO ()
+      accumulatedSend a = do
+        (accChunks, accSize) <- readIORef chunksRef
+        let chunk = toLazyByteString a
+            sz = LBS.length chunk
+        if accSize + sz > msgLimit
+          then do
+            unless (Seq.null accChunks) $
+              publish $ wrapStreamChunk $ Just $ seqToVector accChunks
+            writeIORef chunksRef (Seq.singleton (toStrict chunk), sz)
+          else writeIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
+
+  let streamingDone :: IO ()
+      streamingDone = do
+        (accChunks, _) <- readIORef chunksRef
+        unless (Seq.null accChunks) $
+          publish $ wrapStreamChunk $ Just $ seqToVector accChunks
+        -- Send end of stream indicator
+        publish $ wrapStreamChunk Nothing
+        writeIORef chunksRef (Seq.empty, 0)
+
+  return $ PublishToStream accumulatedSend streamingDone

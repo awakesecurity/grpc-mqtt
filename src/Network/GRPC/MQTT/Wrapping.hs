@@ -252,7 +252,7 @@ unwrapStreamChunk msg =
           parse chunk = case fromByteString chunk of
             Left err -> Left $ parseErrorToRCE err
             Right rsp -> Right rsp
-      Just <$> mapM parse chunks
+      Just <$> traverse parse chunks
 
 -- Utilities
 remoteError :: LText -> RemoteError

@@ -320,7 +320,7 @@ packetizedMesssages = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorPacketized", mqttMsgSizeLimit = 10} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        -- testAddCall awsConfig{_connID = testClientId <> "Packetized"}
+        testAddCall awsConfig{_connID = testClientId <> "Packetized"}
         testHelloCall awsConfig{_connID = testClientId <> "Packetized"}
 
 missingClientError :: Assertion

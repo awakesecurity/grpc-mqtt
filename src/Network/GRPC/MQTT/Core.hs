@@ -20,19 +20,16 @@ import Relude
 import Control.Exception (throw)
 import Data.Conduit.Network
   ( AppData,
-    ClientSettings,
     appSink,
     appSource,
-    clientSettings,
-    runTCPClient,
   )
 import Data.Conduit.Network.TLS
-  ( TLSClientConfig (tlsClientTLSSettings),
+  ( TLSClientConfig (..),
     runTLSClient,
     tlsClientConfig,
   )
 import qualified Data.List as L
-import Network.Connection (TLSSettings (TLSSettingsSimple))
+import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTConduit,
@@ -45,7 +42,7 @@ import Network.MQTT.Client
     subOptions,
     subscribe,
   )
-import Network.MQTT.Topic (Filter(unFilter))
+import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Turtle (NominalDiffTime)
 
@@ -57,6 +54,8 @@ data MQTTGRPCConfig = MQTTGRPCConfig
     useTLS :: Bool
   , -- | Maximum size for an MQTT message in bytes
     mqttMsgSizeLimit :: Int
+  , -- | Proxy to use to connect to the MQTT broker
+    brokerProxy :: Maybe ProxySettings
   , _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback
@@ -76,6 +75,7 @@ defaultMGConfig =
   MQTTGRPCConfig
     { useTLS = False
     , mqttMsgSizeLimit = 128000
+    , brokerProxy = Nothing
     , _cleanSession = True
     , _lwt = Nothing
     , _msgCB = NoCallback
@@ -96,21 +96,18 @@ getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
 connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
-connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ do
-  let runner = if useTLS then runTLS else runTCP
-  runMQTTConduit runner (getMQTTConfig cfg)
+connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTConfig cfg)
   where
-    runTLS :: (MQTTConduit -> IO ()) -> IO ()
-    runTLS f = runTLSClient tlsCfg (f . toMQTTConduit)
+    runClient :: (MQTTConduit -> IO a) -> IO a
+    runClient app = runTLSClient tlsCfg (app . toMQTTConduit)
 
     tlsCfg :: TLSClientConfig
-    tlsCfg = (tlsClientConfig _port (encodeUtf8 _hostname)){tlsClientTLSSettings = _tlsSettings}
-
-    runTCP :: (MQTTConduit -> IO ()) -> IO ()
-    runTCP f = runTCPClient tcpCfg (f . toMQTTConduit)
-
-    tcpCfg :: ClientSettings
-    tcpCfg = clientSettings _port (encodeUtf8 _hostname)
+    tlsCfg =
+      (tlsClientConfig _port (encodeUtf8 _hostname))
+        { tlsClientTLSSettings = _tlsSettings
+        , tlsClientUseTLS = useTLS
+        , tlsClientSockSettings = brokerProxy
+        }
 
     toMQTTConduit :: AppData -> MQTTConduit
     toMQTTConduit ad = (appSource ad, appSink ad)

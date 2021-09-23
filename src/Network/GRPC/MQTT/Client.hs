@@ -47,9 +47,10 @@ import Network.GRPC.MQTT.Core
     subscribeOrThrow,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
+import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
 import Network.GRPC.MQTT.Types
-  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( Batched,
+    MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Wrapping
@@ -61,9 +62,7 @@ import Network.GRPC.MQTT.Wrapping
     unwrapBiDiStreamResponse,
     unwrapClientStreamResponse,
     unwrapServerStreamResponse,
-    unwrapStreamChunk,
     unwrapUnaryResponse,
-    wrapStreamChunk,
   )
 import Network.MQTT.Client
   ( MQTTClient,
@@ -123,9 +122,10 @@ mqttRequest ::
   MQTTGRPCClient ->
   Topic ->
   MethodName ->
+  Batched ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
+mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
 
   handle handleMQTTException $ do
@@ -162,11 +162,11 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
-    let publishStream :: request -> IO (Either GRPCIOError ())
-        publishStream req = do
+    PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish msgSizeLimit useBatchedStream publishToRequestTopic
+    let publishToRequestStream :: request -> IO (Either GRPCIOError ())
+        publishToRequestStream req = do
           logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-          let wrappedReq = wrapStreamChunk (Just req)
-          publishToRequestTopic wrappedReq
+          publishToStream req
           -- TODO: Fix this. Send errors won't be propagated to client's send handler
           return $ Right ()
 
@@ -192,9 +192,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           withControlSignals publishControlMsg . exceptToResult $ do
             liftIO $ do
               -- do client streaming
-              streamHandler publishStream
-              -- Publish 'Nothing' to denote end of stream
-              publishToRequestTopic $ wrapStreamChunk @request Nothing
+              streamHandler publishToRequestStream
+              -- Send end of stream indicator
+              publishToStreamCompleted
 
             rsp <- readResponseTopic
             hoistEither $ unwrapClientStreamResponse rsp
@@ -208,10 +208,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
             rawInitMetadata <- readResponseTopic
             metadata <- hoistEither $ parseMessageOrError rawInitMetadata
 
+            readResponseStream <- mkStreamRead readResponseTopic
             let mqttSRecv :: StreamRecv response
-                mqttSRecv = runExceptT . withExceptT toGRPCIOError $ do
-                  rsp <- readResponseTopic
-                  hoistEither $ unwrapStreamChunk @response rsp
+                mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
 
             -- Run user-provided stream handler
             liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv
@@ -229,17 +228,16 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
             rawInitMetadata <- readResponseTopic
             metadata <- hoistEither $ parseMessageOrError rawInitMetadata
 
+            readResponseStream <- mkStreamRead readResponseTopic
             let mqttSRecv :: StreamRecv response
-                mqttSRecv = runExceptT . withExceptT toGRPCIOError $ do
-                  rsp <- readResponseTopic
-                  hoistEither $ unwrapStreamChunk @response rsp
+                mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
 
             let mqttSSend :: StreamSend request
-                mqttSSend = publishStream
+                mqttSSend = publishToRequestStream
 
             let mqttWritesDone :: WritesDone
                 mqttWritesDone = do
-                  publishToRequestTopic $ wrapStreamChunk @request Nothing
+                  publishToStreamCompleted
                   return $ Right ()
 
             -- Run user-provided stream handler

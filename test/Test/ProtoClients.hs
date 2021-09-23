@@ -11,4 +11,4 @@ module Test.ProtoClients where
 import Network.GRPC.MQTT.TH.Client
 import Proto.Test
 
-$(mqttClientFuncs "proto/test.proto")
+$(mqttClientFuncs "proto/test.proto" Unbatched)

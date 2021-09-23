@@ -6,9 +6,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Network.GRPC.MQTT.TH.Client
-  ( mqttClientFuncs,
-    mqttRequest,
+  ( Batched (..),
     MethodName (MethodName),
+    mqttClientFuncs,
+    mqttRequest,
   )
 where
 
@@ -37,18 +38,18 @@ import Network.GRPC.MQTT.Client
   ( MQTTGRPCClient,
     mqttRequest,
   )
-import Network.GRPC.MQTT.Types (MQTTRequest, MQTTResult)
+import Network.GRPC.MQTT.Types (Batched (..), MQTTRequest, MQTTResult)
 import Network.MQTT.Topic (Topic)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)
 
-mqttClientFuncs :: FilePath -> Q [Dec]
-mqttClientFuncs fp = fmap concat $
-  forEachService fp $ \serviceName serviceMethods -> do
+mqttClientFuncs :: FilePath -> Batched -> Q [Dec]
+mqttClientFuncs fp defaultBatchedStream = fmap concat $
+  forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
     clientFuncName <- mkName <$> prefixedFieldName serviceName "mqttClient"
-    lift $ clientService clientFuncName (mkName serviceName) [a | (a, _, _) <- serviceMethods]
+    lift $ clientService clientFuncName (mkName serviceName) [(a, batched) | (a, batched, _, _) <- serviceMethods]
 
-clientService :: Name -> Name -> [String] -> DecsQ
+clientService :: Name -> Name -> [(String, Batched)] -> DecsQ
 clientService fname serviceName methods = do
   fSig <- sigD fname [t|MQTTGRPCClient -> Topic -> $(conT serviceName) MQTTRequest MQTTResult|]
   fDef <- funD fname [clause args (normalB mqttClientE) []]
@@ -60,7 +61,6 @@ clientService fname serviceName methods = do
     topicE = varE topicName
     args = [varP clientName, varP topicName]
 
-    methodNames = fmap (\ep -> [e|MethodName ep|]) methods
-    mqttRequestE methodName = [e|(mqttRequest $clientE $topicE $methodName)|]
-    clientMethods = mqttRequestE <$> methodNames
+    mqttRequestE (methodName, batched) = [e|(mqttRequest $clientE $topicE (MethodName methodName) batched)|]
+    clientMethods = mqttRequestE <$> methods
     mqttClientE = foldl' appE (conE serviceName) clientMethods

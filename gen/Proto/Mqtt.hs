@@ -597,9 +597,11 @@ instance HsProtobuf.Message WrappedStreamChunk where
                     Hs.Nothing -> Hs.mempty
                     Hs.Just x
                       -> case x of
-                             WrappedStreamChunkOrErrorChunk y
+                             WrappedStreamChunkOrErrorElems y
                                -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
-                                     (HsProtobuf.ForceEmit y))
+                                     (Hs.coerce @(Hs.Maybe Proto.Mqtt.WrappedStreamChunk_Elems)
+                                        @(HsProtobuf.Nested Proto.Mqtt.WrappedStreamChunk_Elems)
+                                        (Hs.Just y)))
                              WrappedStreamChunkOrErrorError y
                                -> (HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 2)
                                      (Hs.coerce @(Hs.Maybe Proto.Mqtt.RemoteError)
@@ -609,8 +611,11 @@ instance HsProtobuf.Message WrappedStreamChunk where
           = (Hs.pure WrappedStreamChunk) <*>
               (HsProtobuf.oneof Hs.Nothing
                  [((HsProtobuf.FieldNumber 1),
-                   (Hs.pure (Hs.Just Hs.. WrappedStreamChunkOrErrorChunk)) <*>
-                     HsProtobuf.decodeMessageField),
+                   (Hs.pure (Hs.fmap WrappedStreamChunkOrErrorElems)) <*>
+                     (Hs.coerce
+                        @(_ (HsProtobuf.Nested Proto.Mqtt.WrappedStreamChunk_Elems))
+                        @(_ (Hs.Maybe Proto.Mqtt.WrappedStreamChunk_Elems))
+                        HsProtobuf.decodeMessageField)),
                   ((HsProtobuf.FieldNumber 2),
                    (Hs.pure (Hs.fmap WrappedStreamChunkOrErrorError)) <*>
                      (Hs.coerce @(_ (HsProtobuf.Nested Proto.Mqtt.RemoteError))
@@ -623,8 +628,8 @@ instance HsJSONPB.ToJSONPB WrappedStreamChunk where
           = (HsJSONPB.object
                [(let encodeOr_error
                        = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamChunkOrErrorChunk f1)
-                                -> (HsJSONPB.pair "chunk" f1)
+                              Hs.Just (WrappedStreamChunkOrErrorElems f1)
+                                -> (HsJSONPB.pair "elems" f1)
                               Hs.Just (WrappedStreamChunkOrErrorError f2)
                                 -> (HsJSONPB.pair "error" f2)
                               Hs.Nothing -> Hs.mempty)
@@ -638,8 +643,8 @@ instance HsJSONPB.ToJSONPB WrappedStreamChunk where
           = (HsJSONPB.pairs
                [(let encodeOr_error
                        = (case f1_or_f2 of
-                              Hs.Just (WrappedStreamChunkOrErrorChunk f1)
-                                -> (HsJSONPB.pair "chunk" f1)
+                              Hs.Just (WrappedStreamChunkOrErrorElems f1)
+                                -> (HsJSONPB.pair "elems" f1)
                               Hs.Just (WrappedStreamChunkOrErrorError f2)
                                 -> (HsJSONPB.pair "error" f2)
                               Hs.Nothing -> Hs.mempty)
@@ -657,8 +662,8 @@ instance HsJSONPB.FromJSONPB WrappedStreamChunk where
                   (Hs.pure WrappedStreamChunk) <*>
                     (let parseOr_error parseObj
                            = Hs.msum
-                               [Hs.Just Hs.. WrappedStreamChunkOrErrorChunk <$>
-                                  (HsJSONPB.parseField parseObj "chunk"),
+                               [Hs.Just Hs.. WrappedStreamChunkOrErrorElems <$>
+                                  (HsJSONPB.parseField parseObj "elems"),
                                 Hs.Just Hs.. WrappedStreamChunkOrErrorError <$>
                                   (HsJSONPB.parseField parseObj "error"),
                                 Hs.pure Hs.Nothing]
@@ -691,7 +696,74 @@ instance HsJSONPB.ToSchema WrappedStreamChunk where
                                                      HsJSONPB.insOrdFromList
                                                        [("or_error", wrappedStreamChunkOrError)]}})
  
-data WrappedStreamChunkOrError = WrappedStreamChunkOrErrorChunk Hs.ByteString
+newtype WrappedStreamChunk_Elems = WrappedStreamChunk_Elems{wrappedStreamChunk_ElemsChunks
+                                                            :: Hs.Vector Hs.ByteString}
+                                   deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
+ 
+instance HsProtobuf.Named WrappedStreamChunk_Elems where
+        nameOf _ = (Hs.fromString "WrappedStreamChunk_Elems")
+ 
+instance HsProtobuf.HasDefault WrappedStreamChunk_Elems
+ 
+instance HsProtobuf.Message WrappedStreamChunk_Elems where
+        encodeMessage _
+          WrappedStreamChunk_Elems{wrappedStreamChunk_ElemsChunks =
+                                     wrappedStreamChunk_ElemsChunks}
+          = (Hs.mconcat
+               [(HsProtobuf.encodeMessageField (HsProtobuf.FieldNumber 1)
+                   (Hs.coerce @(Hs.Vector Hs.ByteString)
+                      @(HsProtobuf.UnpackedVec Hs.ByteString)
+                      wrappedStreamChunk_ElemsChunks))])
+        decodeMessage _
+          = (Hs.pure WrappedStreamChunk_Elems) <*>
+              (Hs.coerce @(_ (HsProtobuf.UnpackedVec Hs.ByteString))
+                 @(_ (Hs.Vector Hs.ByteString))
+                 (HsProtobuf.at HsProtobuf.decodeMessageField
+                    (HsProtobuf.FieldNumber 1)))
+        dotProto _
+          = [(HsProtobuf.DotProtoField (HsProtobuf.FieldNumber 1)
+                (HsProtobuf.Repeated HsProtobuf.Bytes)
+                (HsProtobuf.Single "chunks")
+                []
+                "")]
+ 
+instance HsJSONPB.ToJSONPB WrappedStreamChunk_Elems where
+        toJSONPB (WrappedStreamChunk_Elems f1)
+          = (HsJSONPB.object ["chunks" .= f1])
+        toEncodingPB (WrappedStreamChunk_Elems f1)
+          = (HsJSONPB.pairs ["chunks" .= f1])
+ 
+instance HsJSONPB.FromJSONPB WrappedStreamChunk_Elems where
+        parseJSONPB
+          = (HsJSONPB.withObject "WrappedStreamChunk_Elems"
+               (\ obj -> (Hs.pure WrappedStreamChunk_Elems) <*> obj .: "chunks"))
+ 
+instance HsJSONPB.ToJSON WrappedStreamChunk_Elems where
+        toJSON = HsJSONPB.toAesonValue
+        toEncoding = HsJSONPB.toAesonEncoding
+ 
+instance HsJSONPB.FromJSON WrappedStreamChunk_Elems where
+        parseJSON = HsJSONPB.parseJSONPB
+ 
+instance HsJSONPB.ToSchema WrappedStreamChunk_Elems where
+        declareNamedSchema _
+          = do let declare_chunks = HsJSONPB.declareSchemaRef
+               wrappedStreamChunk_ElemsChunks <- declare_chunks Proxy.Proxy
+               let _ = Hs.pure WrappedStreamChunk_Elems <*>
+                         HsJSONPB.asProxy declare_chunks
+               Hs.return
+                 (HsJSONPB.NamedSchema{HsJSONPB._namedSchemaName =
+                                         Hs.Just "WrappedStreamChunk_Elems",
+                                       HsJSONPB._namedSchemaSchema =
+                                         Hs.mempty{HsJSONPB._schemaParamSchema =
+                                                     Hs.mempty{HsJSONPB._paramSchemaType =
+                                                                 Hs.Just HsJSONPB.SwaggerObject},
+                                                   HsJSONPB._schemaProperties =
+                                                     HsJSONPB.insOrdFromList
+                                                       [("chunks",
+                                                         wrappedStreamChunk_ElemsChunks)]}})
+ 
+data WrappedStreamChunkOrError = WrappedStreamChunkOrErrorElems Proto.Mqtt.WrappedStreamChunk_Elems
                                | WrappedStreamChunkOrErrorError Proto.Mqtt.RemoteError
                                deriving (Hs.Show, Hs.Eq, Hs.Ord, Hs.Generic, Hs.NFData)
  
@@ -700,10 +772,10 @@ instance HsProtobuf.Named WrappedStreamChunkOrError where
  
 instance HsJSONPB.ToSchema WrappedStreamChunkOrError where
         declareNamedSchema _
-          = do let declare_chunk = HsJSONPB.declareSchemaRef
-               wrappedStreamChunkOrErrorChunk <- declare_chunk Proxy.Proxy
-               let _ = Hs.pure WrappedStreamChunkOrErrorChunk <*>
-                         HsJSONPB.asProxy declare_chunk
+          = do let declare_elems = HsJSONPB.declareSchemaRef
+               wrappedStreamChunkOrErrorElems <- declare_elems Proxy.Proxy
+               let _ = Hs.pure WrappedStreamChunkOrErrorElems <*>
+                         HsJSONPB.asProxy declare_elems
                let declare_error = HsJSONPB.declareSchemaRef
                wrappedStreamChunkOrErrorError <- declare_error Proxy.Proxy
                let _ = Hs.pure WrappedStreamChunkOrErrorError <*>
@@ -717,7 +789,7 @@ instance HsJSONPB.ToSchema WrappedStreamChunkOrError where
                                                                  Hs.Just HsJSONPB.SwaggerObject},
                                                    HsJSONPB._schemaProperties =
                                                      HsJSONPB.insOrdFromList
-                                                       [("chunk", wrappedStreamChunkOrErrorChunk),
+                                                       [("elems", wrappedStreamChunkOrErrorElems),
                                                         ("error", wrappedStreamChunkOrErrorError)],
                                                    HsJSONPB._schemaMinProperties = Hs.Just 1,
                                                    HsJSONPB._schemaMaxProperties = Hs.Just 1}})

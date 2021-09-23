@@ -70,12 +70,7 @@ import Network.GRPC.HighLevel.Client
     StreamSend,
     WritesDone,
   )
-import Network.GRPC.HighLevel.Generated
-  ( GRPCIOError (GRPCIOTimeout),
-    ServiceOptions (serverPort),
-    defaultServiceOptions,
-    withGRPCClient,
-  )
+import Network.GRPC.HighLevel.Generated (GRPCIOError (GRPCIOTimeout), GRPCMethodType (..), ServiceOptions (serverPort), defaultServiceOptions, withGRPCClient)
 import Network.MQTT.Client
   ( MessageCallback (SimpleCallback),
     QoS (QoS1),
@@ -87,7 +82,7 @@ import Network.MQTT.Client
   )
 import Network.MQTT.Topic (toFilter)
 import Proto.Test
-  ( AddHello (AddHello, addHelloHelloSS),
+  ( AddHello (..),
     BiRqtRpy (..),
     MultGoodbye (MultGoodbye),
     OneInt (OneInt),
@@ -150,9 +145,12 @@ allTests =
     notParallel
       [ ("Latency", mqttLatency)
       , ("Basic Unary", basicUnary)
-      , ("Basic Server Streaming", basicServerStreaming)
-      , ("Basic Client Streaming", basicClientStreaming)
-      , ("Basic BiDirectional Streaming", basicBiDiStreaming)
+      , ("Basic Server Streaming", basicServerStreaming addHelloHelloSS)
+      , ("Basic Client Streaming", basicClientStreaming addHelloRunningSum)
+      , ("Basic BiDirectional Streaming", basicBiDiStreaming addHelloHelloBi)
+      , ("Batch Server Streaming", basicServerStreaming addHelloHelloSSBatch)
+      , ("Batch Client Streaming", basicClientStreaming addHelloRunningSumBatch)
+      , ("Batch BiDirectional Streaming", basicBiDiStreaming addHelloHelloBiBatch)
       , ("Two Servers", twoServers)
       , ("Timeout", testTimeout)
       , ("Persistent", persistentMQTT)
@@ -175,7 +173,7 @@ persistentMQTT = do
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
         withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
-          let AddHello mqttAdd mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
+          let AddHello{addHelloAdd = mqttAdd, addHelloHelloSS = mqttHelloSS} = addHelloMqttClient client testBaseTopic
 
           mqttAdd (MQTTNormalRequest (TwoInts 4 6) 2 []) >>= \case
             GRPCResult (ClientNormalResponse result _ _ _ _) -> result @?= OneInt 10
@@ -212,7 +210,7 @@ streamingTermination = do
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptor"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
         withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
-          let AddHello _ mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
+          let AddHello{addHelloHelloSS = mqttHelloSS} = addHelloMqttClient client testBaseTopic
           let testInput = SSRqt "Alice" 1
               request = MQTTReaderRequest testInput 20 [] (streamTester (assertContains "Alice" . ssrpyGreeting))
 
@@ -225,7 +223,7 @@ testTimeout = do
   awsConfig <- getTestConfig
 
   withMQTTGRPCClient testLogger awsConfig{_connID = testClientId} $ \client -> do
-    let AddHello mqttAdd mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
+    let AddHello{addHelloAdd = mqttAdd, addHelloHelloSS = mqttHelloSS} = addHelloMqttClient client testBaseTopic
 
     addResponse <- timeit 3 $ mqttAdd (MQTTNormalRequest (TwoInts 9 16) 2 [])
     case addResponse of
@@ -252,7 +250,7 @@ basicUnary = do
         --Delay to allow remote client to start receiving MQTT messages
         sleep 1
         withMQTTGRPCClient testLogger awsConfig{_connID = testClientId <> "BU"} $ \client -> do
-          let AddHello mqttAdd _ _ _ = addHelloMqttClient client testBaseTopic
+          let AddHello{addHelloAdd = mqttAdd} = addHelloMqttClient client testBaseTopic
           let testInput = TwoInts 4 6
               expectedResult = OneInt 10
               request = MQTTNormalRequest testInput 5 []
@@ -262,8 +260,10 @@ basicUnary = do
             GRPCResult (ClientErrorResponse err) -> assertFailure $ "add Client error: " <> show err
             MQTTError err -> assertFailure $ "add mqtt error: " <> show err
 
-basicServerStreaming :: Assertion
-basicServerStreaming = do
+type RPCMethod stype query result = MQTTRequest stype query result -> IO (MQTTResult stype result)
+
+basicServerStreaming :: (AddHello MQTTRequest MQTTResult -> RPCMethod 'ServerStreaming SSRqt SSRpy) -> Assertion
+basicServerStreaming rpcMethod = do
   awsConfig <- getTestConfig
 
   -- Start gRPC Server
@@ -275,10 +275,10 @@ basicServerStreaming = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        testHelloCall awsConfig{_connID = testClientId <> "SS"}
+        testHelloCall rpcMethod awsConfig{_connID = testClientId <> "SS"}
 
-basicClientStreaming :: Assertion
-basicClientStreaming = do
+basicClientStreaming :: (AddHello MQTTRequest MQTTResult -> RPCMethod 'ClientStreaming OneInt OneInt) -> Assertion
+basicClientStreaming rpcMethod = do
   awsConfig <- getTestConfig
 
   -- Start gRPC Server
@@ -290,10 +290,10 @@ basicClientStreaming = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorCS"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        testSumCall awsConfig{_connID = testClientId <> "CS"}
+        testSumCall rpcMethod awsConfig{_connID = testClientId <> "CS"}
 
-basicBiDiStreaming :: Assertion
-basicBiDiStreaming = do
+basicBiDiStreaming :: (AddHello MQTTRequest MQTTResult -> RPCMethod 'BiDiStreaming BiRqtRpy BiRqtRpy) -> Assertion
+basicBiDiStreaming rpcMethod = do
   awsConfig <- getTestConfig
 
   -- Start gRPC Server
@@ -305,7 +305,7 @@ basicBiDiStreaming = do
       -- Start serverside MQTT adaptor
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorBDS"} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
-        testHelloBiCall awsConfig{_connID = testClientId <> "BDS"}
+        testHelloBiCall rpcMethod awsConfig{_connID = testClientId <> "BDS"}
 
 packetizedMesssages :: Assertion
 packetizedMesssages = do
@@ -321,7 +321,7 @@ packetizedMesssages = do
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineAdaptorPacketized", mqttMsgSizeLimit = 10} testBaseTopic methodMap) $ \_adaptorThread -> do
         sleep 1
         testAddCall awsConfig{_connID = testClientId <> "Packetized"}
-        testHelloCall awsConfig{_connID = testClientId <> "Packetized"}
+        testHelloCall addHelloHelloSS awsConfig{_connID = testClientId <> "Packetized"}
 
 missingClientError :: Assertion
 missingClientError = do
@@ -335,7 +335,7 @@ missingClientError = do
       withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorSS"} testBaseTopic []) $ \_adaptorThread -> do
         sleep 1
         withMQTTGRPCClient testLogger awsConfig{_connID = testClientId <> "SS"} $ \client -> do
-          let AddHello _ mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
+          let AddHello{addHelloHelloSS = mqttHelloSS} = addHelloMqttClient client testBaseTopic
               testInput = SSRqt "Alice" 2
               request = MQTTReaderRequest testInput 5 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
 
@@ -363,7 +363,7 @@ twoServers = do
             sleep 1
             -- Server 1
             testAddCall awsConfig{_connID = "testclientTS1"}
-            testHelloCall awsConfig{_connID = "testclientTS2"}
+            testHelloCall addHelloHelloSS awsConfig{_connID = "testclientTS2"}
 
             -- Server 2
             testMultCall awsConfig{_connID = "testclientTS3"}
@@ -371,7 +371,7 @@ twoServers = do
 
 testAddCall :: MQTTGRPCConfig -> Assertion
 testAddCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
-  let AddHello mqttAdd _ _ _ = addHelloMqttClient client testBaseTopic
+  let AddHello{addHelloAdd = mqttAdd} = addHelloMqttClient client testBaseTopic
   let testInput = TwoInts 4 6
       expectedResult = OneInt 10
       request = MQTTNormalRequest testInput 5 []
@@ -381,20 +381,26 @@ testAddCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "add Client error: " <> show err
     MQTTError err -> assertFailure $ "add mqtt error: " <> show err
 
-testHelloCall :: MQTTGRPCConfig -> Assertion
-testHelloCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
-  let AddHello _ mqttHelloSS _ _ = addHelloMqttClient client testBaseTopic
+testHelloCall ::
+  (AddHello MQTTRequest MQTTResult -> RPCMethod 'ServerStreaming SSRqt SSRpy) ->
+  MQTTGRPCConfig ->
+  Assertion
+testHelloCall rpcMethod cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
+  let mqttHelloSS = rpcMethod $ addHelloMqttClient client testBaseTopic
       testInput = SSRqt "Alice" 2
-      request = MQTTReaderRequest testInput 5 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
+      request = MQTTReaderRequest testInput 10 [("alittlebit", "ofinitialmetadata")] (streamTester (assertContains "Alice" . ssrpyGreeting))
 
   mqttHelloSS request >>= \case
     GRPCResult (ClientReaderResponse _ status _) -> status @?= StatusOk
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "helloSS Client error: " <> show err
     MQTTError err -> assertFailure $ "helloSS mqtt error: " <> show err
 
-testSumCall :: MQTTGRPCConfig -> Assertion
-testSumCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
-  let AddHello _ _ mqttSumCS _ = addHelloMqttClient client testBaseTopic
+testSumCall ::
+  (AddHello MQTTRequest MQTTResult -> RPCMethod 'ClientStreaming OneInt OneInt) ->
+  MQTTGRPCConfig ->
+  Assertion
+testSumCall rpcMethod cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
+  let mqttSumCS = rpcMethod $ addHelloMqttClient client testBaseTopic
       request = MQTTWriterRequest 5 [("alittlebit", "ofinitialmetadata")] clientStreamTester
 
   mqttSumCS request >>= \case
@@ -402,9 +408,12 @@ testSumCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
     GRPCResult (ClientErrorResponse err) -> assertFailure $ "sumCS Client error: " <> show err
     MQTTError err -> assertFailure $ "sumCS mqtt error: " <> show err
 
-testHelloBiCall :: MQTTGRPCConfig -> Assertion
-testHelloBiCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
-  let AddHello _ _ _ mqttHelloBi = addHelloMqttClient client testBaseTopic
+testHelloBiCall ::
+  (AddHello MQTTRequest MQTTResult -> RPCMethod 'BiDiStreaming BiRqtRpy BiRqtRpy) ->
+  MQTTGRPCConfig ->
+  Assertion
+testHelloBiCall rpcMethod cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
+  let mqttHelloBi = rpcMethod $ addHelloMqttClient client testBaseTopic
       request = MQTTBiDiRequest 5 [("alittlebit", "ofinitialmetadata")] bidiStreamTester
 
   mqttHelloBi request >>= \case
@@ -414,22 +423,29 @@ testHelloBiCall cfg = withMQTTGRPCClient testLogger cfg $ \client -> do
 
 bidiStreamTester :: MetadataMap -> StreamRecv BiRqtRpy -> StreamSend BiRqtRpy -> WritesDone -> IO ()
 bidiStreamTester mm recv send writesDone = do
+  nRef <- newIORef (1 :: Int)
+
+  let responseMatches resp = do
+        expectedN <- readIORef nRef
+        writeIORef nRef (expectedN + 1)
+        biRqtRpyMessage resp @?= ("Alice" <> show expectedN)
+
+  let testRecv = streamTester responseMatches mm recv
+  let testSend = do
+        eithers <-
+          sequence
+            [ send (BiRqtRpy "Alice1")
+            , send (BiRqtRpy "Alice2")
+            , send (BiRqtRpy "Alice3")
+            , writesDone
+            ]
+        case sequence @[] eithers of
+          Left err -> assertFailure $ "Error while client streaming: " ++ show err
+          Right _ -> pure ()
+
   concurrently_
     testRecv
     testSend
-  where
-    testRecv = streamTester (assertContains "Alice" . biRqtRpyMessage) mm recv
-    testSend = do
-      eithers <-
-        sequence
-          [ send (BiRqtRpy "Alice1")
-          , send (BiRqtRpy "Alice2")
-          , send (BiRqtRpy "Alice3")
-          , writesDone
-          ]
-      case sequence @[] eithers of
-        Left err -> assertFailure $ "Error while client streaming: " ++ show err
-        Right _ -> pure ()
 
 clientStreamTester :: StreamSend OneInt -> IO ()
 clientStreamTester send = do
@@ -506,7 +522,7 @@ malformedMessage = do
           sleep 1
 
           -- Test server is still up and responsive
-          let AddHello mqttAdd _ _ _ = addHelloMqttClient client testBaseTopic
+          let AddHello{addHelloAdd = mqttAdd} = addHelloMqttClient client testBaseTopic
           let testInput = TwoInts 4 6
               expectedResult = OneInt 10
               request = MQTTNormalRequest testInput 5 []

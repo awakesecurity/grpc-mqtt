@@ -13,6 +13,21 @@ service AddHello {
 
   /* Simple bidi streaming: ping-pong echo */
   rpc HelloBi(stream BiRqtRpy) returns (stream BiRqtRpy) {}
+
+  /* Server Streaming with batching */
+  rpc HelloSSBatch(SSRqt) returns (stream SSRpy) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
+
+  /* Client Streaming with batching */
+  rpc RunningSumBatch (stream OneInt) returns (OneInt) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
+
+  /* Bidi streaming with batching: ping-pong echo */
+  rpc HelloBiBatch(stream BiRqtRpy) returns (stream BiRqtRpy) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
 }
 
 service MultGoodbye {

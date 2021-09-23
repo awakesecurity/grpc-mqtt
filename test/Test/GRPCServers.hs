@@ -44,6 +44,9 @@ addHelloHandlers =
     , addHelloHelloSS = helloSSHandler
     , addHelloRunningSum = runningSumHandler
     , addHelloHelloBi = helloBiHandler
+    , addHelloHelloSSBatch = helloSSHandler
+    , addHelloRunningSumBatch = runningSumHandler
+    , addHelloHelloBiBatch = helloBiHandler
     }
 
 addHandler ::

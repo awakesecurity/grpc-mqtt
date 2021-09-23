@@ -11,11 +11,13 @@ module Network.GRPC.MQTT.Types
     ClientHandler (..),
     MQTTRequest (..),
     SessionId,
+    Batched (..),
   )
 where
 
 import Relude
 
+import Language.Haskell.TH.Syntax (Lift)
 import Network.GRPC.HighLevel.Client
   ( ClientResult,
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
@@ -31,7 +33,7 @@ import Proto3.Suite (Message)
 -- | Represents the session ID for a request
 type SessionId = Text
 
--- | Analogs of 'ClientRequest' from grpc-haskell with the unused fields removed
+-- | Analogous of 'ClientRequest' from grpc-haskell with the unused fields removed
 data MQTTRequest (streamType :: GRPCMethodType) request response where
   MQTTNormalRequest :: request -> TimeoutSeconds -> MetadataMap -> MQTTRequest 'Normal request response
   MQTTWriterRequest :: TimeoutSeconds -> MetadataMap -> (StreamSend request -> IO ()) -> MQTTRequest 'ClientStreaming request response
@@ -60,9 +62,27 @@ data ClientHandler where
     ClientHandler
   ClientServerStreamHandler ::
     (Message response) =>
+    Batched ->
     (ByteString -> TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> IO ()) -> IO (ClientResult 'ServerStreaming response)) ->
     ClientHandler
   ClientBiDiStreamHandler ::
     (Message request, Message response) =>
+    Batched ->
     (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
     ClientHandler
+
+{- | Indicates whether streaming messages are batched.
+
+ Batched streaming packs as many messages as possible to a single
+ packet published over MQTT. The maximum size of a packet is defined
+ by @MQTTGRPCConfig.mqttMsgSizeLimit@. The sender will accumulate
+ multiple messages in memory till it reaches the packet size limit and
+ then all the messages are sent in one packet.
+
+ Batching helps to improve performance when many small messages are
+ streamed in a short time. On the other hand, it is not a good idea to
+ batch RPCs that send small messages infrequently (long-poll) because
+ messages will not be published immediately.
+-}
+data Batched = Unbatched | Batched
+  deriving (Eq, Ord, Lift)

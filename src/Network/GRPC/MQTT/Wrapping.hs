@@ -31,7 +31,8 @@ where
 import Relude
 
 import Network.GRPC.MQTT.Types
-  ( ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+  ( Batched,
+    ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
     MQTTResult (..),
   )
 
@@ -50,13 +51,15 @@ import Proto.Mqtt as Proto
       ),
     WrappedStreamChunk (WrappedStreamChunk),
     WrappedStreamChunkOrError
-      ( WrappedStreamChunkOrErrorChunk,
+      ( WrappedStreamChunkOrErrorElems,
         WrappedStreamChunkOrErrorError
       ),
+    WrappedStreamChunk_Elems (WrappedStreamChunk_Elems),
   )
 
 import Control.Exception (ErrorCall, try)
 import qualified Data.Map as M
+import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL
@@ -99,10 +102,11 @@ wrapUnaryClientHandler handler =
 
 wrapServerStreamingClientHandler ::
   (Message request, Message response) =>
+  Batched ->
   (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
   ClientHandler
-wrapServerStreamingClientHandler handler =
-  ClientServerStreamHandler $ \rawRequest timeout metadata recv ->
+wrapServerStreamingClientHandler useBatchedStream handler =
+  ClientServerStreamHandler useBatchedStream $ \rawRequest timeout metadata recv ->
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)
@@ -117,10 +121,11 @@ wrapClientStreamingClientHandler handler =
 
 wrapBiDiStreamingClientHandler ::
   (Message request, Message response) =>
+  Batched ->
   (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
   ClientHandler
-wrapBiDiStreamingClientHandler handler =
-  ClientBiDiStreamHandler $ \timeout metadata bidi -> do
+wrapBiDiStreamingClientHandler useBatchedStream handler =
+  ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
     handler (ClientBiDiRequest timeout metadata bidi)
 
 -- Responses
@@ -235,20 +240,22 @@ unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse 
       GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
 
 -- Stream Chunks
-wrapStreamChunk :: (Message a) => Maybe a -> WrappedStreamChunk
-wrapStreamChunk chunk =
+wrapStreamChunk :: Maybe (Vector ByteString) -> WrappedStreamChunk
+wrapStreamChunk chunks =
   WrappedStreamChunk
-    (WrappedStreamChunkOrErrorChunk . toBS <$> chunk)
+    (WrappedStreamChunkOrErrorElems . WrappedStreamChunk_Elems <$> chunks)
 
-unwrapStreamChunk :: (Message a) => LByteString -> Either RemoteError (Maybe a)
+unwrapStreamChunk :: forall a. (Message a) => LByteString -> Either RemoteError (Maybe (Vector a))
 unwrapStreamChunk msg =
   fromLazyByteString msg >>= \case
     WrappedStreamChunk Nothing -> Right Nothing
     WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
-    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorChunk chunk)) ->
-      case fromByteString chunk of
-        Left err -> Left $ parseErrorToRCE err
-        Right rsp -> Right (Just rsp)
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorElems (WrappedStreamChunk_Elems chunks))) -> do
+      let parse :: ByteString -> Either RemoteError a
+          parse chunk = case fromByteString chunk of
+            Left err -> Left $ parseErrorToRCE err
+            Right rsp -> Right rsp
+      Just <$> traverse parse chunks
 
 -- Utilities
 remoteError :: LText -> RemoteError

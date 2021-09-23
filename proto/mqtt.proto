@@ -17,6 +17,7 @@ message MQTTRequest {
 message ResponseBody {
   bytes value = 1;
 }
+
 message MQTTResponse {
   ResponseBody body = 1;
   MetadataMap init_metamap = 2;
@@ -33,8 +34,11 @@ message WrappedResponse {
 }
 
 message WrappedStreamChunk {
+  message Elems {
+    repeated bytes chunks = 1;
+  }
   oneof or_error {
-    bytes chunk = 1;
+    Elems elems = 1;
     RemoteError error = 2;
   }
 }

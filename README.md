@@ -59,7 +59,7 @@ Typically, each message transmitted through GRPC method calls result in one or m
 packet size limit is configured in `MQTTGRPCConfig.mqttMsgSizeLimit`. If a message is larger than this limit, it will be
 split to multiple packets and then those packets are published.
 
-Streaming RPCs that transmit many small messages in a short time can get a performance improvement by enabling
+The performance of streaming RPCs that transmit many small messages in a short time window can be improved, dramatically, by enabling
 batching. When batching is enabled, the sender accumulates many messages to one packet and then flushes them in a single
 publish operation. This reduces the MQTT protocol overhead and can result in better performace.
 

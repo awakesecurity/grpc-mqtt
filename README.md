@@ -57,7 +57,7 @@ runRemoteClient logger myMQTTConfig baseTopic methodMap
 
 Typically, each message transmitted through GRPC method calls result in one or more MQTT packets published over MQTT. A
 packet size limit is configured in `MQTTGRPCConfig.mqttMsgSizeLimit`. If a message is larger than this limit, it will be
-split to multiple packets and then those packets are published.
+split into multiple packets and then those packets are published.
 
 The performance of streaming RPCs that transmit many small messages in a short time window can be improved, dramatically, by enabling
 batching. When batching is enabled, the sender accumulates many messages to one packet and then flushes them in a single

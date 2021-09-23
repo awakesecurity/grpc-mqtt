@@ -31,7 +31,8 @@ where
 import Relude
 
 import Network.GRPC.MQTT.Types
-  ( ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+  ( Batched,
+    ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
     MQTTResult (..),
   )
 
@@ -101,10 +102,11 @@ wrapUnaryClientHandler handler =
 
 wrapServerStreamingClientHandler ::
   (Message request, Message response) =>
+  Batched ->
   (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
   ClientHandler
-wrapServerStreamingClientHandler handler =
-  ClientServerStreamHandler $ \rawRequest timeout metadata recv ->
+wrapServerStreamingClientHandler useBatchedStream handler =
+  ClientServerStreamHandler useBatchedStream $ \rawRequest timeout metadata recv ->
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)
@@ -119,10 +121,11 @@ wrapClientStreamingClientHandler handler =
 
 wrapBiDiStreamingClientHandler ::
   (Message request, Message response) =>
+  Batched ->
   (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
   ClientHandler
-wrapBiDiStreamingClientHandler handler =
-  ClientBiDiStreamHandler $ \timeout metadata bidi -> do
+wrapBiDiStreamingClientHandler useBatchedStream handler =
+  ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
     handler (ClientBiDiRequest timeout metadata bidi)
 
 -- Responses

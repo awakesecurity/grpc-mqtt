@@ -10,4 +10,4 @@ module Test.ProtoRemoteClients where
 import Network.GRPC.MQTT.TH.RemoteClient
 import Proto.Test
 
-$(mqttRemoteClientMethodMap "proto/test.proto")
+$(mqttRemoteClientMethodMap "proto/test.proto" Unbatched)

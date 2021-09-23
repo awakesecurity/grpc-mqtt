@@ -17,6 +17,7 @@ message MQTTRequest {
 message ResponseBody {
   bytes value = 1;
 }
+
 message MQTTResponse {
   ResponseBody body = 1;
   MetadataMap init_metamap = 2;

@@ -17,6 +17,8 @@ import qualified Data.Sequence as Seq
 import qualified Data.SortedList as SL
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
+import Network.GRPC.HighLevel.Server (toBS)
+import Network.GRPC.MQTT.Types (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping (fromLazyByteString, unwrapStreamChunk, wrapStreamChunk)
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
@@ -157,8 +159,14 @@ data PublishToStream a = PublishToStream
     publishToStreamCompleted :: IO ()
   }
 
-mkStreamPublish :: forall r io. (Message r, MonadIO io) => Int64 -> (forall t. Message t => t -> IO ()) -> io (PublishToStream r)
-mkStreamPublish msgLimit publish = do
+mkStreamPublish ::
+  forall r io.
+  (Message r, MonadIO io) =>
+  Int64 ->
+  Batched ->
+  (forall t. Message t => t -> IO ()) ->
+  io (PublishToStream r)
+mkStreamPublish msgLimit useBatch publish = do
   chunksRef <- newIORef ((Seq.empty, 0) :: (Seq ByteString, Int64))
 
   let seqToVector :: Seq t -> Vector t
@@ -176,6 +184,9 @@ mkStreamPublish msgLimit publish = do
             writeIORef chunksRef (Seq.singleton (toStrict chunk), sz)
           else writeIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
 
+  let unaccumulatedSend :: r -> IO ()
+      unaccumulatedSend = publish . wrapStreamChunk . Just . Vector.singleton . toBS
+
   let streamingDone :: IO ()
       streamingDone = do
         (accChunks, _) <- readIORef chunksRef
@@ -185,4 +196,8 @@ mkStreamPublish msgLimit publish = do
         publish $ wrapStreamChunk Nothing
         writeIORef chunksRef (Seq.empty, 0)
 
-  return $ PublishToStream accumulatedSend streamingDone
+  return $
+    PublishToStream
+      { publishToStream = if useBatch == Batched then accumulatedSend else unaccumulatedSend
+      , publishToStreamCompleted = streamingDone
+      }

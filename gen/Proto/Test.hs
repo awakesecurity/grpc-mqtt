@@ -61,6 +61,24 @@ data AddHello request response = AddHello{addHelloAdd ::
                                             Proto.Test.BiRqtRpy
                                             ->
                                             Hs.IO
+                                              (response 'HsGRPC.BiDiStreaming Proto.Test.BiRqtRpy),
+                                          addHelloHelloSSBatch ::
+                                          request 'HsGRPC.ServerStreaming Proto.Test.SSRqt
+                                            Proto.Test.SSRpy
+                                            ->
+                                            Hs.IO
+                                              (response 'HsGRPC.ServerStreaming Proto.Test.SSRpy),
+                                          addHelloRunningSumBatch ::
+                                          request 'HsGRPC.ClientStreaming Proto.Test.OneInt
+                                            Proto.Test.OneInt
+                                            ->
+                                            Hs.IO
+                                              (response 'HsGRPC.ClientStreaming Proto.Test.OneInt),
+                                          addHelloHelloBiBatch ::
+                                          request 'HsGRPC.BiDiStreaming Proto.Test.BiRqtRpy
+                                            Proto.Test.BiRqtRpy
+                                            ->
+                                            Hs.IO
                                               (response 'HsGRPC.BiDiStreaming Proto.Test.BiRqtRpy)}
                                deriving Hs.Generic
  
@@ -71,7 +89,10 @@ addHelloServer
   AddHello{addHelloAdd = addHelloAdd,
            addHelloHelloSS = addHelloHelloSS,
            addHelloRunningSum = addHelloRunningSum,
-           addHelloHelloBi = addHelloHelloBi}
+           addHelloHelloBi = addHelloHelloBi,
+           addHelloHelloSSBatch = addHelloHelloSSBatch,
+           addHelloRunningSumBatch = addHelloRunningSumBatch,
+           addHelloHelloBiBatch = addHelloHelloBiBatch}
   (ServiceOptions serverHost serverPort useCompression
      userAgentPrefix userAgentSuffix initialMetadata sslConfig logger
      serverMaxReceiveMessageLength)
@@ -82,16 +103,26 @@ addHelloServer
                              HsGRPC.optClientStreamHandlers =
                                [(HsGRPC.ClientStreamHandler
                                    (HsGRPC.MethodName "/test.AddHello/RunningSum")
+                                   (HsGRPC.convertGeneratedServerReaderHandler addHelloRunningSum)),
+                                (HsGRPC.ClientStreamHandler
+                                   (HsGRPC.MethodName "/test.AddHello/RunningSumBatch")
                                    (HsGRPC.convertGeneratedServerReaderHandler
-                                      addHelloRunningSum))],
+                                      addHelloRunningSumBatch))],
                              HsGRPC.optServerStreamHandlers =
                                [(HsGRPC.ServerStreamHandler
                                    (HsGRPC.MethodName "/test.AddHello/HelloSS")
-                                   (HsGRPC.convertGeneratedServerWriterHandler addHelloHelloSS))],
+                                   (HsGRPC.convertGeneratedServerWriterHandler addHelloHelloSS)),
+                                (HsGRPC.ServerStreamHandler
+                                   (HsGRPC.MethodName "/test.AddHello/HelloSSBatch")
+                                   (HsGRPC.convertGeneratedServerWriterHandler
+                                      addHelloHelloSSBatch))],
                              HsGRPC.optBiDiStreamHandlers =
                                [(HsGRPC.BiDiStreamHandler
                                    (HsGRPC.MethodName "/test.AddHello/HelloBi")
-                                   (HsGRPC.convertGeneratedServerRWHandler addHelloHelloBi))],
+                                   (HsGRPC.convertGeneratedServerRWHandler addHelloHelloBi)),
+                                (HsGRPC.BiDiStreamHandler
+                                   (HsGRPC.MethodName "/test.AddHello/HelloBiBatch")
+                                   (HsGRPC.convertGeneratedServerRWHandler addHelloHelloBiBatch))],
                              optServerHost = serverHost, optServerPort = serverPort,
                              optUseCompression = useCompression,
                              optUserAgentPrefix = userAgentPrefix,
@@ -120,6 +151,18 @@ addHelloClient client
       ((Hs.pure (HsGRPC.clientRequest client)) <*>
          (HsGRPC.clientRegisterMethod client
             (HsGRPC.MethodName "/test.AddHello/HelloBi")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.AddHello/HelloSSBatch")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.AddHello/RunningSumBatch")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName "/test.AddHello/HelloBiBatch")))
  
 data MultGoodbye request response = MultGoodbye{multGoodbyeMult ::
                                                 request 'HsGRPC.Normal Proto.Test.TwoInts

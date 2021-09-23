@@ -24,7 +24,8 @@ import Network.GRPC.MQTT.Logging
   )
 import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
 import Network.GRPC.MQTT.Types
-  ( ClientHandler (..),
+  ( Batched,
+    ClientHandler (..),
     MethodMap,
     SessionId,
   )
@@ -243,14 +244,14 @@ requestHandler SessionArgs{..} reqChan = do
         publishToResponseTopic $ wrapResponse response
 
       -- Run Server Streaming Request
-      ClientServerStreamHandler handler -> do
-        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic maxMsgSize)
+      ClientServerStreamHandler useBatchedStream handler -> do
+        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic maxMsgSize useBatchedStream)
         publishToResponseTopic $ wrapResponse response
 
       -- Run BiDirectional Streaming Request
-      ClientBiDiStreamHandler handler -> do
+      ClientBiDiStreamHandler useBatchedStream handler -> do
         readStreamChunk <- mkStreamRead readRequest
-        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic maxMsgSize)
+        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic maxMsgSize useBatchedStream)
         publishToResponseTopic $ wrapResponse response
   where
     publishErrors :: (RemoteError -> IO ()) -> IO (Either RemoteError ()) -> IO ()
@@ -278,12 +279,13 @@ streamReader ::
   (Message response) =>
   (forall r. (Message r) => r -> IO ()) ->
   Int64 ->
+  Batched ->
   clientcall ->
   HL.MetadataMap ->
   StreamRecv response ->
   IO ()
-streamReader publish maxMsgSize _cc initMetadata recv = do
-  PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish maxMsgSize publish
+streamReader publish maxMsgSize useBatch _cc initMetadata recv = do
+  PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish maxMsgSize useBatch publish
 
   let readLoop :: IO ()
       readLoop =
@@ -316,16 +318,17 @@ bidiHandler ::
   ExceptT RemoteError IO (Maybe request) ->
   (forall r. (Message r) => r -> IO ()) ->
   Int64 ->
+  Batched ->
   clientcall ->
   HL.MetadataMap ->
   StreamRecv response ->
   StreamSend request ->
   WritesDone ->
   IO ()
-bidiHandler readChunk publish maxMsgSize cc initMetadata recv send writesDone = do
+bidiHandler readChunk publish maxMsgSize useBatch cc initMetadata recv send writesDone = do
   concurrently_
     (streamSender readChunk send >> writesDone)
-    (streamReader publish maxMsgSize cc initMetadata recv)
+    (streamReader publish maxMsgSize useBatch cc initMetadata recv)
 
 -- | Handles AuxControl signals from the "/control" topic
 controlMsgHandler :: Logger -> Session -> LByteString -> IO ()

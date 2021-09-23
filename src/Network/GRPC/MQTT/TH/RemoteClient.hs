@@ -6,9 +6,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Network.GRPC.MQTT.TH.RemoteClient
-  ( mqttRemoteClientMethodMap,
+  ( Batched (..),
     Client,
     MethodMap,
+    mqttRemoteClientMethodMap,
     wrapServerStreamingClientHandler,
     wrapUnaryClientHandler,
   )
@@ -21,6 +22,7 @@ import Network.GRPC.MQTT.TH.Proto (forEachService)
 import Language.Haskell.TH
   ( Dec,
     DecsQ,
+    ExpQ,
     Name,
     Q,
     clause,
@@ -33,19 +35,19 @@ import Language.Haskell.TH
     varP,
   )
 import Network.GRPC.HighLevel.Client (Client)
-import Network.GRPC.MQTT.Types (MethodMap)
+import Network.GRPC.MQTT.Types (Batched (..), MethodMap)
 import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)
 
-mqttRemoteClientMethodMap :: FilePath -> Q [Dec]
-mqttRemoteClientMethodMap fp = fmap concat $
-  forEachService fp $ \serviceName serviceMethods -> do
+mqttRemoteClientMethodMap :: FilePath -> Batched -> Q [Dec]
+mqttRemoteClientMethodMap fp defaultBatchedStream = fmap concat $
+  forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
     clientFuncName <- mkName <$> prefixedFieldName serviceName "remoteClientMethodMap"
     grpcClientName <- mkName <$> prefixedFieldName serviceName "client"
     lift $ rcMethodMap clientFuncName grpcClientName serviceMethods
 
-rcMethodMap :: Name -> Name -> [(String, Name, Name)] -> DecsQ
+rcMethodMap :: Name -> Name -> [(String, Batched, ExpQ, Name)] -> DecsQ
 rcMethodMap fname grpcName methods = do
   fSig <- sigD fname [t|Client -> IO MethodMap|]
   fDef <- funD fname [clause args (normalB methodMapE) []]
@@ -57,7 +59,7 @@ rcMethodMap fname grpcName methods = do
     clientVarName = mkName "client"
     methodPairs =
       fmap
-        (\(method, wrapFun, clientFun) -> [e|(method, $(varE wrapFun) ($(varE clientFun) $(varE clientVarName)))|])
+        (\(method, _, wrapFun, clientFun) -> [e|(method, $wrapFun ($(varE clientFun) $(varE clientVarName)))|])
         methods
     methodMapE =
       [e|

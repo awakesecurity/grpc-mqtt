@@ -49,7 +49,8 @@ import Network.GRPC.MQTT.Core
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
 import Network.GRPC.MQTT.Types
-  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( Batched,
+    MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Wrapping
@@ -121,9 +122,10 @@ mqttRequest ::
   MQTTGRPCClient ->
   Topic ->
   MethodName ->
+  Batched ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
+mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
 
   handle handleMQTTException $ do
@@ -160,7 +162,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
           logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
-    PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish msgSizeLimit publishToRequestTopic
+    PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish msgSizeLimit useBatchedStream publishToRequestTopic
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream req = do
           logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic

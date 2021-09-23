@@ -18,12 +18,15 @@ import Network.GRPC.MQTT.Wrapping
     wrapUnaryClientHandler,
   )
 
-import Language.Haskell.TH (Name, Q, mkName)
+import Language.Haskell.TH (ExpQ, Name, Q, mkName)
+import Network.GRPC.MQTT.Types (Batched (Batched, Unbatched))
 import Proto3.Suite.DotProto.AST
   ( DotProto (protoDefinitions, protoPackage),
     DotProtoDefinition (DotProtoService),
     DotProtoIdentifier (Single),
-    DotProtoServicePart (DotProtoServiceRPCMethod),
+    DotProtoOption (dotProtoOptionIdentifier),
+    DotProtoServicePart (DotProtoServiceOption, DotProtoServiceRPCMethod),
+    DotProtoValue (BoolLit),
     RPCMethod
       ( RPCMethod,
         rpcMethodName,
@@ -34,6 +37,7 @@ import Proto3.Suite.DotProto.AST
         rpcMethodResponseType
       ),
     Streaming (NonStreaming, Streaming),
+    dotProtoOptionValue,
   )
 import Proto3.Suite.DotProto.Internal
   ( CompileError,
@@ -47,8 +51,12 @@ import Proto3.Suite.DotProto.Internal
   )
 import Turtle (FilePath, directory, filename)
 
-forEachService :: FilePath -> (String -> [(String, Name, Name)] -> ExceptT CompileError Q a) -> Q [a]
-forEachService protoFilepath action = showErrors . runExceptT $ do
+-- | Proto option to enable/disable batching in streams
+batchedStreamOptionIdent :: DotProtoIdentifier
+batchedStreamOptionIdent = Single "hs_grpc_mqtt_batched_stream"
+
+forEachService :: FilePath -> Batched -> (String -> [(String, Batched, ExpQ, Name)] -> ExceptT CompileError Q a) -> Q [a]
+forEachService protoFilepath defBatchedStream action = showErrors . runExceptT $ do
   let protoFile = filename protoFilepath
       protoDir = directory protoFilepath
 
@@ -61,17 +69,37 @@ forEachService protoFilepath action = showErrors . runExceptT $ do
     serviceName <- typeLikeName =<< dpIdentUnqualName name
     let endpointPrefix = "/" <> packageName <> "." <> serviceName <> "/"
 
-    let serviceMethodName (DotProtoServiceRPCMethod RPCMethod{..}) = do
+    let isBatchedStreamEnabled :: [DotProtoOption] -> Maybe Batched
+        isBatchedStreamEnabled opts =
+          let maybeOpt = find (\opt -> dotProtoOptionIdentifier opt == batchedStreamOptionIdent) opts
+              isBatched opt =
+                if dotProtoOptionValue opt == BoolLit True
+                  then Batched
+                  else Unbatched
+           in isBatched <$> maybeOpt
+
+    let serviceUsesBatchedStream :: Maybe Batched
+        serviceUsesBatchedStream = isBatchedStreamEnabled $ mapMaybe toOption parts
+          where
+            toOption (DotProtoServiceOption opt) = Just opt
+            toOption _ = Nothing
+
+    let methodUsesBatchedStream :: RPCMethod -> Maybe Batched
+        methodUsesBatchedStream = isBatchedStreamEnabled . rpcMethodOptions
+
+    let serviceMethodName (DotProtoServiceRPCMethod method@RPCMethod{..}) = do
           case rpcMethodName of
             Single nm -> do
+              let useBatchedStream = fromMaybe defBatchedStream $ methodUsesBatchedStream method <|> serviceUsesBatchedStream
+
               let streamingWrapper =
                     case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
-                      (NonStreaming, Streaming) -> 'wrapServerStreamingClientHandler
-                      (NonStreaming, NonStreaming) -> 'wrapUnaryClientHandler
-                      (Streaming, NonStreaming) -> 'wrapClientStreamingClientHandler
-                      (Streaming, Streaming) -> 'wrapBiDiStreamingClientHandler
+                      (NonStreaming, Streaming) -> [e|wrapServerStreamingClientHandler useBatchedStream|]
+                      (NonStreaming, NonStreaming) -> [e|wrapUnaryClientHandler|]
+                      (Streaming, NonStreaming) -> [e|wrapClientStreamingClientHandler|]
+                      (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler useBatchedStream|]
               clientFun <- prefixedFieldName serviceName nm
-              return [(endpointPrefix <> nm, streamingWrapper, mkName clientFun)]
+              return [(endpointPrefix <> nm, useBatchedStream, streamingWrapper, mkName clientFun)]
             _ -> invalidMethodNameError rpcMethodName
         serviceMethodName _ = pure []
 

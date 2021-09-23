@@ -60,7 +60,7 @@ packet size limit is configured in `MQTTGRPCConfig.mqttMsgSizeLimit`. If a messa
 split into multiple packets and then those packets are published.
 
 The performance of streaming RPCs that transmit many small messages in a short time window can be improved, dramatically, by enabling
-batching. When batching is enabled, the sender accumulates many messages to one packet and then flushes them in a single
+batching. When batching is enabled, the sender accumulates many messages into one packet and then flushes them in a single
 publish operation. This reduces the MQTT protocol overhead and can result in better performace.
 
 Batching can be enabled in one of the following ways:

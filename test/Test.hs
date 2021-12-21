@@ -40,7 +40,7 @@ import Network.GRPC.MQTT.Client
     withMQTTGRPCClient,
   )
 import Network.GRPC.MQTT.Core
-  ( MQTTGRPCConfig (mqttMsgSizeLimit, _connID, _msgCB),
+  ( MQTTGRPCConfig (..),
     connectMQTT,
   )
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
@@ -107,6 +107,7 @@ import Turtle (sleep)
 import UnliftIO.Async (concurrently_, withAsync)
 import UnliftIO.STM (newTChanIO, readTChan, writeTChan)
 import UnliftIO.Timeout (timeout)
+import Network.Connection (ProxySettings(..))
 
 -- Test gRPC servers
 addHelloServerPort :: Port
@@ -139,7 +140,57 @@ testBaseTopic = "testMachine" <> fromString testClientId
 
 -- Tests
 main :: IO ()
-main = defaultMain tests
+main = do
+  awsConfig <- getTestConfig
+
+  -- Start gRPC Server 1
+  withAsync runAddHelloServer $ \_grpcServerThread1 ->
+    -- Start gRPC Server 2
+    withAsync runMultGoodbyeServer $ \_grpcServerThread2 ->
+      -- Get gRPC Client 1
+      withGRPCClient (testGrpcClientConfig addHelloServerPort) $ \grpcClient1 ->
+        -- Get gRPC Client 2
+        withGRPCClient (testGrpcClientConfig multGoodbyeServerPort) $ \grpcClient2 -> do
+          methodMapAH <- addHelloRemoteClientMethodMap grpcClient1
+          methodMapMG <- multGoodbyeRemoteClientMethodMap grpcClient2
+          let methodMap = methodMapAH <> methodMapMG
+          -- Start serverside MQTT adaptor
+          withAsync (runRemoteClient testLogger awsConfig{_connID = "testMachineSSAdaptorTS"} testBaseTopic methodMap) $ \_adaptorThread -> do
+            let range :: [Int]
+                range = [1..1000]
+            forM_ range $ \i -> do
+              putStrLn $ "Round " <> show i
+              
+              sleep 1
+              -- Server 1
+              testAddCall awsConfig{_connID = "testclientTS1"}
+              testHelloCall awsConfig{_connID = "testclientTS2"}
+              testSumCall awsConfig{_connID = testClientId <> "CS"}
+              testHelloBiCall awsConfig{_connID = testClientId <> "BDS"}
+              
+
+              -- Server 2
+              testMultCall awsConfig{_connID = "testclientTS3"}
+              testGoodbyeCall awsConfig{_connID = "testclientTS4"}
+
+  -- replicateM_ 1 $
+  --   traverse_ @[]
+  --     snd
+  --     [ ("Latency", mqttLatency)
+  --     , ("Basic Unary", basicUnary)
+  --     , ("Basic Server Streaming", basicServerStreaming)
+  --     , ("Basic Client Streaming", basicClientStreaming)
+  --     , ("Basic BiDirectional Streaming", basicBiDiStreaming)
+  --     , ("Two Servers", twoServers)
+  --     , ("Timeout", testTimeout)
+  --     , ("Persistent", persistentMQTT)
+  --     , ("Sequenced", testSequenced)
+  --     , ("Missing Client Error", missingClientError)
+  --     , ("Malformed Topic", malformedMessage)
+  --     , ("Packetized", packetizedMesssages)
+  --     ]
+  
+  -- defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests" [allTests]

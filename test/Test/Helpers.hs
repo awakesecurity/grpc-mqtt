@@ -48,15 +48,18 @@ import Test.Tasty.HUnit
   )
 import Test.Tasty.Runners (timed)
 import Turtle.Prelude (need)
+import Network.Connection (ProxySettings(..))
 
 testLogger :: Logger
 testLogger = noLogging
+
 
 awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTGRPCConfig
 awsMqttConfig hostName cred certStore =
   defaultMGConfig
     { useTLS = True
     , mqttMsgSizeLimit = 128000
+    , brokerProxy = Nothing
     , _protocol = Protocol311
     , _hostname = hostName
     , _port = 8883
@@ -93,9 +96,13 @@ getCreds = do
 
 getTestConfig :: IO MQTTGRPCConfig
 getTestConfig = do
-  host <- getEnvVar "TEST_MQTT_HOSTNAME"
-  (cred, certStore) <- getCreds
-  return $ awsMqttConfig (toString host) cred certStore
+  -- host <- getEnvVar "TEST_MQTT_HOSTNAME"
+  -- (cred, certStore) <- getCreds
+  -- return $ awsMqttConfig (toString host) cred certStore
+  pure $
+    defaultMGConfig
+      { _hostname = "localhost"
+      }
 
 getEnvVar :: Text -> IO String
 getEnvVar varName =

@@ -15,7 +15,7 @@ common shared-settings
   default-language:   Haskell2010 
   ghc-options:        -Wall
                       -Wcompat
-                      -Werror
+                      -- -Werror
                       -Widentities
                       -Wincomplete-record-updates
                       -Wincomplete-uni-patterns
@@ -84,7 +84,8 @@ library
                       Network.GRPC.MQTT.Types
                       Network.GRPC.MQTT.Wrapping
   other-modules:      Proto.Mqtt
-  ghc-options:        -O2
+  ghc-options:        -g
+  extra-libraries:    dl
   hs-source-dirs:     src gen
   build-depends:      conduit-extra
                     , connection
@@ -94,10 +95,11 @@ library
                     , sorted-list
                     , template-haskell
                     , unordered-containers
+                    , inline-c
 
 test-suite grpc-mqtt-test
   import:             shared-settings
-  ghc-options:        -threaded -with-rtsopts=-N2
+  ghc-options:        -threaded -with-rtsopts=-N2 -g
   type:               exitcode-stdio-1.0
   hs-source-dirs:     test gen
   main-is:            Test.hs

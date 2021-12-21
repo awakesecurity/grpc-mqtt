@@ -5,6 +5,8 @@
 -}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
@@ -12,6 +14,7 @@ module Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     defaultMGConfig,
     subscribeOrThrow,
+    cozTransaction,
   )
 where
 
@@ -45,6 +48,12 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Turtle (NominalDiffTime)
+
+import qualified Language.C.Inline as C
+
+C.context (C.baseCtx <> C.bsCtx)
+C.include "<coz.h>"
+
 
 {- |
   Superset of 'MQTTConfig'
@@ -128,3 +137,23 @@ subscribeOrThrow client topics = do
   where
     errMsg :: (Filter, SubErr) -> String
     errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
+
+
+cozTransaction :: MonadIO m => Text -> m a -> m a
+cozTransaction txName k = do
+  cozBegin txName 
+  r <- k
+  cozEnd txName
+  return r
+
+cozBegin :: MonadIO m => Text -> m ()
+cozBegin txName = liftIO [C.exp| void { COZ_BEGIN($bs-ptr:cname) } |]
+  where
+    cname :: ByteString
+    cname = encodeUtf8 txName
+
+cozEnd :: MonadIO m => Text -> m ()
+cozEnd txName = liftIO [C.exp| void { COZ_END($bs-ptr:cname) } |]
+  where
+    cname :: ByteString
+    cname = encodeUtf8 txName

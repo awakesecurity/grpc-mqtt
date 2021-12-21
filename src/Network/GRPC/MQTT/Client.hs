@@ -45,6 +45,7 @@ import Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
     subscribeOrThrow,
+    cozTransaction
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced (mkPacketizedPublish, mkPacketizedRead)
@@ -125,7 +126,7 @@ mqttRequest ::
   MethodName ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = do
+mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) request = cozTransaction "mqttRequest" $ do
   logDebug mqttLogger $ "Making gRPC request for method: " <> decodeUtf8 method
 
   handle handleMQTTException $ do

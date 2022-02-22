@@ -15,14 +15,9 @@ module Network.GRPC.MQTT.Core
   )
 where
 
-import Relude
 
 import Control.Exception (throw)
-import Data.Conduit.Network
-  ( AppData,
-    appSink,
-    appSource,
-  )
+import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
   ( TLSClientConfig (..),
     runTLSClient,
@@ -45,10 +40,11 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Turtle (NominalDiffTime)
+-- import Prelude (Bool, IO, Int, Maybe, String)
 
-{- |
-  Superset of 'MQTTConfig'
--}
+--------------------------------------------------------------------------------
+
+-- | Superset of 'MQTTConfig'
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool

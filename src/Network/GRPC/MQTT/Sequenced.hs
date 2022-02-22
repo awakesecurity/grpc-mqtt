@@ -8,15 +8,13 @@
 
 module Network.GRPC.MQTT.Sequenced where
 
-import Relude
-
-import qualified Data.ByteString.Builder as Builder
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Builder qualified as Builder
+import Data.ByteString.Lazy qualified as LBS
 import Data.Sequence ((|>))
-import qualified Data.Sequence as Seq
-import qualified Data.SortedList as SL
+import Data.Sequence qualified as Seq
+import Data.SortedList qualified as SL
 import Data.Vector (Vector)
-import qualified Data.Vector as Vector
+import Data.Vector qualified as Vector
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.MQTT.Types (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping (fromLazyByteString, unwrapStreamChunk, wrapStreamChunk)
@@ -26,13 +24,19 @@ import Proto.Mqtt (Packet (..), RemoteError)
 import Proto3.Suite (Message, toLazyByteString)
 import UnliftIO.STM (TChan, readTChan)
 
-data SequenceIdx = Unsequenced | SequencedIdx Natural
+--------------------------------------------------------------------------------
+
+data SequenceIdx
+  = Unsequenced
+  | SequencedIdx Natural
   deriving stock (Eq, Ord)
 
 -- | A class representing types that have some form of sequence id
 class Sequenced a where
   type Payload a
+
   seqNum :: a -> SequenceIdx
+
   seqPayload :: a -> Payload a
 
 -- | A newtype wrapper to use 'seqNum` for its 'Ord' and 'Eq' instances
@@ -40,10 +44,10 @@ newtype SequencedWrap a = SequencedWrap a
   deriving stock (Show)
   deriving newtype (Sequenced)
 
-instance (Sequenced sa) => Eq (SequencedWrap sa) where
+instance Sequenced a => Eq (SequencedWrap a) where
   (==) = (==) `on` seqNum
 
-instance (Sequenced sa) => Ord (SequencedWrap sa) where
+instance Sequenced a => Ord (SequencedWrap a) where
   (<=) = (<=) `on` seqNum
 
 -- 'Either' can be sequenced where 'Left' represents an error and will
@@ -78,10 +82,9 @@ mkPacketizedRead chan = do
 
   return $ readMessage mempty
 
-{- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
- read the objects in order even if they are received out of order
- NB: Objects with negative sequence numbers are always returned immediately
--}
+-- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
+-- read the objects in order even if they are received out of order
+-- NB: Objects with negative sequence numbers are always returned immediately
 mkSequencedRead :: forall io a. (MonadIO io, Sequenced a) => STM a -> io (io a)
 mkSequencedRead read = do
   seqVar <- newTVarIO 0

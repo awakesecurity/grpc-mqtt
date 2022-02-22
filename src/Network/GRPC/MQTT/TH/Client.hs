@@ -13,8 +13,6 @@ module Network.GRPC.MQTT.TH.Client
   )
 where
 
-import Relude hiding (FilePath)
-
 import Network.GRPC.MQTT.TH.Proto (forEachService)
 
 import Language.Haskell.TH
@@ -34,16 +32,15 @@ import Language.Haskell.TH
     varP,
   )
 import Network.GRPC.HighLevel (MethodName (MethodName))
-import Network.GRPC.MQTT.Client
-  ( MQTTGRPCClient,
-    mqttRequest,
-  )
+import Network.GRPC.MQTT.Client ( MQTTGRPCClient, mqttRequest)
 import Network.GRPC.MQTT.Types (Batched (..), MQTTRequest, MQTTResult)
 import Network.MQTT.Topic (Topic)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)
 
-mqttClientFuncs :: FilePath -> Batched -> Q [Dec]
+--------------------------------------------------------------------------------
+
+mqttClientFuncs :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttClientFuncs fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
     clientFuncName <- mkName <$> prefixedFieldName serviceName "mqttClient"

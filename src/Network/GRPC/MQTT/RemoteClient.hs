@@ -7,8 +7,6 @@
 
 module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
 
-import Relude
-
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
     connectMQTT,
@@ -22,7 +20,13 @@ import Network.GRPC.MQTT.Logging
     logInfo,
     logWarn,
   )
-import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
+import Network.GRPC.MQTT.Sequenced
+  ( PublishToStream (..),
+    mkPacketizedPublish,
+    mkPacketizedRead,
+    mkStreamPublish,
+    mkStreamRead,
+  )
 import Network.GRPC.MQTT.Types
   ( Batched,
     ClientHandler (..),
@@ -47,9 +51,9 @@ import Control.Exception (bracket)
 import Control.Monad.Except (MonadError (throwError))
 import Data.HashMap.Strict (lookup)
 import Data.List (stripPrefix)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Network.GRPC.HighLevel (StreamRecv, StreamSend)
-import qualified Network.GRPC.HighLevel as HL
+import Network.GRPC.HighLevel qualified as HL
 import Network.GRPC.HighLevel.Client
   ( ClientError (ClientIOError),
     ClientResult (ClientErrorResponse),
@@ -77,6 +81,8 @@ import Turtle (NominalDiffTime)
 import UnliftIO (TChan, newTChanIO, timeout, writeTChan)
 import UnliftIO.Async (Async, async, cancel, concurrently_, race_)
 import UnliftIO.Exception (finally, handle, handleAny)
+
+--------------------------------------------------------------------------------
 
 -- | A shared map of all currently running sessions
 type SessionMap = TVar (Map SessionId Session)
@@ -169,13 +175,13 @@ runRemoteClient logger cfg baseTopic methodMap = do
       logErr logger $
         name <> " terminated with exception: " <> toText (displayException e)
 
-{- | Creates a new 'Session'
- Spawns a thread to handle a request with a watchdog timer to
- monitor the heartbeat signal.
-
- The new 'Session' is inserted into the global 'SessionMap' and
- is removed by the handler thread upon completion.
--}
+-- | Creates a new 'Session'
+--
+-- Spawns a thread to handle a request with a watchdog timer to
+-- monitor the heartbeat signal.
+--
+-- The new 'Session' is inserted into the global 'SessionMap' and
+-- is removed by the handler thread upon completion.
 createNewSession :: SessionArgs -> IO Session
 createNewSession args@SessionArgs{..} = do
   reqChan <- newTChanIO
@@ -262,9 +268,8 @@ requestHandler SessionArgs{..} reqChan = do
           logErr sessionLogger $ show err
           publishErr err
 
-{- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
- Intended to be used with 'race'
--}
+-- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
+-- Intended to be used with 'race'
 watchdog :: NominalDiffTime -> TMVar () -> IO ()
 watchdog timeLimit var = loop
   where

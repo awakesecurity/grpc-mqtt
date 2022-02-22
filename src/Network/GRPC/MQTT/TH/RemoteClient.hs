@@ -15,8 +15,6 @@ module Network.GRPC.MQTT.TH.RemoteClient
   )
 where
 
-import Relude hiding (FilePath)
-
 import Network.GRPC.MQTT.TH.Proto (forEachService)
 
 import Language.Haskell.TH
@@ -40,7 +38,9 @@ import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryCl
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)
 
-mqttRemoteClientMethodMap :: FilePath -> Batched -> Q [Dec]
+--------------------------------------------------------------------------------
+
+mqttRemoteClientMethodMap :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttRemoteClientMethodMap fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
     clientFuncName <- mkName <$> prefixedFieldName serviceName "remoteClientMethodMap"

@@ -14,8 +14,6 @@ module Network.GRPC.MQTT.Client
   )
 where
 
-import Relude
-
 import Proto.Mqtt
   ( AuxControl (AuxControlAlive, AuxControlTerminate),
     AuxControlMessage (AuxControlMessage),
@@ -37,7 +35,7 @@ import Network.GRPC.HighLevel.Client
     TimeoutSeconds,
     WritesDone,
   )
-import qualified Network.GRPC.HighLevel.Generated as HL
+import Network.GRPC.HighLevel.Generated qualified as HL
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (_msgCB),
@@ -71,7 +69,7 @@ import Network.MQTT.Client
     normalDisconnect,
   )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
-import qualified Proto.Mqtt as Proto
+import Proto.Mqtt qualified as Proto
 import Proto3.Suite
   ( Enumerated (Enumerated),
     HasDefault,
@@ -90,6 +88,8 @@ import UnliftIO.STM
   )
 import UnliftIO.Timeout (timeout)
 
+--------------------------------------------------------------------------------
+
 -- | Client for making gRPC calls over MQTT
 data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
@@ -104,18 +104,16 @@ data MQTTGRPCClient = MQTTGRPCClient
     msgSizeLimit :: Int64
   }
 
-{- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
- Disconnects from the MQTT broker with 'normalDisconnect' when finished.
--}
+-- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
+-- Disconnects from the MQTT broker with 'normalDisconnect' when finished.
 withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
   bracket
     (connectMQTTGRPC logger cfg)
     disconnectMQTTGRPC
 
-{- | Send a gRPC request over MQTT using the provided client
- This function makes synchronous requests.
--}
+-- | Send a gRPC request over MQTT using the provided client
+-- This function makes synchronous requests.
 mqttRequest ::
   forall request response streamtype.
   (Message request, Message response, HasDefault request) =>
@@ -253,15 +251,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
 
-{- | Helper function to run an 'ExceptT RemoteError' action and convert any failure
- to an 'MQTTResult'
--}
+-- | Helper function to run an 'ExceptT RemoteError' action and convert any failure
+-- to an 'MQTTResult'
 exceptToResult :: (Functor m) => ExceptT RemoteError m (MQTTResult streamtype response) -> m (MQTTResult streamtype response)
 exceptToResult = fmap (either fromRemoteError id) . runExceptT
 
-{- | Manages the control signals (Heartbeat and Terminate) asynchronously while
- the provided action performs a request
--}
+-- | Manages the control signals (Heartbeat and Terminate) asynchronously while
+-- the provided action performs a request
 withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
 withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnException
   where
@@ -275,9 +271,8 @@ withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnExcept
     sendTerminateOnException action =
       action `onException` publishControlMsg AuxControlTerminate
 
-{- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
--}
+-- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
+-- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 connectMQTTGRPC :: (MonadIO io) => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   resultChan <- newTChanIO

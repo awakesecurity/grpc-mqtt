@@ -5,7 +5,7 @@
 -}
 module Network.GRPC.MQTT.Logging where
 
-import Relude
+--------------------------------------------------------------------------------
 
 data Logger = Logger
   { log :: Text -> IO ()
@@ -25,10 +25,13 @@ noLogging = Logger (\_ -> pure ()) Silent
 
 logErr :: (MonadIO io) => Logger -> Text -> io ()
 logErr = logVerbosity Error
+
 logWarn :: (MonadIO io) => Logger -> Text -> io ()
 logWarn = logVerbosity Warn
+
 logInfo :: (MonadIO io) => Logger -> Text -> io ()
 logInfo = logVerbosity Info
+
 logDebug :: (MonadIO io) => Logger -> Text -> io ()
 logDebug = logVerbosity Debug
 

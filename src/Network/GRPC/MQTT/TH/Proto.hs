@@ -9,8 +9,6 @@
 
 module Network.GRPC.MQTT.TH.Proto where
 
-import Relude hiding (FilePath)
-
 import Network.GRPC.MQTT.Wrapping
   ( wrapBiDiStreamingClientHandler,
     wrapClientStreamingClientHandler,
@@ -51,11 +49,17 @@ import Proto3.Suite.DotProto.Internal
   )
 import Turtle (FilePath, directory, filename)
 
+-------------------------------------------------------------------------------
+
 -- | Proto option to enable/disable batching in streams
 batchedStreamOptionIdent :: DotProtoIdentifier
 batchedStreamOptionIdent = Single "hs_grpc_mqtt_batched_stream"
 
-forEachService :: FilePath -> Batched -> (String -> [(String, Batched, ExpQ, Name)] -> ExceptT CompileError Q a) -> Q [a]
+forEachService ::
+  Turtle.FilePath ->
+  Batched ->
+  (String -> [(String, Batched, ExpQ, Name)] -> ExceptT CompileError Q a) ->
+  Q [a]
 forEachService protoFilepath defBatchedStream action = showErrors . runExceptT $ do
   let protoFile = filename protoFilepath
       protoDir = directory protoFilepath

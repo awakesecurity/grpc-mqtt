@@ -28,8 +28,6 @@ module Network.GRPC.MQTT.Wrapping
   )
 where
 
-import Relude
-
 import Network.GRPC.MQTT.Types
   ( Batched,
     ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
@@ -58,9 +56,9 @@ import Proto.Mqtt as Proto
   )
 
 import Control.Exception (ErrorCall, try)
-import qualified Data.Map as M
+import Data.Map qualified as M
 import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL
   ( GRPCIOError (..),
@@ -88,6 +86,8 @@ import Proto3.Suite
     fromByteString,
   )
 import Proto3.Wire.Decode (ParseError (..))
+
+--------------------------------------------------------------------------------
 
 -- Client Handler Wrappers
 wrapUnaryClientHandler ::

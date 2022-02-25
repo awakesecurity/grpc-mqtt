@@ -114,14 +114,35 @@ runRemoteClient ::
   MethodMap ->
   IO ()
 runRemoteClient logger cfg baseTopic methodMap = do
+  runRemoteClient' logger cfg connectMQTT baseTopic methodMap
+
+runRemoteClient' ::
+  Logger ->
+  -- | MQTT configuration for connecting to the MQTT broker
+  -- | MQTT configuration for connecting to the MQTT broker
+  MQTTGRPCConfig ->
+  (MQTTGRPCConfig -> IO MQTTClient) ->
+  -- | Base topic which should uniquely identify the device
+  Topic ->
+  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
+  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
+  MethodMap ->
+  IO ()
+runRemoteClient' logger cfg connect baseTopic methodMap = do
   sharedSessionMap <- newTVarIO mempty
   let gatewayConfig = cfg{_msgCB = gatewayHandler sharedSessionMap}
 
-  bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
+  bracket (connect gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
-    runRemoteClient' logger gatewayMQTTClient baseTopic
+    handle (logException "MQTT client connection") $ do
+      let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+" <> "+"
+      let controlFilter = toFilter baseTopic <> "grpc" <> "session" <> "+" <> "control"
+      subscribeOrThrow gatewayMQTTClient [grpcRequestsFilter, controlFilter]
 
+      waitForClient gatewayMQTTClient
+
+      logInfo logger "MQTT client connection terminated normally"
   where
     gatewayHandler :: SessionMap -> MessageCallback
     gatewayHandler sharedSessionMap = SimpleCallback $ \client topic mqttMessage _props -> do
@@ -158,31 +179,6 @@ runRemoteClient logger cfg baseTopic methodMap = do
               Nothing -> logInfo taggedLogger "Received control message for non-existant session"
               Just session -> controlMsgHandler taggedLogger session mqttMessage
           _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
-    logException :: Text -> SomeException -> IO ()
-    logException name e =
-      logErr logger $
-        name <> " terminated with exception: " <> toText (displayException e)
-
-
-runRemoteClient' ::
-  Logger ->
-  -- | MQTT configuration for connecting to the MQTT broker
-  MQTTClient ->
-  -- | Base topic which should uniquely identify the device
-  Topic ->
-  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
-  IO ()
-runRemoteClient' logger gatewayMQTTClient baseTopic  = do
-
-  handle (logException "MQTT client connection") $ do
-    let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+" <> "+"
-    let controlFilter = toFilter baseTopic <> "grpc" <> "session" <> "+" <> "control"
-    subscribeOrThrow gatewayMQTTClient [grpcRequestsFilter, controlFilter]
-
-    waitForClient gatewayMQTTClient
-
-    logInfo logger "MQTT client connection terminated normally"
-  where
     logException :: Text -> SomeException -> IO ()
     logException name e =
       logErr logger $

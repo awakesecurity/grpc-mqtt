@@ -1,10 +1,9 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE RecordWildCards #-}
 
+-- |
 module Network.GRPC.MQTT.Client
   ( MQTTGRPCClient (..),
     mqttRequest,
@@ -19,6 +18,7 @@ import Proto.Mqtt
     AuxControlMessage (AuxControlMessage),
     RemoteError,
   )
+import Proto.Mqtt qualified as Proto
 
 import Control.Exception (bracket, throw)
 import Control.Monad.Except (withExceptT)
@@ -45,7 +45,17 @@ import Network.GRPC.MQTT.Core
     subscribeOrThrow,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
-import Network.GRPC.MQTT.Sequenced (PublishToStream (..), mkPacketizedPublish, mkPacketizedRead, mkStreamPublish, mkStreamRead)
+import Network.GRPC.MQTT.Sequenced
+  ( PublishToStream
+      ( PublishToStream,
+        publishToStream,
+        publishToStreamCompleted
+      ),
+    mkPacketizedPublish,
+    mkPacketizedRead,
+    mkStreamPublish,
+    mkStreamRead,
+  )
 import Network.GRPC.MQTT.Types
   ( Batched,
     MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
@@ -69,7 +79,6 @@ import Network.MQTT.Client
     normalDisconnect,
   )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
-import Proto.Mqtt qualified as Proto
 import Proto3.Suite
   ( Enumerated (Enumerated),
     HasDefault,
@@ -81,11 +90,7 @@ import Turtle (sleep)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (withAsync)
 import UnliftIO.Exception (handle, onException)
-import UnliftIO.STM
-  ( TChan,
-    newTChanIO,
-    writeTChan,
-  )
+import UnliftIO.STM (TChan, newTChanIO, writeTChan)
 import UnliftIO.Timeout (timeout)
 
 --------------------------------------------------------------------------------

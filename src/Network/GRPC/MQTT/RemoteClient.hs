@@ -1,11 +1,13 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
+-- |
+module Network.GRPC.MQTT.RemoteClient
+  ( runRemoteClient,
+  )
+where
 
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
@@ -21,7 +23,11 @@ import Network.GRPC.MQTT.Logging
     logWarn,
   )
 import Network.GRPC.MQTT.Sequenced
-  ( PublishToStream (..),
+  ( PublishToStream
+      ( PublishToStream,
+        publishToStream,
+        publishToStreamCompleted
+      ),
     mkPacketizedPublish,
     mkPacketizedRead,
     mkStreamPublish,
@@ -29,7 +35,12 @@ import Network.GRPC.MQTT.Sequenced
   )
 import Network.GRPC.MQTT.Types
   ( Batched,
-    ClientHandler (..),
+    ClientHandler
+      ( ClientBiDiStreamHandler,
+        ClientClientStreamHandler,
+        ClientServerStreamHandler,
+        ClientUnaryHandler
+      ),
     MethodMap,
     SessionId,
   )

@@ -1,12 +1,11 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-- |
 module Network.GRPC.MQTT.TH.Proto where
 
 import Network.GRPC.MQTT.Wrapping

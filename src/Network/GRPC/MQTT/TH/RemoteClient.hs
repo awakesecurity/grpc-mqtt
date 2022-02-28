@@ -1,12 +1,10 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE TemplateHaskell #-}
 
 module Network.GRPC.MQTT.TH.RemoteClient
-  ( Batched (..),
+  ( Batched (Batched, Unbatched),
     Client,
     MethodMap,
     mqttRemoteClientMethodMap,
@@ -33,7 +31,7 @@ import Language.Haskell.TH
     varP,
   )
 import Network.GRPC.HighLevel.Client (Client)
-import Network.GRPC.MQTT.Types (Batched (..), MethodMap)
+import Network.GRPC.MQTT.Types (Batched (Batched, Unbatched), MethodMap)
 import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)

@@ -1,12 +1,16 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 
+-- |
 module Network.GRPC.MQTT.Sequenced where
+
+import Proto.Mqtt
+  ( Packet (Packet, packetSequenceNum, packetPayload)
+  , RemoteError
+  )
 
 import Data.ByteString.Builder qualified as Builder
 import Data.ByteString.Lazy qualified as LBS
@@ -17,10 +21,13 @@ import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.MQTT.Types (Batched (Batched))
-import Network.GRPC.MQTT.Wrapping (fromLazyByteString, unwrapStreamChunk, wrapStreamChunk)
+import Network.GRPC.MQTT.Wrapping
+  ( fromLazyByteString,
+    unwrapStreamChunk,
+    wrapStreamChunk,
+  )
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
-import Proto.Mqtt (Packet (..), RemoteError)
 import Proto3.Suite (Message, toLazyByteString)
 import UnliftIO.STM (TChan, readTChan)
 

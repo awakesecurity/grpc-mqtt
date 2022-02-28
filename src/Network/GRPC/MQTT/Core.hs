@@ -1,11 +1,10 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
 
+-- |
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
@@ -15,20 +14,37 @@ module Network.GRPC.MQTT.Core
   )
 where
 
-
 import Control.Exception (throw)
 import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
-  ( TLSClientConfig (..),
+  ( TLSClientConfig
+      ( tlsClientSockSettings,
+        tlsClientTLSSettings,
+        tlsClientUseTLS
+      ),
     runTLSClient,
     tlsClientConfig,
   )
-import qualified Data.List as L
+import Data.List qualified as L
 import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTConduit,
-    MQTTConfig (..),
+    MQTTConfig
+      ( MQTTConfig,
+        _cleanSession,
+        _connID,
+        _connProps,
+        _connectTimeout,
+        _hostname,
+        _lwt,
+        _msgCB,
+        _password,
+        _port,
+        _protocol,
+        _tlsSettings,
+        _username
+      ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
     QoS (QoS1),
@@ -40,7 +56,6 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
 import Turtle (NominalDiffTime)
--- import Prelude (Bool, IO, Int, Maybe, String)
 
 --------------------------------------------------------------------------------
 

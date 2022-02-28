@@ -1,7 +1,6 @@
 syntax = "proto3";
 package mqtt;
 
-
 message Packet {
   bool terminal = 1;
   int32 sequence_num = 2;

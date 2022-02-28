@@ -1,9 +1,26 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
-module Network.GRPC.MQTT.Logging where
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
+
+-- |
+module Network.GRPC.MQTT.Logging
+  ( -- * Logger
+    Logger (Logger),
+    log,
+    verbosity,
+    noLogging,
+
+    -- ** Log Verbosity
+    Verbosity (Silent, Error, Warn, Info, Debug),
+
+    -- ** Logging Operations
+    logErr,
+    logWarn,
+    logInfo,
+    logDebug,
+    logVerbosity,
+  )
+where
 
 --------------------------------------------------------------------------------
 

@@ -1,12 +1,11 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE TemplateHaskell #-}
 
+-- |
 module Network.GRPC.MQTT.TH.Client
-  ( Batched (..),
+  ( Batched (Batched, Unbatched),
     MethodName (MethodName),
     mqttClientFuncs,
     mqttRequest,
@@ -32,8 +31,12 @@ import Language.Haskell.TH
     varP,
   )
 import Network.GRPC.HighLevel (MethodName (MethodName))
-import Network.GRPC.MQTT.Client ( MQTTGRPCClient, mqttRequest)
-import Network.GRPC.MQTT.Types (Batched (..), MQTTRequest, MQTTResult)
+import Network.GRPC.MQTT.Client (MQTTGRPCClient, mqttRequest)
+import Network.GRPC.MQTT.Types
+  ( Batched (Batched, Unbatched),
+    MQTTRequest,
+    MQTTResult,
+  )
 import Network.MQTT.Topic (Topic)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)
 import Turtle (FilePath)

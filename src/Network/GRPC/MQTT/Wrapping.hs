@@ -1,11 +1,13 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE RecordWildCards #-}
+-- Disable import lists in order to avoid having to enumerate the constructors
+-- for error handler types exported by 'grpc-haskell'.
+{-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
+-- |
 module Network.GRPC.MQTT.Wrapping
   ( fromLazyByteString,
     fromRemoteError,
@@ -28,12 +30,33 @@ module Network.GRPC.MQTT.Wrapping
   )
 where
 
+import Network.GRPC.HighLevel.Client
+  ( ClientError (ClientErrorNoParse, ClientIOError),
+    ClientRequest
+      ( ClientBiDiRequest,
+        ClientNormalRequest,
+        ClientReaderRequest,
+        ClientWriterRequest
+      ),
+    ClientResult
+      ( ClientBiDiResponse,
+        ClientErrorResponse,
+        ClientNormalResponse,
+        ClientReaderResponse,
+        ClientWriterResponse
+      ),
+    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
+  )
 import Network.GRPC.MQTT.Types
   ( Batched,
-    ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
-    MQTTResult (..),
+    ClientHandler
+      ( ClientBiDiStreamHandler,
+        ClientClientStreamHandler,
+        ClientServerStreamHandler,
+        ClientUnaryHandler
+      ),
+    MQTTResult (GRPCResult, MQTTError),
   )
-
 import Proto.Mqtt as Proto
   ( MQTTResponse (..),
     MetadataMap (MetadataMap),
@@ -64,27 +87,11 @@ import Network.GRPC.HighLevel as HL
   ( GRPCIOError (..),
     MetadataMap (MetadataMap),
     StatusCode,
-    StatusDetails (..),
-  )
-import Network.GRPC.HighLevel.Client
-  ( ClientError (..),
-    ClientRequest (ClientBiDiRequest, ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
-    ClientResult
-      ( ClientBiDiResponse,
-        ClientErrorResponse,
-        ClientNormalResponse,
-        ClientReaderResponse,
-        ClientWriterResponse
-      ),
-    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
+    StatusDetails (StatusDetails, unStatusDetails),
   )
 import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.Unsafe (CallError (..))
-import Proto3.Suite
-  ( Enumerated (Enumerated),
-    Message,
-    fromByteString,
-  )
+import Proto3.Suite (Enumerated (Enumerated), Message, fromByteString)
 import Proto3.Wire.Decode (ParseError (..))
 
 --------------------------------------------------------------------------------

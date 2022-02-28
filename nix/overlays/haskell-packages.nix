@@ -22,8 +22,12 @@ in {
   };
 
   haskellPackages = pkgsOld.haskell.packages."${compiler}".override (old: {
-    overrides = pkgsNew.lib.composeExtensions
-      (old.overrides or (_: _: { }))
+    overrides = pkgsNew.lib.composeManyExtensions [
+      (haskellPackagesNew: haskellPackagesOld: {
+        proto3-suite = pkgsNew.haskell.lib.dontCheck (haskellPackagesNew.callPackage ../packages/proto3-suite.nix {});
+        proto3-wire  = haskellPackagesNew.callPackage ../packages/proto3-wire.nix  {};
+        grpc-haskell = pkgsNew.haskell.lib.dontCheck (haskellPackagesNew.callPackage ../packages/grpc-haskell.nix {});
+      })
       (haskellPackagesNew: haskellPackagesOld: {
         net-mqtt = haskellPackagesNew.callHackage "net-mqtt" "0.8.1.0" {};
 
@@ -35,22 +39,18 @@ in {
               jailbreak = true;
             });
 
-        proto3-suite = pkgsNew.haskell.lib.dontCheck haskellPackagesOld.proto3-suite;
-
         grpc-haskell-core =
           let
             source = pkgsNew.fetchFromGitHub {
               owner  = "awakesecurity";
               repo   = "gRPC-haskell";
-              rev    = "e1091b9c0dc9dee8354cf63c9aebe51fa041cfd9";
-              sha256 = "0rkmcd0rnhbh4da65477hdsh3j70ma38wi1qq953bb509byhilp8";
+              rev = "112777023f475ddd752c954056e679fbca0baa44";
+              sha256 = "05s3p5xidfdqh3vghday62pscl968vx9r3xmqhs037a8ark3gr6h";
             };
           in haskellPackagesNew.callCabal2nix "grpc-haskell-core" "${source}/core" {
             inherit (pkgsNew) grpc;
             gpr = null;
           };
-
-        grpc-haskell =  pkgsNew.haskell.lib.dontCheck haskellPackagesOld.grpc-haskell;
 
         grpc-mqtt =
           let
@@ -85,6 +85,6 @@ in {
                 # Network failures?
                 doCheck = false;
               });
-      });
-  });
+      })];
+    });
 }

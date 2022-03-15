@@ -132,6 +132,7 @@ runRemoteClient' logger cfg connect baseTopic methodMap = do
   sharedSessionMap <- newTVarIO mempty
   let gatewayConfig = cfg{_msgCB = gatewayHandler sharedSessionMap}
 
+  logInfo logger "Connecting to MQTT Broker"
   bracket (connect gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 

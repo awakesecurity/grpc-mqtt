@@ -33,4 +33,8 @@ logDebug :: (MonadIO io) => Logger -> Text -> io ()
 logDebug = logVerbosity Debug
 
 logVerbosity :: (MonadIO io) => Verbosity -> Logger -> Text -> io ()
-logVerbosity v logger msg = when (verbosity logger >= v) $ liftIO (log logger msg)
+logVerbosity v logger msg = do
+  print $ verbosity logger
+  print v
+  print msg
+  when (verbosity logger >= v) $ liftIO (log logger msg)

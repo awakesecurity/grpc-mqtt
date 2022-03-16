@@ -1,2 +1,6 @@
 
-:set -Wno-error=unused-packages
+-- Basic verbosity
+:set -v1
+
+-- Silence warnings that are unhelpful in GHCi.
+:set -Wno-unused-packages

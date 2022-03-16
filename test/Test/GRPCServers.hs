@@ -4,11 +4,13 @@
   that can be found in the COPYING file.
 -}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Test.GRPCServers where
 
-import Relude
-
+import Data.Foldable (forM_)
+import Data.String (fromString)
+import Data.Function
 import Proto.Test
   ( AddHello (..),
     BiRqtRpy,
@@ -74,7 +76,7 @@ helloSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) = d
   return $ ServerWriterResponse [("metadata_field", "metadata_helloSS")] StatusOk "Stream is done"
   where
     greeting :: Int -> SSRpy
-    greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
+    greeting i = SSRpy $ "Hello, " <> name <> " - " <> fromString (show i)
 
 infiniteHelloSSHandler :: ServerRequest 'ServerStreaming SSRqt SSRpy -> IO (ServerResponse 'ServerStreaming SSRpy)
 infiniteHelloSSHandler (ServerWriterRequest _metadata (SSRqt name _) ssend) = do
@@ -88,7 +90,7 @@ infiniteHelloSSHandler (ServerWriterRequest _metadata (SSRqt name _) ssend) = do
   return $ ServerWriterResponse [("metadata_field", "metadata_infiniteHelloSS")] StatusOk "Stream is done"
   where
     greeting :: Int -> SSRpy
-    greeting i = SSRpy $ "Hello, " <> name <> " - " <> show i
+    greeting i = SSRpy $ "Hello, " <> name <> " - " <> fromString (show i)
 
 runningSumHandler :: ServerRequest 'ClientStreaming OneInt OneInt -> IO (ServerResponse 'ClientStreaming OneInt)
 runningSumHandler (ServerReaderRequest _metadata recv) = loop 0
@@ -157,7 +159,7 @@ goodbyeSSHandler (ServerWriterRequest _metadata (SSRqt name numReplies) ssend) =
 
   return $ ServerWriterResponse [("metadata_field", "metadata_value")] StatusOk "Stream is done"
   where
-    sendoff i = SSRpy $ "Good Bye, " <> name <> " - " <> show i
+    sendoff i = SSRpy $ "Good Bye, " <> name <> " - " <> fromString (show i)
 
 runningProdHandler :: ServerRequest 'ClientStreaming OneInt OneInt -> IO (ServerResponse 'ClientStreaming OneInt)
 runningProdHandler (ServerReaderRequest _metadata recv) = loop 0

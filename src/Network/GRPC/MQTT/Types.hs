@@ -14,6 +14,7 @@ module Network.GRPC.MQTT.Types
 where
 
 import Language.Haskell.TH.Syntax (Lift)
+
 import Network.GRPC.HighLevel.Client
   ( ClientResult,
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),

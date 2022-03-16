@@ -6,15 +6,16 @@
 
 module Test.Helpers where
 
-import Relude
-
 import Network.GRPC.MQTT
   ( ProtocolLevel (Protocol311),
   )
-import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..), defaultMGConfig)
+import Network.GRPC.MQTT.Core (defaultMGConfig)
+import Network.GRPC.MQTT.Core qualified as GRPC.MQTT
 import Network.GRPC.MQTT.Logging (Logger (..), noLogging)
 
 import Data.Default (Default (def))
+import Data.Text (Text)
+import Data.Text qualified as Text
 import qualified Data.Text.Lazy as TL
 import Data.X509.CertificateStore
   ( CertificateStore,
@@ -52,15 +53,15 @@ import Turtle.Prelude (need)
 testLogger :: Logger
 testLogger = noLogging
 
-awsMqttConfig :: HostName -> Credential -> CertificateStore -> MQTTGRPCConfig
+awsMqttConfig :: HostName -> Credential -> CertificateStore -> GRPC.MQTT.Config
 awsMqttConfig hostName cred certStore =
   defaultMGConfig
-    { useTLS = True
-    , mqttMsgSizeLimit = 128000
-    , _protocol = Protocol311
-    , _hostname = hostName
-    , _port = 8883
-    , _tlsSettings =
+    { GRPC.MQTT.useTLS = True
+    , GRPC.MQTT.mqttMsgSizeLimit = 128000
+    , GRPC.MQTT._protocol = Protocol311
+    , GRPC.MQTT._hostname = hostName
+    , GRPC.MQTT._port = 8883
+    , GRPC.MQTT._tlsSettings =
         TLSSettings
           (defaultParamsClient hostName "")
             { clientShared =
@@ -91,19 +92,19 @@ getCreds = do
       Nothing -> assertFailure "Failed to read cert store"
   return (cred, certStore)
 
-getTestConfig :: IO MQTTGRPCConfig
+getTestConfig :: IO GRPC.MQTT.Config
 getTestConfig = do
   host <- getEnvVar "TEST_MQTT_HOSTNAME"
   (cred, certStore) <- getCreds
-  return $ awsMqttConfig (toString host) cred certStore
+  return $ awsMqttConfig host cred certStore
 
 getEnvVar :: Text -> IO String
 getEnvVar varName =
   need varName >>= \case
-    Nothing -> assertFailure . toString $ varName <> " must be set"
-    Just val -> pure $ toString val
+    Nothing -> assertFailure . Text.unpack $ varName <> " must be set"
+    Just val -> pure $ Text.unpack val
 
-assertContains :: LText -> LText -> Assertion
+assertContains :: TL.Text -> TL.Text -> Assertion
 assertContains substr str = assertBool (show $ "Stream response: " <> str <> ", did not contain " <> substr) (substr `TL.isInfixOf` str)
 
 timeit :: Double -> IO a -> IO a

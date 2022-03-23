@@ -119,12 +119,11 @@ runRemoteClient logger cfg baseTopic methodMap = do
 runRemoteClient' ::
   Logger ->
   -- | MQTT configuration for connecting to the MQTT broker
-  -- | MQTT configuration for connecting to the MQTT broker
   MQTTGRPCConfig ->
+  -- | A function that creates a client for us to use
   (MQTTGRPCConfig -> IO MQTTClient) ->
   -- | Base topic which should uniquely identify the device
   Topic ->
-  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()

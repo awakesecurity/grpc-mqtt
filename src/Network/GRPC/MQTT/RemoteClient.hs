@@ -5,7 +5,7 @@
 -}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.RemoteClient (runRemoteClient, runRemoteClient') where
+module Network.GRPC.MQTT.RemoteClient (runRemoteClient, runRemoteClientWithConnect) where
 
 import Relude
 
@@ -113,21 +113,20 @@ runRemoteClient ::
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient logger cfg baseTopic methodMap = do
-  runRemoteClient' logger cfg connectMQTT baseTopic methodMap
+runRemoteClient = runRemoteClientWithConnect connectMQTT
 
-runRemoteClient' ::
+runRemoteClientWithConnect ::
+  -- | A function that creates a client for us to use
+  (MQTTGRPCConfig -> IO MQTTClient) ->
   Logger ->
   -- | MQTT configuration for connecting to the MQTT broker
   MQTTGRPCConfig ->
-  -- | A function that creates a client for us to use
-  (MQTTGRPCConfig -> IO MQTTClient) ->
   -- | Base topic which should uniquely identify the device
   Topic ->
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient' logger cfg connect baseTopic methodMap = do
+runRemoteClientWithConnect connect logger cfg baseTopic methodMap = do
   sharedSessionMap <- newTVarIO mempty
   let gatewayConfig = cfg{_msgCB = gatewayHandler sharedSessionMap}
 

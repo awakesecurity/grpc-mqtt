@@ -5,7 +5,7 @@
 -}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.RemoteClient (runRemoteClient) where
+module Network.GRPC.MQTT.RemoteClient (runRemoteClient, runRemoteClientWithConnect) where
 
 import Relude
 
@@ -113,10 +113,25 @@ runRemoteClient ::
   -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient logger cfg baseTopic methodMap = do
+runRemoteClient = runRemoteClientWithConnect connectMQTT
+
+runRemoteClientWithConnect ::
+  -- | A function that creates a client for us to use
+  (MQTTGRPCConfig -> IO MQTTClient) ->
+  Logger ->
+  -- | MQTT configuration for connecting to the MQTT broker
+  MQTTGRPCConfig ->
+  -- | Base topic which should uniquely identify the device
+  Topic ->
+  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
+  MethodMap ->
+  IO ()
+runRemoteClientWithConnect connect logger cfg baseTopic methodMap = do
   sharedSessionMap <- newTVarIO mempty
   let gatewayConfig = cfg{_msgCB = gatewayHandler sharedSessionMap}
-  bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
+
+  logInfo logger "Connecting to MQTT Broker"
+  bracket (connect gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
     logInfo logger "Connected to MQTT Broker"
 
     handle (logException "MQTT client connection") $ do
@@ -163,7 +178,6 @@ runRemoteClient logger cfg baseTopic methodMap = do
               Nothing -> logInfo taggedLogger "Received control message for non-existant session"
               Just session -> controlMsgHandler taggedLogger session mqttMessage
           _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
-
     logException :: Text -> SomeException -> IO ()
     logException name e =
       logErr logger $

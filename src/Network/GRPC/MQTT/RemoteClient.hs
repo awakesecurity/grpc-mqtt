@@ -1,7 +1,6 @@
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
-{-# LANGUAGE RecordWildCards #-}
 
 -- |
 module Network.GRPC.MQTT.RemoteClient
@@ -9,315 +8,364 @@ module Network.GRPC.MQTT.RemoteClient
   )
 where
 
-import Network.GRPC.MQTT.Core
-  ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
-    connectMQTT,
-    heartbeatPeriodSeconds,
-    subscribeOrThrow,
+---------------------------------------------------------------------------------
+
+import Control.Exception (bracket)
+import Control.Monad.Except (throwError)
+
+import Data.List (stripPrefix)
+import Data.HashMap.Strict qualified as HashMap
+
+import Network.GRPC.HighLevel.Client
+  ( ClientError (ClientErrorNoParse, ClientIOError),
+    ClientResult (ClientNormalResponse)
+  , GRPCMethodType (Normal),
+    StreamSend,
+    StreamRecv,
+    MetadataMap,
+    WritesDone,
   )
+import Network.GRPC.LowLevel (GRPCIOError)
+
+import Network.MQTT.Client
+  ( MessageCallback (SimpleCallback),
+    MQTTClient,
+    normalDisconnect,
+    waitForClient,
+  )
+import Network.MQTT.Topic (Filter, Topic (unTopic), toFilter, split)
+
+import Proto3.Suite
+  ( Enumerated (Enumerated),
+    Message,
+    encodeMessage,
+    fromByteString,
+    toLazyByteString
+  )
+import Proto3.Wire.Encode qualified as Wire.Encode
+import Proto3.Wire.Decode qualified as Wire.Decode
+
+import UnliftIO (TChan, cancel, concurrently_, readTChan, writeTChan)
+import UnliftIO.Exception (handle, handleAny)
+
+---------------------------------------------------------------------------------
+
+import Network.GRPC.HighLevel.Extra (wireEncodeMetadataMap)
+
+import Network.GRPC.MQTT (MQTTException (MQTTException))
+import Network.GRPC.MQTT.Core (Config (..), connectMQTT, subscribeOrThrow)
 import Network.GRPC.MQTT.Logging
   ( Logger (log),
     logDebug,
     logErr,
     logInfo,
-    logWarn,
+    logWarn
+  )
+import Network.GRPC.MQTT.RemoteClient.Handler
+import Network.GRPC.MQTT.RemoteClient.Session
+  ( Session (Session, sessHandlerThread, sessHeartbeatSem, sessRequestChan),
+    SessionCtx (..),
+    SessionManager,
+    SessionMap,
+    lookupSessionMap,
+    newSession,
+    newSessionMap,
+    runSessionManager,
   )
 import Network.GRPC.MQTT.Sequenced
-  ( PublishToStream
-      ( PublishToStream,
-        publishToStream,
-        publishToStreamCompleted
-      ),
-    mkPacketizedPublish,
-    mkPacketizedRead,
-    mkStreamPublish,
-    mkStreamRead,
-  )
-import Network.GRPC.MQTT.Types
-  ( Batched,
-    ClientHandler
-      ( ClientBiDiStreamHandler,
-        ClientClientStreamHandler,
-        ClientServerStreamHandler,
-        ClientUnaryHandler
-      ),
-    MethodMap,
-    SessionId,
-  )
-import Network.GRPC.MQTT.Wrapping
-  ( fromLazyByteString,
-    fromMetadataMap,
-    remoteError,
-    toMetadataMap,
-    wrapResponse,
-  )
+
+import Network.GRPC.MQTT.Request (Request (..))
+import Network.GRPC.MQTT.Request qualified as Request
+
+import Network.GRPC.MQTT.Response.BiDiStreaming qualified as Response.BiDiStreaming
+import Network.GRPC.MQTT.Response.ClientStreaming qualified as Response.ClientStreaming
+import Network.GRPC.MQTT.Response.Normal qualified as Response.Normal
+import Network.GRPC.MQTT.Response.ServerStreaming qualified as Response.ServerStreaming
+
+import Network.GRPC.MQTT.Types (Batched (..), ClientHandler (..), MethodMap)
+import Network.GRPC.MQTT.Wrap (getWrapT, parseErrorToRCE)
+import Network.GRPC.MQTT.Wrapping (remoteError, toRemoteError)
+
 import Proto.Mqtt
   ( AuxControl (AuxControlAlive, AuxControlTerminate),
     AuxControlMessage (AuxControlMessage),
-    MQTTRequest (MQTTRequest),
     RemoteError,
   )
 
-import Control.Exception (bracket)
-import Control.Monad.Except (MonadError (throwError))
-import Data.HashMap.Strict (lookup)
-import Data.List (stripPrefix)
-import Data.Map.Strict qualified as Map
-import Network.GRPC.HighLevel (StreamRecv, StreamSend)
-import Network.GRPC.HighLevel qualified as HL
-import Network.GRPC.HighLevel.Client
-  ( ClientError (ClientIOError),
-    ClientResult (ClientErrorResponse),
-    WritesDone,
-  )
-import Network.GRPC.MQTT (MQTTException (MQTTException))
-import Network.MQTT.Client
-  ( MQTTClient,
-    MessageCallback (SimpleCallback),
-    normalDisconnect,
-    waitForClient,
-  )
-import Network.MQTT.Topic
-  ( Topic (unTopic),
-    split,
-    toFilter,
-  )
-import Proto3.Suite
-  ( Enumerated (Enumerated),
-    Message,
-    fromByteString,
-    toLazyByteString,
-  )
-import Turtle (NominalDiffTime)
-import UnliftIO (TChan, newTChanIO, timeout, writeTChan)
-import UnliftIO.Async (Async, async, cancel, concurrently_, race_)
-import UnliftIO.Exception (finally, handle, handleAny)
+---------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
-
--- | A shared map of all currently running sessions
-type SessionMap = TVar (Map SessionId Session)
-
--- | Holds information for managing a session
-data Session = Session
-  { -- | Handle of the the thread making the gRPC request
-    handlerThread :: Async ()
-  , -- | Variable that must be touched at 'heartbeatPeriod' rate or the session will be terminated
-    sessionHeartbeat :: TMVar ()
-  , -- | Channel for passing MQTT messages to handler thread
-    requestChan :: TChan LByteString
-  }
-
--- | Parameters for creating a new 'Session'
-data SessionArgs = SessionArgs
-  { sessionLogger :: Logger
-  , sessionMap :: SessionMap
-  , client :: MQTTClient
-  , methodMap :: MethodMap
-  , baseTopic :: Topic
-  , sessionId :: Topic
-  , maxMsgSize :: Int64
-  , grpcMethod :: ByteString
-  }
-
--- | The serverside adapter acts as a remote gRPC client.
+-- | TODO
+--
+-- @since 1.0.0
 runRemoteClient ::
   Logger ->
-  -- | MQTT configuration for connecting to the MQTT broker
-  MQTTGRPCConfig ->
-  -- | Base topic which should uniquely identify the device
+  Config ->
   Topic ->
-  -- | A map from gRPC method names to functions that can make requests to an appropriate gRPC server
   MethodMap ->
   IO ()
-runRemoteClient logger cfg baseTopic methodMap = do
-  sharedSessionMap <- newTVarIO mempty
-  let gatewayConfig = cfg{_msgCB = gatewayHandler sharedSessionMap}
-  bracket (connectMQTT gatewayConfig) normalDisconnect $ \gatewayMQTTClient -> do
-    logInfo logger "Connected to MQTT Broker"
+runRemoteClient logger config baseTopic methods = do
+  sharedSessionMap <- newSessionMap
+  let gatewayCallback :: MessageCallback
+      gatewayCallback =
+        simpleGatewayCallback
+          logger
+          config
+          baseTopic
+          methods
+          sharedSessionMap
 
-    handle (logException "MQTT client connection") $ do
-      let grpcRequestsFilter = toFilter baseTopic <> "grpc" <> "request" <> "+" <> "+" <> "+"
-      let controlFilter = toFilter baseTopic <> "grpc" <> "session" <> "+" <> "control"
-      subscribeOrThrow gatewayMQTTClient [grpcRequestsFilter, controlFilter]
+      cfgGateway :: Config
+      cfgGateway = config {_msgCB = gatewayCallback }
+   in bracket
+        (connectMQTT cfgGateway)
+        normalDisconnect
+        (handleRemoteClient logger baseTopic)
 
-      waitForClient gatewayMQTTClient
+-- | TODO
+--
+-- @since 1.0.0
+handleRemoteClient :: Logger -> Topic -> MQTTClient -> IO ()
+handleRemoteClient logger baseTopic gatewayClient = do
+  handle (logException "MQTT client connection") $ do
+    subscribeOrThrow gatewayClient [requestFilter, controlFilter]
+    waitForClient gatewayClient
 
-      logInfo logger "MQTT client connection terminated normally"
+    logInfo logger "MQTT client connection terminated normally"
   where
-    gatewayHandler :: SessionMap -> MessageCallback
-    gatewayHandler sharedSessionMap = SimpleCallback $ \client topic mqttMessage _props -> do
-      logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
+    baseFilter :: Filter
+    baseFilter = toFilter baseTopic
 
-      -- Catch and log any synchronous exception. We don't want an exception
-      -- from an individual callback thread to take down the entire MQTT client.
-      handleAny (logException "gatewayHandler") $ do
-        let getSession :: SessionId -> IO (Maybe Session)
-            getSession sessionId = Map.lookup sessionId <$> readTVarIO sharedSessionMap
+    requestFilter :: Filter
+    requestFilter = baseFilter <> "grpc" <> "request" <> "+" <> "+" <> "+"
 
-        case stripPrefix (split baseTopic) (split topic) of
-          Nothing -> bug $ MQTTException "Base topic mismatch"
-          Just ["grpc", "request", sessionId, service, method] -> do
-            session <-
-              getSession (unTopic sessionId) `whenNothingM` do
-                let taggedLog msg = log logger $ "[" <> unTopic sessionId <> "] " <> msg
-                createNewSession
-                  SessionArgs
-                    { sessionLogger = logger{log = taggedLog}
-                    , sessionMap = sharedSessionMap
-                    , client = client
-                    , methodMap = methodMap
-                    , baseTopic = baseTopic
-                    , sessionId = sessionId
-                    , maxMsgSize = fromIntegral $ mqttMsgSizeLimit cfg
-                    , grpcMethod = encodeUtf8 ("/" <> unTopic service <> "/" <> unTopic method)
-                    }
-            atomically $ writeTChan (requestChan session) mqttMessage
-          Just ["grpc", "session", sessionId, "control"] -> do
-            let taggedLog msg = log logger $ "[" <> unTopic sessionId <> "] " <> msg
-            let taggedLogger = logger{log = taggedLog}
-            getSession (unTopic sessionId) >>= \case
-              Nothing -> logInfo taggedLogger "Received control message for non-existant session"
-              Just session -> controlMsgHandler taggedLogger session mqttMessage
-          _ -> logErr logger $ "Failed to parse topic: " <> unTopic topic
+    controlFilter :: Filter
+    controlFilter = baseFilter <> "grpc" <> "session" <> "+" <> "control"
 
     logException :: Text -> SomeException -> IO ()
     logException name e =
-      logErr logger $
-        name <> " terminated with exception: " <> toText (displayException e)
+      let logmsg :: Text
+          logmsg = name <> " terminated with exception: " <> toText (displayException e)
+       in logErr logger logmsg
 
--- | Creates a new 'Session'
+-- | Handles AuxControl signals from the "/control" topic
+controlMsgHandler :: Logger -> Session -> LByteString -> IO ()
+controlMsgHandler logger session mqttMessage = do
+  case fromByteString (toStrict mqttMessage) of
+    Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
+      -- logInfo logger "Received terminate message"
+      cancel $ sessHandlerThread session
+    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
+      -- logDebug logger "Received heartbeat message"
+      void . atomically $ tryPutTMVar (sessHeartbeatSem session) ()
+    Right ctrl -> do
+      -- logWarn logger $ "Received unknown control message: " <> show ctrl
+      pure ()
+    Left err -> do
+      -- logErr logger $ "Failed to parse control message: " <> show err
+      pure ()
+
+-- | TODO
 --
--- Spawns a thread to handle a request with a watchdog timer to
--- monitor the heartbeat signal.
+-- @since 1.0.0
+simpleGatewayCallback ::
+  Logger ->
+  Config ->
+  Topic ->
+  MethodMap ->
+  SessionMap ->
+  MessageCallback
+simpleGatewayCallback logger config baseTopic methods sharedSessionMap =
+  SimpleCallback \client topic msg _ -> do
+    logInfo logger $ "Remote Client received request at topic: " <> unTopic topic
+    logInfo logger $ "Remote Client message recieved: " <> show msg
+
+    handleAny (logException "gatewayHandler") do
+      case stripPrefix (split baseTopic) (split topic) of
+        Nothing -> do
+          bug $ MQTTException "Base topic mismatch"
+          --
+        Just ["grpc", "request", sessionId, service, method] -> do
+          withSessionIO client sessionId service method \isNewSession session -> do
+            logInfo logger "Remote Client shared message: "
+            atomically (writeTChan (sessRequestChan session) msg)
+            --
+          --
+        Just ["grpc", "session", sessionId, "control"] -> do
+          let taggedLog msg = log logger $ "[" <> unTopic sessionId <> "] " <> msg
+          let taggedLogger = logger{log = taggedLog}
+          lookupSessionMap (unTopic sessionId) sharedSessionMap >>= \case
+            Nothing -> logInfo taggedLogger "Received control message for non-existant session"
+            Just session -> do
+              controlMsgHandler taggedLogger session msg
+          --
+        _ -> do
+          logErr logger $ "Failed to parse topic: " <> unTopic topic
+  where
+
+    logException :: Text -> SomeException -> IO ()
+    logException name e =
+      let logmsg :: Text
+          logmsg = name <> " terminated with exception: " <> toText (displayException e)
+       in logErr logger logmsg
+
+    withSessionIO ::
+      MQTTClient ->
+      Topic ->
+      Topic ->
+      Topic ->
+      (Bool -> Session -> SessionManager ()) ->
+      IO ()
+    withSessionIO client sessionId serviceTopic methodTopic k = do
+      sessionM <- lookupSessionMap (unTopic sessionId) sharedSessionMap
+      let taggedLog :: Text -> IO ()
+          taggedLog msg = log logger $ "[" <> unTopic sessionId <> "] " <> msg
+
+          sessionCtx :: SessionCtx
+          sessionCtx =
+            SessionCtx
+              { sessCtxLogger = logger{log = taggedLog}
+              , sessCtxSessionMap = sharedSessionMap
+              , sessCtxClient = client
+              , sessCtxMethodMap = methods
+              , sessCtxBaseTopic = baseTopic
+              , sessCtxSessionId = sessionId
+              , sessCtxMaxMsgSize = fromIntegral $ mqttMsgSizeLimit config
+              , sessCtxGrpcMethod = encodeUtf8 ("/" <> unTopic serviceTopic <> "/" <> unTopic methodTopic)
+              }
+       in case sessionM of
+            Just session -> runSessionManager (k False session) sessionCtx $> ()
+            Nothing -> runSessionManager (newSession (k True)) sessionCtx $> ()
+
+-- | TODO
 --
--- The new 'Session' is inserted into the global 'SessionMap' and
--- is removed by the handler thread upon completion.
-createNewSession :: SessionArgs -> IO Session
-createNewSession args@SessionArgs{..} = do
-  reqChan <- newTChanIO
-  heartbeatVar <- newTMVarIO ()
+-- @since 1.0.0
+sessionHandleRequest :: Session -> SessionManager ()
+sessionHandleRequest session = do
+  methods <- asks sessCtxMethodMap
+  method <- asks sessCtxGrpcMethod
 
-  let sessionHandler :: IO ()
-      sessionHandler =
-        requestHandlerWithWatchdog
-          `finally` atomically (modifyTVar' sessionMap (Map.delete (unTopic sessionId)))
-        where
-          requestHandlerWithWatchdog :: IO ()
-          requestHandlerWithWatchdog =
-            race_
-              heartbeatMonitor
-              (requestHandler args reqChan)
-          heartbeatMonitor :: IO ()
-          heartbeatMonitor = do
-            watchdog (heartbeatPeriodSeconds + 1) heartbeatVar
-            logWarn sessionLogger "watchdog timed out"
-
-  sessionThread <- async sessionHandler
-
-  let newSession = Session sessionThread heartbeatVar reqChan
-  atomically $ modifyTVar' sessionMap (Map.insert (unTopic sessionId) newSession)
-
-  return newSession
-
--- | Perform the local gRPC call and publish the response
-requestHandler :: SessionArgs -> TChan LByteString -> IO ()
-requestHandler SessionArgs{..} reqChan = do
-  logInfo sessionLogger $ "Received request for the gRPC method: " <> decodeUtf8 grpcMethod
-
-  let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
-  publishRsp' <- mkPacketizedPublish client maxMsgSize responseTopic
-  let publishToResponseTopic :: forall r. Message r => r -> IO ()
-      publishToResponseTopic = publishRsp' . toLazyByteString
-
-  publishErrors publishToResponseTopic . runExceptT $ do
-    clientHandler <-
-      lookup grpcMethod methodMap
-        `whenNothing` throwError (remoteError $ "Failed to find gRPC client for: " <> decodeUtf8 grpcMethod)
-
-    readRequest <- liftIO $ mkPacketizedRead reqChan
-
-    mqttMessage <- readRequest
-
-    (MQTTRequest timeLimit reqMetadata payload) <- hoistEither (fromLazyByteString mqttMessage)
-
-    logDebug sessionLogger $
-      unlines
-        [ "Wrapped request data: "
-        , "  Timeout: " <> show timeLimit
-        , "  Metadata: " <> show (toMetadataMap <$> reqMetadata)
-        ]
-
-    liftIO $ case clientHandler of
-      -- Run Unary Request
-      ClientUnaryHandler handler -> do
-        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata)
-        publishToResponseTopic $ wrapResponse response
-
-      -- Run Client Streaming Request
-      ClientClientStreamHandler handler -> do
-        readStreamChunk <- mkStreamRead readRequest
-        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamSender readStreamChunk)
-        publishToResponseTopic $ wrapResponse response
-
-      -- Run Server Streaming Request
-      ClientServerStreamHandler useBatchedStream handler -> do
-        response <- handler payload (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (streamReader publishToResponseTopic maxMsgSize useBatchedStream)
-        publishToResponseTopic $ wrapResponse response
-
-      -- Run BiDirectional Streaming Request
-      ClientBiDiStreamHandler useBatchedStream handler -> do
-        readStreamChunk <- mkStreamRead readRequest
-        response <- handler (fromIntegral timeLimit) (maybe mempty toMetadataMap reqMetadata) (bidiHandler readStreamChunk publishToResponseTopic maxMsgSize useBatchedStream)
-        publishToResponseTopic $ wrapResponse response
+  case HashMap.lookup method methods of
+    Nothing  -> do
+      sessionId <- asks sessCtxSessionId
+      let errmsg :: LText
+          errmsg = "Failed to find gRPC client for: " <> toLazy (unTopic sessionId)
+       in sessionHandleRemoteError (remoteError errmsg)
+    Just hdl -> do
+      bytes <- liftIO (atomically (readTChan (sessRequestChan session)))
+      case Wire.Decode.parse Request.wireUnwrapRequest (toStrict bytes) of
+        Left perr -> do
+          liftIO $ print ("remote client parse error!")
+          sessionHandleRemoteError (parseErrorToRCE perr)
+          pure ()
+        Right rqt -> do
+          dispatchHandler rqt hdl
   where
-    publishErrors :: (RemoteError -> IO ()) -> IO (Either RemoteError ()) -> IO ()
-    publishErrors publishErr action =
-      action >>= \case
-        Right _ -> pure ()
-        Left err -> do
-          logErr sessionLogger $ show err
-          publishErr err
+    dispatchHandler :: Request ByteString -> ClientHandler -> SessionManager ()
+    dispatchHandler Request {..} (ClientNormalHandler handler) = do
+      client <- asks sessCtxClient
+      topic <- sessionResponseTopic
+      result <- liftIO $ handler rqtMessage rqtTimeout rqtMetadata
 
--- | Runs indefinitely as long as the `TMVar` is filled every `timeLimit` seconds
--- Intended to be used with 'race'
-watchdog :: NominalDiffTime -> TMVar () -> IO ()
-watchdog timeLimit var = loop
-  where
-    uSecs = floor $ timeLimit * 1000000
-    loop =
-      timeout uSecs (atomically (takeTMVar var))
-        `whenJustM` const loop
+      let encoded :: Either ClientError LByteString
+          encoded =
+            Response.Normal.fromClientNormalResult result
+              <&> Response.Normal.wireEncodeNormalResponse
+              <&> Wire.Encode.toLazyByteString
+       in case encoded of
+            Left err -> sessionHandleClientError err
+            Right payload -> liftIO (publishNormal client topic payload)
+      --
+    dispatchHandler Request {..} (ClientClientStreamHandler handler) = do
+      client <- asks sessCtxClient
+      topic <- sessionResponseTopic
+
+      reader <- mkStreamRead =<< liftIO (mkPacketizedRead (sessRequestChan session))
+      result <- liftIO (handler rqtTimeout rqtMetadata (streamSender reader))
+
+      let encoded :: Either ClientError LByteString
+          encoded =
+            Response.ClientStreaming.fromClientStreamingResult result
+              <&> Response.ClientStreaming.wireEncodeClientStreamingResponse
+              <&> Wire.Encode.toLazyByteString
+       in case encoded of
+            Left err -> do
+              liftIO $ print ("remote client response error!")
+              sessionHandleClientError err
+            Right payload -> liftIO (publishNormal client topic payload)
+    dispatchHandler Request {..} (ClientServerStreamHandler batch handler) = do
+      msgLim <- asks sessCtxMaxMsgSize
+      client <- asks sessCtxClient
+      topic <- sessionResponseTopic
+
+      let publish = publishNormal client topic
+      let reader  = streamReader (publish . toLazy) msgLim batch
+      result <- liftIO (handler rqtMessage rqtTimeout rqtMetadata (const reader))
+
+      let encoded :: Either ClientError LByteString
+          encoded =
+            Response.ServerStreaming.fromServerStreamingResult result
+              <&> Response.ServerStreaming.wireEncodeServerStreamingResponse
+              <&> Wire.Encode.toLazyByteString
+       in case encoded of
+            Left err -> do
+              liftIO $ print ("remote client response error!")
+              sessionHandleClientError err
+            Right payload -> liftIO (publishNormal client topic payload)
+    dispatchHandler Request {..} (ClientBiDiStreamHandler batch handler) = do
+      topic <- sessionResponseTopic
+      msgLim <- asks sessCtxMaxMsgSize
+      client <- asks sessCtxClient
+      reader <- mkStreamRead =<< liftIO (mkPacketizedRead (sessRequestChan session))
+
+      let publish = publishNormal client topic
+      let channel = bidiHandler reader (publish . toLazy) msgLim batch
+      result <- liftIO (handler rqtTimeout rqtMetadata (const channel))
+
+      let encoded :: Either ClientError LByteString
+          encoded =
+            Response.BiDiStreaming.fromBiDiStreamingResult result
+              <&> Response.BiDiStreaming.wireEncodeBiDiStreamingResponse
+              <&> Wire.Encode.toLazyByteString
+       in case encoded of
+            Left err -> do
+              liftIO $ print ("remote client response error!")
+              sessionHandleClientError err
+            Right payload -> liftIO (publishNormal client topic payload)
 
 -- | Passes chunks of data from a gRPC stream onto MQTT
+--
+-- @since 1.0.0
 streamReader ::
-  forall response clientcall.
-  (Message response) =>
-  (forall r. (Message r) => r -> IO ()) ->
-  Int64 ->
+  Message rsp =>
+  (ByteString -> IO ()) ->
+  Int ->
   Batched ->
-  clientcall ->
-  HL.MetadataMap ->
-  StreamRecv response ->
+  MetadataMap ->
+  StreamRecv rsp ->
   IO ()
-streamReader publish maxMsgSize useBatch _cc initMetadata recv = do
-  PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish maxMsgSize useBatch publish
+streamReader publish maxMsgSize useBatch initMetadata recv = do
+  PublishToStream pubStream pubDone <- publishStream maxMsgSize useBatch publish
 
   let readLoop :: IO ()
       readLoop =
         recv >>= \case
-          Left err -> publish $ wrapResponse @response (ClientErrorResponse $ ClientIOError err)
-          Right (Just resp) -> do
-            publishToStream resp
-            readLoop
-          Right Nothing ->
-            publishToStreamCompleted
+          Left err -> undefined -- publish $ wrapResponse @response (ClientErrorResponse $ ClientIOError err)
+          Right Nothing -> pubDone
+          Right (Just rsp) ->
+            let rspPayload :: ByteString
+                rspPayload = toStrict (toLazyByteString rsp)
+             in pubStream rspPayload >> readLoop
 
-  publish $ fromMetadataMap initMetadata
+  let metadataEncoded :: ByteString
+      metadataEncoded = toStrict (Wire.Encode.toLazyByteString (wireEncodeMetadataMap 1 initMetadata))
+   in publish metadataEncoded -- encode wire
+
   readLoop
 
--- | Reads chunks from MQTT and send them on to the gRPC stream
-streamSender :: forall request. ExceptT RemoteError IO (Maybe request) -> StreamSend request -> IO ()
+-- | TODO
+--
+-- @since 1.0.0
+streamSender :: ExceptT RemoteError IO (Maybe rqt) -> StreamSend rqt -> IO ()
 streamSender readChunk send = void $ runExceptT loop
   where
     -- TODO: handle any errors in read/send
@@ -329,34 +377,57 @@ streamSender readChunk send = void $ runExceptT loop
           void $ liftIO $ send chunk
           loop
 
+-- | TODO
+--
+-- @since 1.0.0
 bidiHandler ::
-  (Message response) =>
-  ExceptT RemoteError IO (Maybe request) ->
-  (forall r. (Message r) => r -> IO ()) ->
-  Int64 ->
+  Message rsp =>
+  ExceptT RemoteError IO (Maybe rqt) ->
+  (ByteString -> IO ()) ->
+  Int ->
   Batched ->
-  clientcall ->
-  HL.MetadataMap ->
-  StreamRecv response ->
-  StreamSend request ->
+  MetadataMap ->
+  StreamRecv rsp ->
+  StreamSend rqt ->
   WritesDone ->
   IO ()
-bidiHandler readChunk publish maxMsgSize useBatch cc initMetadata recv send writesDone = do
+bidiHandler readChunk publish maxMsgSize useBatch initMetadata recv send writesDone = do
   concurrently_
     (streamSender readChunk send >> writesDone)
-    (streamReader publish maxMsgSize useBatch cc initMetadata recv)
+    (streamReader publish maxMsgSize useBatch initMetadata recv)
 
--- | Handles AuxControl signals from the "/control" topic
-controlMsgHandler :: Logger -> Session -> LByteString -> IO ()
-controlMsgHandler logger session mqttMessage = do
-  case fromByteString (toStrict mqttMessage) of
-    Right (AuxControlMessage (Enumerated (Right AuxControlTerminate))) -> do
-      logInfo logger "Received terminate message"
-      cancel $ handlerThread session
-    Right (AuxControlMessage (Enumerated (Right AuxControlAlive))) -> do
-      logDebug logger "Received heartbeat message"
-      void . atomically $ tryPutTMVar (sessionHeartbeat session) ()
-    Right ctrl ->
-      logWarn logger $ "Received unknown control message: " <> show ctrl
-    Left err ->
-      logErr logger $ "Failed to parse control message: " <> show err
+-- | TODO
+--
+-- @since 1.0.0
+sessionHandleParseError :: Wire.Decode.ParseError -> SessionManager ()
+sessionHandleParseError err = sessionHandleRemoteError (parseErrorToRCE err)
+
+-- | TODO
+--
+-- @since 1.0.0
+sessionHandleGRPCIOError :: GRPCIOError -> SessionManager ()
+sessionHandleGRPCIOError err = sessionHandleClientError (ClientIOError err)
+
+-- | TODO
+--
+-- @since 1.0.0
+sessionHandleClientError :: ClientError -> SessionManager ()
+sessionHandleClientError err = sessionHandleRemoteError (toRemoteError err)
+
+-- | TODO
+--
+-- @since 1.0.0
+sessionHandleRemoteError :: RemoteError -> SessionManager ()
+sessionHandleRemoteError err = do
+  client <- asks sessCtxClient
+  topic <- sessionResponseTopic
+  liftIO (publishNormal client topic (toLazyByteString err))
+
+-- | TODO
+--
+-- @since 1.0.0
+sessionResponseTopic :: SessionManager Topic
+sessionResponseTopic = do
+  baseTopic <- asks sessCtxBaseTopic
+  idTopic <- asks sessCtxSessionId
+  pure (baseTopic <> "grpc" <> "session" <> idTopic)

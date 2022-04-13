@@ -18,10 +18,9 @@ import Proto.Mqtt
     AuxControlMessage (AuxControlMessage),
     RemoteError,
   )
-import Proto.Mqtt qualified as Proto
 
 import Control.Exception (bracket, throw)
-import Control.Monad.Except (withExceptT)
+import Control.Monad.Except (ExceptT (ExceptT), throwError, withExceptT)
 import Crypto.Nonce (Generator, new, nonce128urlT)
 import Network.GRPC.HighLevel
   ( GRPCIOError (GRPCIOTimeout),
@@ -36,41 +35,74 @@ import Network.GRPC.HighLevel.Client
     WritesDone,
   )
 import Network.GRPC.HighLevel.Generated qualified as HL
+import Network.GRPC.HighLevel.Client
 import Network.GRPC.HighLevel.Server (toBS)
+import Proto3.Wire.Encode qualified as Wire.Encode
+import Proto3.Wire.Decode qualified as Wire.Decode
+import Proto3.Suite
+  ( Enumerated (Enumerated),
+    HasDefault,
+    Message,
+    def,
+    toLazyByteString,
+    fromByteString,
+    encodeMessage,
+  )
+import Turtle (sleep)
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async (withAsync)
+import UnliftIO.Exception (handle, onException)
+import UnliftIO.STM
+  ( TChan
+  , newTChanIO
+  , tryReadTChan
+  , readTChan
+  , writeTChan
+  )
+import UnliftIO.Timeout (timeout)
+
+import Network.GRPC.MQTT.Wrap
+  ( WrapT (getWrapT, unwrapT),
+    Wrap,
+    fromEitherT,
+    unwrap,
+    pattern WrapEither,
+    pattern WrapRight,
+    pattern WrapError,
+    readMetadataMap,
+  )
 import Network.GRPC.MQTT.Core
-  ( MQTTGRPCConfig (_msgCB),
+  ( Config (_msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
     subscribeOrThrow,
   )
+
+import Network.GRPC.MQTT.Response.BiDiStreaming qualified as Response.BiDiStreaming
+import Network.GRPC.MQTT.Response.ClientStreaming qualified as Response.ClientStreaming
+import Network.GRPC.MQTT.Response.Normal qualified as Response.Normal
+import Network.GRPC.MQTT.Response.ServerStreaming qualified as Response.ServerStreaming
+
+import Network.GRPC.MQTT.Request (Request (Request))
+import Network.GRPC.MQTT.Request qualified as Request
+
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Sequenced
-  ( PublishToStream
-      ( PublishToStream,
-        publishToStream,
-        publishToStreamCompleted
-      ),
-    mkPacketizedPublish,
-    mkPacketizedRead,
-    mkStreamPublish,
-    mkStreamRead,
-  )
 import Network.GRPC.MQTT.Types
   ( Batched,
     MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Wrapping
-  ( fromMetadataMap,
-    fromRemoteError,
-    parseMessageOrError,
+  ( fromRemoteError,
     toGRPCIOError,
-    toMetadataMap,
     unwrapBiDiStreamResponse,
     unwrapClientStreamResponse,
     unwrapServerStreamResponse,
     unwrapUnaryResponse,
+    toStatusDetails,
+    toStatusCode,
   )
 import Network.MQTT.Client
   ( MQTTClient,
@@ -79,19 +111,6 @@ import Network.MQTT.Client
     normalDisconnect,
   )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
-import Proto3.Suite
-  ( Enumerated (Enumerated),
-    HasDefault,
-    Message,
-    def,
-    toLazyByteString,
-  )
-import Turtle (sleep)
-import UnliftIO (MonadUnliftIO)
-import UnliftIO.Async (withAsync)
-import UnliftIO.Exception (handle, onException)
-import UnliftIO.STM (TChan, newTChanIO, writeTChan)
-import UnliftIO.Timeout (timeout)
 
 --------------------------------------------------------------------------------
 
@@ -109,9 +128,12 @@ data MQTTGRPCClient = MQTTGRPCClient
     msgSizeLimit :: Int64
   }
 
--- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the `MQTTGRPCClient' to the supplied function, closing the connection for you when the function finishes.
+-- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the
+-- `MQTTGRPCClient' to the supplied function, closing the connection for you
+-- when the function finishes.
+--
 -- Disconnects from the MQTT broker with 'normalDisconnect' when finished.
-withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
+withMQTTGRPCClient :: Logger -> Config -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
   bracket
     (connectMQTTGRPC logger cfg)
@@ -141,21 +163,19 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
       mkTopic (unTopic baseRequestTopic <> decodeUtf8 method)
         `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
 
-    publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
+    publishReq' <- mkPacketizedPublish mqttClient (fromIntegral msgSizeLimit) requestTopic
+
     let publishToRequestTopic :: Message r => r -> IO ()
         publishToRequestTopic = publishReq' . toLazyByteString
 
     let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
-        publishRequest req timeLimit reqMetadata = do
+        publishRequest rqt timeLimit reqMetadata = do
           logDebug mqttLogger $ "Publishing message to topic: " <> unTopic requestTopic
-          let protoRequest =
-                Proto.MQTTRequest
-                  (fromIntegral timeLimit)
-                  (Just $ fromMetadataMap reqMetadata)
-                  (toBS req)
-          publishToRequestTopic protoRequest
+          let protoRequest = Request (toStrict $ toLazyByteString rqt) (fromIntegral timeLimit) reqMetadata
+          publishReq' (Wire.Encode.toLazyByteString (Request.wireWrapRequest protoRequest))
 
-    publishCtrl' <- mkPacketizedPublish mqttClient msgSizeLimit controlTopic
+    publishCtrl' <- mkPacketizedPublish mqttClient (fromIntegral msgSizeLimit) controlTopic
+
     let publishToControlTopic :: Message r => r -> IO ()
         publishToControlTopic = publishCtrl' . toLazyByteString
 
@@ -165,12 +185,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
           logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
-    PublishToStream{publishToStream, publishToStreamCompleted} <- mkStreamPublish msgSizeLimit useBatchedStream publishToRequestTopic
+    PublishToStream {..} <- publishStream (fromIntegral msgSizeLimit) useBatchedStream \chunk ->
+          publishReq' (Wire.Encode.toLazyByteString (Request.wireWrapRequest (Request chunk maxBound mempty)))
+
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
-        publishToRequestStream req = do
+        publishToRequestStream rqt = do
           logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-          publishToStream req
-          -- TODO: Fix this. Send errors won't be propagated to client's send handler
+          publishToStream (toStrict $ toLazyByteString rqt)
           return $ Right ()
 
     readResponseTopic <- mkPacketizedRead responseChan
@@ -181,46 +202,72 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
     -- Process request
     case request of
       -- Unary Requests
-      MQTTNormalRequest req timeLimit reqMetadata ->
+      MQTTNormalRequest msg timeLimit reqMetadata ->
         grpcTimeout timeLimit $ do
-          publishRequest req timeLimit reqMetadata
+          let rqt = Request msg timeLimit reqMetadata
+           in publishNormal mqttClient requestTopic (Wire.Encode.toLazyByteString (Request.wireEncodeRequest rqt))
+          -- logDebug mqttLogger $ "Client: published request"
           withControlSignals publishControlMsg . exceptToResult $ do
-            rsp <- readResponseTopic
-            hoistEither $ unwrapUnaryResponse rsp
+            rspBytes <- liftIO do
+              atomically (readTChan responseChan)
+
+            case Wire.Decode.parse Response.Normal.wireDecodeNormalResponse (toStrict rspBytes) of
+              Left err -> do
+                print ("client error: " ++ show err)
+                undefined
+              Right rsp -> do
+                pure (GRPCResult $ Response.Normal.toClientNormalResult rsp)
 
       -- Client Streaming Requests
       MQTTWriterRequest timeLimit initMetadata streamHandler -> do
         grpcTimeout timeLimit $ do
-          publishRequest def timeLimit initMetadata
+          -- publishRequest def timeLimit initMetadata
+          let rqt = Request mempty timeLimit initMetadata
+           in publishNormal mqttClient requestTopic (Wire.Encode.toLazyByteString (Request.wireWrapRequest rqt))
           withControlSignals publishControlMsg . exceptToResult $ do
-            liftIO $ do
-              -- do client streaming
+            liftIO do
               streamHandler publishToRequestStream
-              -- Send end of stream indicator
               publishToStreamCompleted
 
-            rsp <- readResponseTopic
-            hoistEither $ unwrapClientStreamResponse rsp
+            rspBytes <- liftIO do
+              atomically (readTChan responseChan)
+
+            case Wire.Decode.parse Response.ClientStreaming.wireDecodeClientStreamingResponse (toStrict rspBytes) of
+              Left err -> do
+                print ("client error: " ++ show err)
+                undefined
+              Right rsp -> do
+                pure (GRPCResult $ Response.ClientStreaming.toClientStreamingResult rsp)
 
       -- Server Streaming Requests
-      MQTTReaderRequest req timeLimit reqMetadata streamHandler ->
+      MQTTReaderRequest msg timeLimit metadata streamHandler ->
         grpcTimeout timeLimit $ do
-          publishRequest req timeLimit reqMetadata
+          let rqt = Request msg timeLimit metadata
+           in publishNormal mqttClient requestTopic (Wire.Encode.toLazyByteString (Request.wireEncodeRequest rqt))
           withControlSignals publishControlMsg . exceptToResult $ do
             -- Wait for initial metadata
             rawInitMetadata <- readResponseTopic
-            metadata <- hoistEither $ parseMessageOrError rawInitMetadata
+
+            metadata <- case readMetadataMap (fromLazy rawInitMetadata) of
+              WrapError perr -> throwError perr
+              WrapRight meta -> pure meta
 
             readResponseStream <- mkStreamRead readResponseTopic
+
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
 
-            -- Run user-provided stream handler
-            liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv
+             in -- Run user-provided stream handler
+                liftIO $ streamHandler metadata mqttSRecv
 
             -- Return final result
-            rsp <- readResponseTopic
-            hoistEither $ unwrapServerStreamResponse rsp
+            rspBytes <- readResponseTopic
+            case Wire.Decode.parse Response.ServerStreaming.wireDecodeServerStreamingResponse (toStrict rspBytes) of
+              Left err -> do
+                print ("client error: " ++ show err)
+                undefined
+              Right rsp -> do
+                pure (GRPCResult $ Response.ServerStreaming.toServerStreamingResult rsp)
 
       -- BiDirectional Server Streaming Requests
       MQTTBiDiRequest timeLimit reqMetadata streamHandler ->
@@ -229,9 +276,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
           withControlSignals publishControlMsg . exceptToResult $ do
             -- Wait for initial metadata
             rawInitMetadata <- readResponseTopic
-            metadata <- hoistEither $ parseMessageOrError rawInitMetadata
+
+            metadata <- case readMetadataMap (fromLazy rawInitMetadata) of
+              WrapError perr -> throwError perr
+              WrapRight meta -> pure meta
 
             readResponseStream <- mkStreamRead readResponseTopic
+
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
 
@@ -244,11 +295,16 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
                   return $ Right ()
 
             -- Run user-provided stream handler
-            liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
+            liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
-            -- Return final result
-            rsp <- readResponseTopic
-            hoistEither $ unwrapBiDiStreamResponse rsp
+            rspBytes <- readResponseTopic
+            case Wire.Decode.parse Response.BiDiStreaming.wireDecodeBiDiStreamingResponse (toStrict rspBytes) of
+              Left err -> do
+                print ("client error: " ++ show err)
+                undefined
+              Right rsp -> do
+                pure (GRPCResult $ Response.BiDiStreaming.toBiDiStreamingResult rsp)
+
   where
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do
@@ -278,14 +334,14 @@ withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnExcept
 
 -- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
 -- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
-connectMQTTGRPC :: (MonadIO io) => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
+connectMQTTGRPC :: (MonadIO io) => Logger -> Config -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   resultChan <- newTChanIO
 
   let clientMQTTHandler :: MessageCallback
       clientMQTTHandler =
         SimpleCallback $ \_client topic mqttMessage _props -> do
-          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic <> " Raw: " <> decodeUtf8 mqttMessage
+          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic <> "\nRaw: " <> decodeUtf8 mqttMessage
           atomically $ writeTChan resultChan mqttMessage
 
   MQTTGRPCClient

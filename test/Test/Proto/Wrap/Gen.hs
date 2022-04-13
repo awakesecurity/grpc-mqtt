@@ -1,11 +1,11 @@
 -- | Hedgehog generators for us in the @Test.Proto.Wrap@ module group.
 module Test.Proto.Wrap.Gen
   ( -- * Hedgehog Generators
-    seqInfo,
+    -- seqInfo,
     metadataMap,
-    packet,
+    -- packet,
     request,
-    response,
+    -- response,
     stream,
   )
 where
@@ -17,9 +17,9 @@ import Hedgehog.Range qualified as Range
 import Network.GRPC.HighLevel (MetadataMap (MetadataMap))
 
 import Network.GRPC.MQTT.Wrap.Stream (Stream)
-import Network.GRPC.MQTT.Wrap.Request (Request (Request))
-import Network.GRPC.MQTT.Wrap.Response (Response (Response))
-import Network.GRPC.MQTT.Wrap.Packet (Packet (Packet), SeqInfo, fromSeqIx)
+import Network.GRPC.MQTT.Request (Request (Request))
+-- import Network.GRPC.MQTT.Response (Response (Response))
+import Network.GRPC.MQTT.Wrap.Packet (Packet (Packet)) --, SeqInfo, fromSeqIx)
 
 -- -----------------------------------------------------------------------------
 
@@ -28,8 +28,8 @@ import Network.GRPC.MQTT.Wrap.Packet (Packet (Packet), SeqInfo, fromSeqIx)
 -- wrapping = _
 
 -- | 'SeqInfo' generator combinator.
-seqInfo :: MonadGen m => m SeqInfo
-seqInfo = fromSeqIx <$> Gen.word32 Range.constantBounded
+-- seqInfo :: MonadGen m => m SeqInfo
+-- seqInfo = fromSeqIx <$> Gen.word32 Range.constantBounded
 
 -- | 'MetadataMap' generator dependent on Hedgehog's size parameter.
 metadataMap :: MonadGen m => m MetadataMap
@@ -39,26 +39,26 @@ metadataMap = do
     liftA2 (,) sized'bytes (sized'list sized'bytes)
 
 -- | 'Packet' generator dependent on Hedgehog's size parameter.
-packet :: MonadGen m => m Packet
-packet = Packet <$> seqInfo <*> sized'bytes
+-- packet :: MonadGen m => m Packet
+-- packet = Packet <$> seqInfo <*> sized'bytes
 
 -- | 'Request' generator dependent on Hedgehog's size parameter.
-request :: MonadGen m => m Request
+request :: MonadGen m => m (Request ByteString)
 request =
   Request
-    <$> Gen.int64 Range.constantBounded
+    <$> sized'bytes
+    <*> Gen.int Range.constantBounded
     <*> metadataMap
-    <*> sized'bytes
 
 -- | 'Response' generator dependent on Hedgehog's size parameter.
-response :: MonadGen m => m Response
-response =
-  Response
-    <$> sized'bytes
-    <*> metadataMap
-    <*> metadataMap
-    <*> Gen.int32 Range.constantBounded
-    <*> sized'text
+-- response :: MonadGen m => m (Response ByteString)
+-- response =
+--   Response
+--     <$> sized'bytes
+--     <*> metadataMap
+--     <*> metadataMap
+--     <*> Gen.int32 Range.constantBounded
+--     <*> sized'text
 
 -- | 'Stream' generator dependent on Hedgehog's size parameter.
 stream :: MonadGen m => m Stream

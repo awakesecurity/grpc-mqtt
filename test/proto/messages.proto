@@ -1,0 +1,24 @@
+syntax = "proto3";
+package test;
+
+message TwoInts {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message OneInt {
+  int32 result = 1;
+}
+
+message SSRqt {
+  string name = 1;
+  uint32 num_replies = 2;
+}
+
+message SSRpy {
+  string greeting = 1;
+}
+
+message BiRqtRpy {
+  string message = 1;
+}

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+import "proto/message.proto";
+
+// Package declaration is only specified because the proto-suite code generator
+// requires it.
+package haskell.grpc.mqtt.test;
+
+service TestService {
+  /* Unary Service */
+  rpc NormalCall(TwoInts) returns (OneInt) {}
+
+  /* Server Streaming Service */
+  rpc ServerStreamCall(StreamRequest) returns (stream StreamReply) {}
+
+  /* Client Streaming Service */
+  rpc ClientStreamCall(stream OneInt) returns (OneInt) {}
+
+  /* Simple bidi streaming: ping-pong echo */
+  rpc BiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {}
+
+  // /* Server Streaming with batching */
+  // rpc HelloSSBatch(SSRqt) returns (stream SSRpy) {
+  //   option hs_grpc_mqtt_batched_stream = true;
+  // }
+
+  // /* Client Streaming with batching */
+  // rpc RunningSumBatch (stream OneInt) returns (OneInt) {
+  //   option hs_grpc_mqtt_batched_stream = true;
+  // }
+
+  // /* Bidi streaming with batching: ping-pong echo */
+  // rpc HelloBiBatch(stream BiRqtRpy) returns (stream BiRqtRpy) {
+  //   option hs_grpc_mqtt_batched_stream = true;
+  // }
+}

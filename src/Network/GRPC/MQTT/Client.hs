@@ -32,7 +32,7 @@ import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
 import Control.Monad (forever)
 import Control.Monad.Except (ExceptT, liftEither, runExceptT, withExceptT)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.IO.Unlift (MonadUnliftIO, toIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Crypto.Nonce qualified as Nonce
 
@@ -164,9 +164,9 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
     let controlTopic = responseTopic <> "control"
     let baseRequestTopic = baseTopic <> "grpc" <> "request" <> sessionId
 
-    requestTopic <- case mkTopic (Text.Encoding.decodeUtf8 method) of
+    requestTopic <- case mkTopic (unTopic baseRequestTopic <> Text.Encoding.decodeUtf8 method) of
       Nothing -> throw (MQTTException ("gRPC method forms invalid topic: " <> show method))
-      Just topic -> pure (baseRequestTopic <> topic)
+      Just topic -> pure topic
 
     -- `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
 
@@ -199,8 +199,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
           publishToStream req
           -- TODO: Fix this. Send errors won't be propagated to client's send handler
           return $ Right ()
-
-    -- readResponseTopic <- mkPacketizedRead responseChan
 
     -- Subscribe to response topic
     subscribeOrThrow mqttClient [toFilter responseTopic]
@@ -367,7 +365,8 @@ timeout'secs period'secs action =
   -- microseconds (although using @1e6 * secs@ directly needs 'truncate').
   let period'usecs :: Int
       period'usecs = 1_000_000 * period'secs
-   in liftIO . System.timeout period'usecs =<< toIO action
+   in withRunInIO \runIO ->
+        System.timeout period'usecs (runIO action)
 
 -- | Generates a new randomized 128-bit nonce word to use as a fresh remote
 -- client session ID 'Topic'.

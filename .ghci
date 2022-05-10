@@ -1,0 +1,4 @@
+
+:set -fobject-code
+:set -Wno-error=unused-packages
+:set -Wno-unused-packages

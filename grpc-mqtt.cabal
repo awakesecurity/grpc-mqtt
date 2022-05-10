@@ -13,104 +13,134 @@ extra-source-files:  proto/*.proto
 
 common shared-settings
   default-language:   Haskell2010 
-  ghc-options:        -Wall
-                      -Wcompat
-                      -Werror
-                      -Widentities
-                      -Wincomplete-record-updates
-                      -Wincomplete-uni-patterns
-                      -Wmissing-fields
-                      -Wmissing-home-modules
-                      -Wpartial-fields
-                      -Wredundant-constraints
-                      -Wunused-packages
-                      -fshow-warning-groups
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Werror
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-fields
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Wunused-packages
+    -fshow-warning-groups
 
-  default-extensions: BangPatterns
-                      DataKinds
-                      DefaultSignatures
-                      DeriveFoldable
-                      DeriveFunctor
-                      DeriveGeneric
-                      DeriveLift
-                      DeriveTraversable
-                      DerivingStrategies
-                      FlexibleContexts
-                      FlexibleInstances
-                      FunctionalDependencies
-                      GADTs
-                      InstanceSigs
-                      KindSignatures
-                      LambdaCase
-                      MultiParamTypeClasses
-                      NamedFieldPuns
-                      NoImplicitPrelude
-                      OverloadedStrings
-                      PatternSynonyms
-                      RankNTypes
-                      ScopedTypeVariables
-                      StandaloneDeriving
-                      TupleSections
-                      TypeApplications
-                      TypeFamilies
-                      TypeOperators
+  default-extensions:
+    BangPatterns BlockArguments DataKinds DefaultSignatures DeriveFoldable
+    DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies
+    FlexibleContexts FlexibleInstances FunctionalDependencies GADTs
+    ImportQualifiedPost InstanceSigs KindSignatures LambdaCase
+    MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude OverloadedStrings
+    PatternSynonyms RankNTypes ScopedTypeVariables StandaloneDeriving
+    TupleSections TypeApplications TypeFamilies TypeOperators
 
-  build-depends:      base >=4.14 && <4.15
-                    , bytestring
-                    , containers
-                    , deepseq
-                    , grpc-haskell
-                    , grpc-haskell-core
-                    , net-mqtt >= 0.8.1
-                    , proto3-suite
-                    , proto3-wire
-                    , relude
-                    , text
-                    , turtle
-                    , unliftio
-                    , vector
+  build-depends:
+    , async
+    , base >=4.14 && <4.15
+    , bytestring
+    , containers
+    , deepseq
+    , grpc-haskell
+    , grpc-haskell-core
+    , net-mqtt >= 0.8.1
+    , proto3-suite
+    , proto3-wire
+    , relude
+    , safe-exceptions
+    , stm
+    , text
+    , time
+    , turtle
+    , unliftio
+    , unordered-containers
+    , vector
 
 library
   import:             shared-settings
-  exposed-modules:    Network.GRPC.MQTT
-                      Network.GRPC.MQTT.Client
-                      Network.GRPC.MQTT.Core
-                      Network.GRPC.MQTT.Logging
-                      Network.GRPC.MQTT.RemoteClient
-                      Network.GRPC.MQTT.Sequenced
-                      Network.GRPC.MQTT.TH.Client
-                      Network.GRPC.MQTT.TH.Proto
-                      Network.GRPC.MQTT.TH.RemoteClient
-                      Network.GRPC.MQTT.Types
-                      Network.GRPC.MQTT.Wrapping
-  other-modules:      Proto.Mqtt
   ghc-options:        -O2
-  hs-source-dirs:     src gen
-  build-depends:      conduit-extra
-                    , connection
-                    , mtl
-                    , network-conduit-tls
-                    , nonce
-                    , sorted-list
-                    , template-haskell
-                    , unordered-containers
 
-test-suite grpc-mqtt-test
+  hs-source-dirs:
+    src
+    gen/src
+
+  exposed-modules:
+    Control.Concurrent.TMap
+    Network.GRPC.HighLevel.Extra
+    Network.GRPC.MQTT
+    Network.GRPC.MQTT.Client
+    Network.GRPC.MQTT.Core
+    Network.GRPC.MQTT.Logging
+    Network.GRPC.MQTT.Message.Request
+    Network.GRPC.MQTT.RemoteClient
+    Network.GRPC.MQTT.RemoteClient.Session
+    Network.GRPC.MQTT.Sequenced
+    Network.GRPC.MQTT.TH.Client
+    Network.GRPC.MQTT.TH.Proto
+    Network.GRPC.MQTT.TH.RemoteClient
+    Network.GRPC.MQTT.Types
+    Network.GRPC.MQTT.Wrapping
+
+  other-modules:
+    Proto.Mqtt
+
+  build-depends:
+    , conduit-extra
+    , connection
+    , mtl
+    , network-conduit-tls
+    , nonce
+    , sorted-list
+    , template-haskell
+    , unliftio-core
+    , unordered-containers
+
+test-suite test
   import:             shared-settings
-  ghc-options:        -threaded -with-rtsopts=-N2
   type:               exitcode-stdio-1.0
-  hs-source-dirs:     test gen
   main-is:            Test.hs
-  other-modules:      Proto.Test
-                      Test.GRPCServers
-                      Test.Helpers
-                      Test.ProtoClients
-                      Test.ProtoRemoteClients
-  build-depends:      grpc-mqtt   
-                    , connection
-                    , data-default
-                    , tasty
-                    , tasty-hunit
-                    , time
-                    , tls
-                    , x509-store
+
+  hs-source-dirs:
+    test
+    gen/test
+
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N2
+    -O2
+
+  other-modules:
+    Test.Proto.Clients
+    Test.Proto.RemoteClients
+    Test.Proto.Service
+
+    Test.Network.GRPC.HighLevel.Extra
+    Test.Network.GRPC.HighLevel.Extra.Gen
+    Test.Network.GRPC.MQTT.Message.Request
+    Test.Network.GRPC.MQTT.Message.Request.Gen
+
+    Test.Service
+    Test.Message.Gen
+    Test.Request.Gen
+
+    Test.Suite.Config
+    Test.Suite.Fixture
+
+    Proto.Service
+    Proto.Message
+
+  build-depends:
+    , connection
+    , data-default
+    , grpc-mqtt
+    , hedgehog
+    , mtl
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
+    , time
+    , tls
+    , unliftio-core
+    , x509-store

@@ -1,49 +1,31 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
 -- |
 module Test.Service
   ( tests,
-    makeNormalCall,
   )
 where
 
 --------------------------------------------------------------------------------
 
-import Hedgehog
+import Hedgehog (annotateShow, evalIO, failure, (===))
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Hedgehog (testProperty)
 
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
-import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TMVar (newEmptyTMVarIO, putTMVar, readTMVar)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (asks)
 
-import Data.Default (Default (def))
-import Data.Foldable (traverse_)
+import Data.Function (fix)
 
-import Data.String (fromString)
-
-import Network.Connection (TLSSettings (TLSSettings))
-
+import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
-  ( ClientConfig
-      ( ClientConfig,
-        clientArgs,
-        clientAuthority,
-        clientSSLConfig,
-        clientServerHost,
-        clientServerPort
-      ),
-    ClientResult
+  ( ClientResult
       ( ClientBiDiResponse,
         ClientErrorResponse,
         ClientNormalResponse,
@@ -51,68 +33,60 @@ import Network.GRPC.HighLevel.Client
         ClientWriterResponse
       ),
     MetadataMap,
-    Port,
     StreamRecv,
     StreamSend,
     WritesDone,
   )
+import Network.GRPC.HighLevel.Client qualified as GRPC.Client
 import Network.GRPC.HighLevel.Generated
   ( GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
-    ServiceOptions (serverPort),
     StatusCode (StatusOk),
-    defaultServiceOptions,
     withGRPCClient,
   )
+import Network.GRPC.Unsafe qualified as GRPC.Unsafe
 
-import Network.MQTT.Topic (Topic)
-
-import Network.TLS
-  ( ClientHooks (onCertificateRequest),
-    ClientParams (clientHooks, clientShared, clientSupported),
-    Credential,
-    Credentials (Credentials),
-    HostName,
-    Shared (sharedCAStore, sharedCredentials),
-    Supported (supportedCiphers),
-    credentialLoadX509,
-    defaultParamsClient,
-  )
-import Network.TLS.Extra.Cipher (ciphersuite_default)
+import Network.MQTT.Client (publishq, QoS (QoS1))
 
 import Turtle (sleep)
 
 --------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT
-  ( ProtocolLevel (Protocol311),
-  )
-import Network.GRPC.MQTT.Client
-  ( MQTTGRPCClient (mqttClient),
-    withMQTTGRPCClient,
-  )
+import Test.Suite.Config qualified as Suite
+import Test.Suite.Fixture (Fixture, FixtureT)
+import Test.Suite.Fixture qualified as Suite
+
+import Test.Message.Gen qualified as Gen
+import Test.Request.Gen qualified as Gen
+
+--------------------------------------------------------------------------------
+
+import Network.GRPC.MQTT.Client (MQTTGRPCClient, withMQTTGRPCClient)
+import Network.GRPC.MQTT.Client qualified as GRPC.MQTT.Client
 import Network.GRPC.MQTT.Core
-import Network.GRPC.MQTT.Logging (Logger (Logger), Verbosity (Debug, Silent))
-import Network.GRPC.MQTT.RemoteClient
-  ( runRemoteClient,
-  )
+import Network.GRPC.MQTT.Logging (Logger (Logger))
+import Network.GRPC.MQTT.Logging qualified as GRPC.MQTT.Logging
+import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
 import Network.GRPC.MQTT.Types
-  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( MQTTRequest (MQTTBiDiRequest, MQTTReaderRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
+import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
 
 import Test.Proto.Clients (testServiceMqttClient)
 import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
 import Test.Proto.Service (newTestService)
 
-import Proto.Message (BiRqtRpy, OneInt, SSRpy, SSRqt, TwoInts)
+import Proto.Message (BiDiRequestReply, OneInt, StreamReply, TwoInts)
 import Proto.Message qualified as Message
 import Proto.Service
   ( TestService
-      ( TestService,
-        testServiceBiDi,
-        testServiceClientStream,
-        testServiceNormal,
-        testServiceServerStream
+      ( testServiceBatchBiDiStreamCall,
+        testServiceBatchClientStreamCall,
+        testServiceBatchServerStreamCall,
+        testServiceBiDiStreamCall,
+        testServiceClientStreamCall,
+        testServiceNormalCall,
+        testServiceServerStreamCall
       ),
   )
 
@@ -122,75 +96,228 @@ tests :: TestTree
 tests =
   testGroup
     "Test.Service"
-    [ testProperty "Normal RPC Call" testNormalCall
-    , testProperty "Client Stream RPC Call" testClientStreamCall
-    , testProperty "Server Stream RPC Call" testServerStreamCall
-    , testProperty "BiDi Stream RPC Call" testBiDiCall
+    [ Suite.testFixture "Normal RPC Call" testNormalCall
+    , testGroup
+        "Client Stream Calls"
+        [ Suite.testFixture "Unbatched" testClientStreamCall
+        , Suite.testFixture "Batched" testBatchClientStreamCall
+        ]
+    , testGroup
+        "Server Stream RPC Calls"
+        [ Suite.testFixture "Unbatched" testServerStreamCall
+        , Suite.testFixture "Batched" testBatchServerStreamCall
+        ]
+    , testGroup
+        "BiDi Stream RPC Calls"
+        [ Suite.testFixture "Unbatched" testBiDiCall
+        , Suite.testFixture "Batched" testBatchBiDiCall
+        ]
+    , testGroup
+        "Error Cases"
+        [ Suite.testFixture "Missing Client Method" testMissingClientMethod
+        , Suite.testFixture "Client Timeout" testClientTimeout
+        , Suite.testFixture "Malformed Message" testMalformedMessage
+        ]
     ]
 
-runTestService :: IO ()
-runTestService =
-  newTestService
-    defaultServiceOptions
-      { serverPort = 50051
-      }
-
-testClientId :: String
-testClientId = "testClient"
-
-testBaseTopic :: Topic
-testBaseTopic = "testMachine" <> fromString testClientId
-
-clientConfigGRPC :: Port -> ClientConfig
-clientConfigGRPC port =
-  ClientConfig
-    { clientServerHost = "localhost"
-    , clientServerPort = port
-    , clientArgs = []
-    , clientSSLConfig = Nothing
-    , clientAuthority = Nothing
-    }
-
-configGrpcMqtt :: MQTTGRPCConfig
-configGrpcMqtt =
-  defaultMGConfig
-    { useTLS = False
-    , mqttMsgSizeLimit = 128000
-    , _protocol = Protocol311
-    , _hostname = "localhost"
-    , _port = 1883
-    , _tlsSettings =
-        TLSSettings
-          (defaultParamsClient "localhost" "")
-            { clientSupported = def{supportedCiphers = ciphersuite_default}
-            }
-    }
-
-withTestService :: (MQTTGRPCClient -> IO ()) -> IO ()
+withTestService :: (Async () -> IO a) -> FixtureT IO a
 withTestService k = do
-  Async.withAsync runTestService \_ -> do
-    withGRPCClient (clientConfigGRPC 50051) \clientGRPC -> do
-      methods <- testServiceRemoteClientMethodMap clientGRPC
-      Async.withAsync (runRemoteClient logger remoteClientConfig testBaseTopic methods) \_ -> do
+  svcOptions <- Suite.askServiceOptions
+  evalIO (Async.withAsync (newTestService svcOptions) k)
+
+withServiceFixture :: forall a. (MQTTGRPCClient -> IO a) -> FixtureT IO a
+withServiceFixture k = do
+  configGRPC <- Suite.askConfigClientGRPC
+  configMQTT <- Suite.askConfigClientMQTT
+
+  baseTopic <- asks Suite.testConfigBaseTopic
+
+  let remoteConfig = configMQTT{_connID = "test_machine_adaptor"}
+  let clientConfig = configMQTT{_connID = "test_machine_client"}
+
+  withTestService \server -> do
+    withGRPCClient configGRPC \client -> do
+      methods <- testServiceRemoteClientMethodMap client
+      Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
+        Async.link2 server remote
         sleep 1
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
-    logger = Logger print Silent
+    logger = Logger print GRPC.MQTT.Logging.Silent
 
-    remoteClientConfig :: MQTTGRPCConfig
-    remoteClientConfig = configGrpcMqtt{_connID = "test_adaptor"}
+--------------------------------------------------------------------------------
 
-    clientConfig :: MQTTGRPCConfig
-    clientConfig = configGrpcMqtt{_connID = "test_client"}
+testNormalCall :: Fixture
+testNormalCall = Suite.fixture do
+  msg <- Suite.forAll Gen.twoInts
+  rqt <- Suite.forAll (Gen.normalRequest msg)
+  rsp <- makeMethodCall testServiceNormalCall rqt
+  annotateShow rqt
 
-testNormalCall :: Property
-testNormalCall = withTests 1 $ property do
-  let message = Message.TwoInts 4 6
-  let request = MQTTNormalRequest message 5 []
-  response <- liftIO (makeNormalCall request)
+  checkNormalResponse msg rsp
 
-  case response of
+testClientStreamCall :: Fixture
+testClientStreamCall = Suite.fixture do
+  msg <- Suite.forAll (Gen.size'list Gen.oneInt)
+  rqt <- Suite.forAll (Gen.clientStreamRequest msg)
+  rsp <- makeMethodCall testServiceClientStreamCall rqt
+  annotateShow rqt
+
+  checkClientStreamResponse msg rsp
+
+testBatchClientStreamCall :: Fixture
+testBatchClientStreamCall = Suite.fixture do
+  msg <- Suite.forAll (Gen.size'list Gen.oneInt)
+  rqt <- Suite.forAll (Gen.clientStreamRequest msg)
+  rsp <- makeMethodCall testServiceBatchClientStreamCall rqt
+  annotateShow rqt
+
+  checkClientStreamResponse msg rsp
+
+testServerStreamCall :: Fixture
+testServerStreamCall = Suite.fixture do
+  let msg = Message.StreamRequest "Alice" 3
+  let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
+  rsp <- makeMethodCall testServiceServerStreamCall rqt
+  annotateShow rqt
+
+  checkServerStreamResponse rsp
+
+testBatchServerStreamCall :: Fixture
+testBatchServerStreamCall = Suite.fixture do
+  let msg = Message.StreamRequest "Alice" 3
+  let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
+  rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
+  annotateShow rqt
+
+  checkServerStreamResponse rsp
+
+testBiDiCall :: Fixture
+testBiDiCall = Suite.fixture do
+  let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
+  rsp <- makeMethodCall testServiceBiDiStreamCall rqt
+  annotateShow rqt
+
+  checkBiDiStreamResponse rsp
+
+testBatchBiDiCall :: Fixture
+testBatchBiDiCall = Suite.fixture do
+  let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
+  rsp <- makeMethodCall testServiceBatchBiDiStreamCall rqt
+  annotateShow rqt
+
+  checkBiDiStreamResponse rsp
+
+testClientTimeout :: Fixture
+testClientTimeout = Suite.fixture do
+  configMQTT <- Suite.askConfigClientMQTT
+  baseTopic <- asks Suite.testConfigBaseTopic
+
+  let clientConfig = configMQTT{_connID = "test_machine_client"}
+
+  rsp <- evalIO $ withMQTTGRPCClient logger clientConfig \client -> do
+    let msg = Message.TwoInts 5 10
+    let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+    testServiceNormalCall (testServiceMqttClient client baseTopic) rqt
+
+  case rsp of
+    MQTTError err -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientNormalResponse result _ _ status _) -> do
+      annotateShow result
+      annotateShow status
+      failure
+    GRPCResult (ClientErrorResponse err) -> do
+      annotateShow err
+      err === expectation
+  where
+    logger :: Logger
+    logger = Logger print GRPC.MQTT.Logging.Silent
+
+    expectation :: GRPC.Client.ClientError
+    expectation = GRPC.Client.ClientIOError GRPC.GRPCIOTimeout
+
+testMissingClientMethod :: Fixture
+testMissingClientMethod = Suite.fixture do
+  configGRPC <- Suite.askConfigClientGRPC
+  configMQTT <- Suite.askConfigClientMQTT
+  baseTopic <- asks Suite.testConfigBaseTopic
+
+  let remoteConfig = configMQTT{_connID = "test_machine_adaptor"}
+  let clientConfig = configMQTT{_connID = "test_machine_client"}
+
+  rsp <- withTestService \server -> do
+    withGRPCClient configGRPC \_ -> do
+      -- The critical change in this service setup is in passing a @mempty@
+      -- MethodMap to the remote client. This test is ensuring that this
+      -- will cause a failure upon when the remote client attempts to handle
+      -- the non-existent request.
+      let remoteClient = runRemoteClient logger remoteConfig baseTopic mempty
+      Async.withAsync remoteClient \remote -> do
+        Async.link2 server remote
+        sleep 1
+        withMQTTGRPCClient logger clientConfig \clientMQTT -> do
+          let msg = Message.TwoInts 5 10
+          let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+          testServiceNormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+
+  case rsp of
+    MQTTError err -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientNormalResponse result _ _ status _) -> do
+      annotateShow result
+      annotateShow status
+      failure
+    GRPCResult (ClientErrorResponse err) -> do
+      annotateShow err
+      err === expectation
+  where
+    logger :: Logger
+    logger = Logger print GRPC.MQTT.Logging.Silent
+
+    expectation :: GRPC.Client.ClientError
+    expectation = GRPC.Client.ClientIOError (GRPC.GRPCIOCallError GRPC.Unsafe.CallError)
+
+testMalformedMessage :: Fixture
+testMalformedMessage = Suite.fixture do
+  configGRPC <- Suite.askConfigClientGRPC
+  configMQTT <- Suite.askConfigClientMQTT
+  baseTopic <- asks Suite.testConfigBaseTopic
+
+  let remoteConfig = configMQTT{_connID = "test_machine_adaptor"}
+  let clientConfig = configMQTT{_connID = "test_machine_client"}
+
+  let msg = Message.TwoInts 5 10
+  let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+
+  rsp <- withTestService \server -> do
+    withGRPCClient configGRPC \clientGRPC -> do
+      methods <- testServiceRemoteClientMethodMap clientGRPC
+      let remoteClient = runRemoteClient logger remoteConfig baseTopic methods
+      Async.withAsync remoteClient \remote -> do
+        Async.link2 server remote
+        sleep 1
+        withMQTTGRPCClient logger clientConfig \clientMQTT -> do
+          -- Send a malformed message to an unknown topic
+          publishq (GRPC.MQTT.Client.mqttClient clientMQTT) (baseTopic <> "bad") "blah" False QoS1 []
+
+          -- Make a well-formed request to ensure the previous request did not
+          -- take down the service
+          testServiceNormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+
+  checkNormalResponse msg rsp
+  where
+    logger :: Logger
+    logger = Logger print GRPC.MQTT.Logging.Silent
+
+--------------------------------------------------------------------------------
+
+checkNormalResponse :: TwoInts -> MQTTResult 'Normal OneInt -> FixtureT IO ()
+checkNormalResponse (Message.TwoInts x y) rsp =
+  case rsp of
     MQTTError err -> do
       annotateShow err
       failure
@@ -199,15 +326,19 @@ testNormalCall = withTests 1 $ property do
       failure
     GRPCResult (ClientNormalResponse result _ _ status _) -> do
       annotateShow result
-      result === Message.OneInt 10
+      annotateShow status
       status === StatusOk
+      result === expectation
+  where
+    expectation :: OneInt
+    expectation = Message.OneInt (x + y)
 
-testClientStreamCall :: Property
-testClientStreamCall = withTests 1 $ property do
-  let request = MQTTWriterRequest 5 [("a_little_bit", "of_initial_metadata")] clientStream
-  response <- liftIO (makeClientStreamCall request)
-
-  case response of
+checkClientStreamResponse ::
+  [OneInt] ->
+  MQTTResult 'ClientStreaming OneInt ->
+  FixtureT IO ()
+checkClientStreamResponse ints rsp =
+  case rsp of
     MQTTError err -> do
       annotateShow err
       failure
@@ -216,111 +347,97 @@ testClientStreamCall = withTests 1 $ property do
       failure
     GRPCResult (ClientWriterResponse result _ _ status _) -> do
       annotateShow result
+      annotateShow status
       status === StatusOk
+      result === expectation
   where
-    clientStream :: StreamSend OneInt -> IO ()
-    clientStream send = do
-      let ints :: [OneInt]
-          ints = map Message.OneInt [1 .. 3]
-       in traverse_ send ints
+    plusOneInt :: OneInt -> OneInt -> OneInt
+    plusOneInt (Message.OneInt x) (Message.OneInt y) = Message.OneInt (x + y)
 
-testServerStreamCall :: Property
-testServerStreamCall = withTests 1 $ property do
-  let testInput = Message.SSRqt "Alice" 2
-  let request = MQTTReaderRequest testInput 10 [("a_little_bit", "of_initial_metadata")] serverStream
-  liftIO (makeServerStreamCall request)
+    expectation :: Maybe OneInt
+    expectation = Just (foldr plusOneInt (Message.OneInt 0) ints)
+
+checkServerStreamResponse ::
+  MQTTResult 'ServerStreaming StreamReply ->
+  FixtureT IO ()
+checkServerStreamResponse rsp =
+  case rsp of
+    MQTTError err -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientErrorResponse err) -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientReaderResponse _ status _) -> do
+      annotateShow status
+      status === StatusOk
+
+checkBiDiStreamResponse ::
+  MQTTResult 'BiDiStreaming BiDiRequestReply ->
+  FixtureT IO ()
+checkBiDiStreamResponse rsp =
+  case rsp of
+    MQTTError err -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientErrorResponse err) -> do
+      annotateShow err
+      failure
+    GRPCResult (ClientBiDiResponse _ status _) -> do
+      annotateShow status
+      status === StatusOk
+
+--------------------------------------------------------------------------------
+
+type Handler s rqt rsp = MQTTRequest s rqt rsp -> IO (MQTTResult s rsp)
+
+makeMethodCall ::
+  (TestService MQTTRequest MQTTResult -> Handler s rqt rsp) ->
+  MQTTRequest s rqt rsp ->
+  FixtureT IO (MQTTResult s rsp)
+makeMethodCall method request = do
+  baseTopic <- asks Suite.testConfigBaseTopic
+  withServiceFixture \client -> do
+    method (testServiceMqttClient client baseTopic) request
+
+--------------------------------------------------------------------------------
+
+serverStreamHandler :: MetadataMap -> StreamRecv StreamReply -> IO ()
+serverStreamHandler _ recv =
+  fix \loop -> do
+    recieved <- recv
+    case recieved of
+      Left err -> error (show err)
+      Right Nothing -> pure ()
+      Right (Just _) -> loop
+
+bidiStreamHandler ::
+  MetadataMap ->
+  StreamRecv BiDiRequestReply ->
+  StreamSend BiDiRequestReply ->
+  WritesDone ->
+  IO ()
+bidiStreamHandler _ recv send done = do
+  Async.concurrently_ sender reader
   where
-    serverStream :: MetadataMap -> StreamRecv SSRpy -> IO ()
-    serverStream metadata recv =
-      let loop :: IO ()
-          loop = do
-            response <- recv
-            case response of
-              Left err -> do
-                error (show err)
-              Right Nothing -> do
-                pure ()
-              Right (Just msg) -> do
-                print msg
-                loop
-       in loop
+    sender :: IO ()
+    sender = do
+      results <-
+        sequence
+          [ send (Message.BiDiRequestReply "Alice1")
+          , send (Message.BiDiRequestReply "Alice2")
+          , send (Message.BiDiRequestReply "Alice3")
+          , done
+          ]
+      case sequence results of
+        Left err -> error (show err)
+        Right _ -> pure ()
 
-testBiDiCall :: Property
-testBiDiCall = withTests 1 $ property do
-  let request = MQTTBiDiRequest 5 [("a_little_bit", "of_initial_metadata")] bidiStream
-  liftIO (makeBiDiCall request)
-  where
-    bidiStream :: MetadataMap -> StreamRecv BiRqtRpy -> StreamSend BiRqtRpy -> WritesDone -> IO ()
-    bidiStream metadata recv send done = do
-      let testSend = do
-            eithers <-
-              sequence
-                [ send (Message.BiRqtRpy "Alice1")
-                , send (Message.BiRqtRpy "Alice2")
-                , send (Message.BiRqtRpy "Alice3")
-                , done
-                ]
-            case sequence @[] eithers of
-              Left err -> error (show err)
-              Right _ -> pure ()
-
-      Async.concurrently_
-        (serverStream metadata recv)
-        testSend
-
-    serverStream :: MetadataMap -> StreamRecv BiRqtRpy -> IO ()
-    serverStream metadata recv =
-      let loop :: IO ()
-          loop = do
-            response <- recv
-            case response of
-              Left err -> do
-                error (show err)
-              Right Nothing -> do
-                pure ()
-              Right (Just msg) -> do
-                print msg
-                loop
-       in loop
-
-makeNormalCall ::
-  MQTTRequest 'Normal TwoInts OneInt ->
-  IO (MQTTResult 'Normal OneInt)
-makeNormalCall request = do
-  var <- newEmptyTMVarIO
-
-  withTestService \clientMQTT -> do
-    let TestService{testServiceNormal} = testServiceMqttClient clientMQTT testBaseTopic
-    thread <- Async.async (testServiceNormal request)
-    result <- Async.wait thread
-    atomically (putTMVar var result)
-
-  atomically (readTMVar var)
-
-makeClientStreamCall ::
-  MQTTRequest 'ClientStreaming OneInt OneInt ->
-  IO (MQTTResult 'ClientStreaming OneInt)
-makeClientStreamCall request = do
-  var <- newEmptyTMVarIO
-
-  withTestService \clientMQTT -> do
-    let TestService{testServiceClientStream} = testServiceMqttClient clientMQTT testBaseTopic
-    thread <- Async.async (testServiceClientStream request)
-    result <- Async.wait thread
-    atomically (putTMVar var result)
-
-  atomically (readTMVar var)
-
-makeServerStreamCall :: MQTTRequest 'ServerStreaming SSRqt SSRpy -> IO ()
-makeServerStreamCall request = do
-  withTestService \clientMQTT -> do
-    let TestService{testServiceServerStream} = testServiceMqttClient clientMQTT testBaseTopic
-    Async.async (testServiceServerStream request)
-    pure ()
-
-makeBiDiCall :: MQTTRequest 'BiDiStreaming BiRqtRpy BiRqtRpy -> IO ()
-makeBiDiCall request = do
-  withTestService \clientMQTT -> do
-    let TestService{testServiceBiDi} = testServiceMqttClient clientMQTT testBaseTopic
-    Async.async (testServiceBiDi request)
-    pure ()
+    reader :: IO ()
+    reader = do
+      fix \loop -> do
+        recieved <- recv
+        case recieved of
+          Left err -> error (show err)
+          Right Nothing -> pure ()
+          Right (Just _) -> loop

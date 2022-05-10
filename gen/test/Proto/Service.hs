@@ -60,6 +60,21 @@ data TestService request
                               Proto.Message.BiDiRequestReply
                               ->
                               Hs.IO
+                                (response 'HsGRPC.BiDiStreaming Proto.Message.BiDiRequestReply),
+                            testServiceBatchServerStreamCall ::
+                            request 'HsGRPC.ServerStreaming Proto.Message.StreamRequest
+                              Proto.Message.StreamReply
+                              ->
+                              Hs.IO (response 'HsGRPC.ServerStreaming Proto.Message.StreamReply),
+                            testServiceBatchClientStreamCall ::
+                            request 'HsGRPC.ClientStreaming Proto.Message.OneInt
+                              Proto.Message.OneInt
+                              -> Hs.IO (response 'HsGRPC.ClientStreaming Proto.Message.OneInt),
+                            testServiceBatchBiDiStreamCall ::
+                            request 'HsGRPC.BiDiStreaming Proto.Message.BiDiRequestReply
+                              Proto.Message.BiDiRequestReply
+                              ->
+                              Hs.IO
                                 (response 'HsGRPC.BiDiStreaming Proto.Message.BiDiRequestReply)}
               deriving Hs.Generic
  
@@ -70,7 +85,12 @@ testServiceServer
   TestService{testServiceNormalCall = testServiceNormalCall,
               testServiceServerStreamCall = testServiceServerStreamCall,
               testServiceClientStreamCall = testServiceClientStreamCall,
-              testServiceBiDiStreamCall = testServiceBiDiStreamCall}
+              testServiceBiDiStreamCall = testServiceBiDiStreamCall,
+              testServiceBatchServerStreamCall =
+                testServiceBatchServerStreamCall,
+              testServiceBatchClientStreamCall =
+                testServiceBatchClientStreamCall,
+              testServiceBatchBiDiStreamCall = testServiceBatchBiDiStreamCall}
   (ServiceOptions serverHost serverPort useCompression
      userAgentPrefix userAgentSuffix initialMetadata sslConfig logger
      serverMaxReceiveMessageLength serverMaxMetadataSize)
@@ -85,19 +105,34 @@ testServiceServer
                                    (HsGRPC.MethodName
                                       "/haskell.grpc.mqtt.test.TestService/ClientStreamCall")
                                    (HsGRPC.convertGeneratedServerReaderHandler
-                                      testServiceClientStreamCall))],
+                                      testServiceClientStreamCall)),
+                                (HsGRPC.ClientStreamHandler
+                                   (HsGRPC.MethodName
+                                      "/haskell.grpc.mqtt.test.TestService/BatchClientStreamCall")
+                                   (HsGRPC.convertGeneratedServerReaderHandler
+                                      testServiceBatchClientStreamCall))],
                              HsGRPC.optServerStreamHandlers =
                                [(HsGRPC.ServerStreamHandler
                                    (HsGRPC.MethodName
                                       "/haskell.grpc.mqtt.test.TestService/ServerStreamCall")
                                    (HsGRPC.convertGeneratedServerWriterHandler
-                                      testServiceServerStreamCall))],
+                                      testServiceServerStreamCall)),
+                                (HsGRPC.ServerStreamHandler
+                                   (HsGRPC.MethodName
+                                      "/haskell.grpc.mqtt.test.TestService/BatchServerStreamCall")
+                                   (HsGRPC.convertGeneratedServerWriterHandler
+                                      testServiceBatchServerStreamCall))],
                              HsGRPC.optBiDiStreamHandlers =
                                [(HsGRPC.BiDiStreamHandler
                                    (HsGRPC.MethodName
                                       "/haskell.grpc.mqtt.test.TestService/BiDiStreamCall")
                                    (HsGRPC.convertGeneratedServerRWHandler
-                                      testServiceBiDiStreamCall))],
+                                      testServiceBiDiStreamCall)),
+                                (HsGRPC.BiDiStreamHandler
+                                   (HsGRPC.MethodName
+                                      "/haskell.grpc.mqtt.test.TestService/BatchBiDiStreamCall")
+                                   (HsGRPC.convertGeneratedServerRWHandler
+                                      testServiceBatchBiDiStreamCall))],
                              optServerHost = serverHost, optServerPort = serverPort,
                              optUseCompression = useCompression,
                              optUserAgentPrefix = userAgentPrefix,
@@ -131,3 +166,18 @@ testServiceClient client
          (HsGRPC.clientRegisterMethod client
             (HsGRPC.MethodName
                "/haskell.grpc.mqtt.test.TestService/BiDiStreamCall")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName
+               "/haskell.grpc.mqtt.test.TestService/BatchServerStreamCall")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName
+               "/haskell.grpc.mqtt.test.TestService/BatchClientStreamCall")))
+      <*>
+      ((Hs.pure (HsGRPC.clientRequest client)) <*>
+         (HsGRPC.clientRegisterMethod client
+            (HsGRPC.MethodName
+               "/haskell.grpc.mqtt.test.TestService/BatchBiDiStreamCall")))

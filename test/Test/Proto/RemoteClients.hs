@@ -15,11 +15,15 @@ import Network.GRPC.MQTT.TH.RemoteClient (mqttRemoteClientMethodMap)
 import Network.GRPC.MQTT.Types (Batched (Unbatched))
 
 import Proto.Service
-  ( testServiceBiDi,
+  ( TestService (TestService),
+    testServiceBatchBiDiStreamCall,
+    testServiceBatchClientStreamCall,
+    testServiceBatchServerStreamCall,
+    testServiceBiDiStreamCall,
     testServiceClient,
-    testServiceClientStream,
-    testServiceNormal,
-    testServiceServerStream,
+    testServiceClientStreamCall,
+    testServiceNormalCall,
+    testServiceServerStreamCall,
   )
 
 ---------------------------------------------------------------------------------

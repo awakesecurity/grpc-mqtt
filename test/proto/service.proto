@@ -19,18 +19,18 @@ service TestService {
   /* Simple bidi streaming: ping-pong echo */
   rpc BiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {}
 
-  // /* Server Streaming with batching */
-  // rpc HelloSSBatch(SSRqt) returns (stream SSRpy) {
-  //   option hs_grpc_mqtt_batched_stream = true;
-  // }
+  /* Server Streaming with batching */
+  rpc BatchServerStreamCall(StreamRequest) returns (stream StreamReply) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
 
-  // /* Client Streaming with batching */
-  // rpc RunningSumBatch (stream OneInt) returns (OneInt) {
-  //   option hs_grpc_mqtt_batched_stream = true;
-  // }
+  /* Client Streaming with batching */
+  rpc BatchClientStreamCall (stream OneInt) returns (OneInt) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
 
-  // /* Bidi streaming with batching: ping-pong echo */
-  // rpc HelloBiBatch(stream BiRqtRpy) returns (stream BiRqtRpy) {
-  //   option hs_grpc_mqtt_batched_stream = true;
-  // }
+  /* BiDi streaming with batching: ping-pong echo */
+  rpc BatchBiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
+    option hs_grpc_mqtt_batched_stream = true;
+  }
 }

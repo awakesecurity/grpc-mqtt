@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Test.Proto.Clients
-  ( testServiceMqttClient
+  ( testServiceMqttClient,
   )
 where
 
@@ -16,11 +16,13 @@ import Network.GRPC.MQTT.Types (Batched (Unbatched))
 
 import Proto.Service
   ( TestService (TestService),
-    testServiceBiDi,
-    testServiceClient,
-    testServiceClientStream,
-    testServiceNormal,
-    testServiceServerStream,
+    testServiceBatchBiDiStreamCall,
+    testServiceBatchClientStreamCall,
+    testServiceBatchServerStreamCall,
+    testServiceBiDiStreamCall,
+    testServiceClientStreamCall,
+    testServiceNormalCall,
+    testServiceServerStreamCall,
   )
 
 ---------------------------------------------------------------------------------

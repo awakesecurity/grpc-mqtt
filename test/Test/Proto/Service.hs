@@ -12,15 +12,21 @@ where
 
 ---------------------------------------------------------------------------------
 
+import Control.Concurrent.Async qualified as Async
+
+import Control.Monad (forM, forM_)
+
 import Data.Foldable (for_)
 import Data.Function (fix)
 import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.Maybe (isJust)
 
+import Data.Either (fromRight)
 import Data.String (fromString)
 import Data.Text.Lazy qualified as Lazy (Text)
 import Data.Text.Lazy qualified as Lazy.Text
+import Data.ByteString.Lazy qualified as Lazy.ByteString
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
@@ -57,11 +63,18 @@ import Network.GRPC.HighLevel.Server
       ),
   )
 
+import Proto3.Suite
 import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
 
-import Proto.Message (BiRqtRpy, OneInt, SSRpy, SSRqt, TwoInts)
+import Proto.Message
+  ( BiDiRequestReply,
+    OneInt,
+    StreamReply,
+    StreamRequest,
+    TwoInts,
+  )
 import Proto.Message qualified as Message
 import Proto.Service (TestService)
 import Proto.Service qualified as Proto
@@ -74,10 +87,14 @@ newTestService = Proto.testServiceServer testServiceHandlers
     testServiceHandlers :: TestService ServerRequest ServerResponse
     testServiceHandlers =
       Proto.TestService
-        { Proto.testServiceNormal = handleClientNormal
-        , Proto.testServiceClientStream = handleClientStream
-        , Proto.testServiceServerStream = handleServerStream
-        , Proto.testServiceBiDi = handleBiDi
+        { Proto.testServiceNormalCall = handleClientNormal
+        , Proto.testServiceClientStreamCall = handleClientStream
+        , Proto.testServiceServerStreamCall = handleServerStream
+        , Proto.testServiceBiDiStreamCall = handleBiDi
+        -- Batched Streaming Calls
+        , Proto.testServiceBatchClientStreamCall = handleClientStream
+        , Proto.testServiceBatchServerStreamCall = handleServerStream
+        , Proto.testServiceBatchBiDiStreamCall = handleBiDi
         }
 
 ---------------------------------------------------------------------------------
@@ -87,7 +104,7 @@ newTestService = Proto.testServiceServer testServiceHandlers
 
 type Handler s rqt rsp = ServerRequest s rqt rsp -> IO (ServerResponse s rsp)
 
-handleClientNormal :: Handler 'Normal TwoInts OneInt
+handleClientNormal :: Handler 'Normal Message.TwoInts Message.OneInt
 handleClientNormal (ServerNormalRequest _ (Message.TwoInts x y)) =
   let response :: Message.OneInt
       response = Message.OneInt (x + y)
@@ -99,7 +116,7 @@ handleClientNormal (ServerNormalRequest _ (Message.TwoInts x y)) =
       details = fromString ("client normal: added ints " ++ show x ++ " & " ++ show y)
    in return (ServerNormalResponse response metadata StatusOk details)
 
-handleClientStream :: Handler 'ClientStreaming OneInt OneInt
+handleClientStream :: Handler 'ClientStreaming Message.OneInt Message.OneInt
 handleClientStream (ServerReaderRequest _ recv) = loop 0
   where
     loop :: Int32 -> IO (ServerResponse 'ClientStreaming OneInt)
@@ -117,22 +134,22 @@ handleClientStream (ServerReaderRequest _ recv) = loop 0
       | isJust xs = ServerReaderResponse xs [] StatusOk . fromString
       | otherwise = ServerReaderResponse xs [] StatusUnknown . fromString
 
-handleServerStream :: Handler 'ServerStreaming SSRqt SSRpy
-handleServerStream (ServerWriterRequest _ (Message.SSRqt name n) ssend) = do
-  for_ @[] [1 .. n] \i -> do
-    let greeting :: Lazy.Text
-        greeting = "Hello, " <> name <> " - " <> Lazy.Text.pack (show i)
-     in ssend (Message.SSRpy greeting) $> ()
+handleServerStream :: Handler 'ServerStreaming StreamRequest StreamReply
+handleServerStream (ServerWriterRequest _ (Message.StreamRequest name n) ssend) = do
+  forM_ @[] [1 .. n] \i -> do
+    let greet = name <> Lazy.Text.pack (show i)
+    _ <- ssend (Message.StreamReply greet)
     sleep 0.1
 
-  let metadata :: MetadataMap
-      metadata = [("server_writer_key", "server_writer_metadata")]
+  pure (ServerWriterResponse metadata StatusOk details)
+  where
+    metadata :: MetadataMap
+    metadata = [] -- [("server_writer_key", "server_writer_metadata")]
 
-      details :: StatusDetails
-      details = fromString ("server writer: greeted " ++ show name)
-   in return (ServerWriterResponse metadata StatusOk details)
+    details :: StatusDetails
+    details = fromString ("stream is done" ++ show name)
 
-handleBiDi :: Handler 'BiDiStreaming BiRqtRpy BiRqtRpy
+handleBiDi :: Handler 'BiDiStreaming BiDiRequestReply BiDiRequestReply
 handleBiDi (ServerBiDiRequest _ recv send) = fix \go ->
   recv >>= \case
     Left e -> fail $ "helloBi recv error: " ++ show e

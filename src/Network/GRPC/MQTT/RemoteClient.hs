@@ -457,7 +457,6 @@ clientStreamSender source = do
     let reader :: Session (Maybe a)
         reader = streamReader source
      in runSessionIO (loop send reader) config
->>>>>>> tests-refactor
   where
     loop :: StreamSend a -> Session (Maybe a) -> Session ()
     loop sender reader = do

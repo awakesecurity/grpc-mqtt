@@ -64,4 +64,3 @@ testOptions =
   , Option (Proxy @(TestOption "server-host" Host))
   , Option (Proxy @(TestOption "base-topic" Topic))
   ]
->>>>>>> tests-refactor

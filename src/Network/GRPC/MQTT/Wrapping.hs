@@ -248,7 +248,6 @@ unwrapStreamChunk msg =
               Right rsp -> Right rsp
       Just <$> traverse parse chunks
 
->>>>>>> tests-refactor
 -- Utilities
 remoteError :: LText -> RemoteError
 remoteError errMsg = RemoteError (Enumerated (Right RErrorMQTTFailure)) errMsg Nothing

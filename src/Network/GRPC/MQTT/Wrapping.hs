@@ -19,10 +19,8 @@ module Network.GRPC.MQTT.Wrapping
     wrapClientStreamingClientHandler,
     wrapServerStreamingClientHandler,
     wrapBiDiStreamingClientHandler,
-    toStatusCode,
-    toStatusDetails,
-    fromStatusCode,
-    fromStatusDetails,
+    unwrapBiDiStreamResponse,
+    parseErrorToRCE,
   )
 where
 
@@ -75,17 +73,22 @@ import Network.GRPC.MQTT.RemoteClient.Handler
 type Handler :: Type -> Type -> Constraint
 type Handler rqt rsp = (Message rqt, Message rsp)
 
+---------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------
+
 -- Client Handler Wrappers
 wrapUnaryClientHandler ::
   -- (Request ByteString -> IO (Response ByteString)) ->
   Handler rqt rsp =>
   (ClientRequest 'Normal rqt rsp -> IO (ClientResult 'Normal rsp)) ->
   ClientHandler
-wrapUnaryClientHandler k =
-  ClientNormalHandler \rawRqt timeout metadata ->
-    case fromByteString rawRqt of
+wrapUnaryClientHandler handler =
+  ClientUnaryHandler $ \raw timeout metadata ->
+    case fromByteString raw of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
-      Right req -> k (ClientNormalRequest req timeout metadata)
+      Right msg -> handler (ClientNormalRequest msg timeout metadata)
 
 wrapServerStreamingClientHandler ::
   Handler rqt rsp =>
@@ -115,6 +118,137 @@ wrapBiDiStreamingClientHandler useBatchedStream handler =
   ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
     handler (ClientBiDiRequest timeout metadata bidi)
 
+-- Responses
+wrapResponse :: (Message response) => ClientResult streamType response -> WrappedResponse
+wrapResponse res =
+  WrappedResponse . Just $
+    case res of
+      ClientNormalResponse rspBody initMD trailMD rspCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (Just $ ResponseBody (toBS rspBody))
+            (Just $ fromMetadataMap initMD)
+            (Just $ fromMetadataMap trailMD)
+            (fromStatusCode rspCode)
+            (fromStatusDetails details)
+      ClientWriterResponse rspBody initMD trailMD rspCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (ResponseBody . toBS <$> rspBody)
+            (Just $ fromMetadataMap initMD)
+            (Just $ fromMetadataMap trailMD)
+            (fromStatusCode rspCode)
+            (fromStatusDetails details)
+      ClientReaderResponse rspMetadata statusCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
+            (Just $ fromMetadataMap rspMetadata)
+            (fromStatusCode statusCode)
+            (fromStatusDetails details)
+      ClientBiDiResponse rspMetadata statusCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
+            (Just $ fromMetadataMap rspMetadata)
+            (fromStatusCode statusCode)
+            (fromStatusDetails details)
+      ClientErrorResponse err ->
+        WrappedResponseOrErrorError $ toRemoteError err
+
+data ParsedMQTTResponse response = ParsedMQTTResponse
+  { responseBody :: Maybe response
+  , initMetadata :: HL.MetadataMap
+  , trailMetadata :: HL.MetadataMap
+  , statusCode :: StatusCode
+  , statusDetails :: StatusDetails
+  }
+
+unwrapResponse :: forall response. (Message response) => LByteString -> Either RemoteError (ParsedMQTTResponse response)
+unwrapResponse wrappedMessage = do
+  MQTTResponse{..} <-
+    case fromLazyByteString wrappedMessage of
+      Left err -> Left err
+      Right (WrappedResponse Nothing) -> Left $ remoteError "Empty response"
+      Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> Left err
+      Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> Right rsp
+
+  responseBody <-
+    case fromByteString . responseBodyValue <$> mqttresponseBody of
+      Just (Left err) -> Left $ parseErrorToRCE err
+      Nothing -> Right Nothing
+      Just (Right r) -> Right (Just r)
+
+  let initMetadata = maybe mempty toMetadataMap mqttresponseInitMetamap
+  let trailMetadata = maybe mempty toMetadataMap mqttresponseTrailMetamap
+
+  statusCode <-
+    case toStatusCode mqttresponseResponseCode of
+      Nothing -> Left $ remoteError ("Invalid reponse code: " <> Relude.show mqttresponseResponseCode)
+      Just sc -> Right sc
+
+  let statusDetails = toStatusDetails mqttresponseDetails
+
+  return $
+    ParsedMQTTResponse
+      responseBody
+      initMetadata
+      trailMetadata
+      statusCode
+      statusDetails
+
+unwrapUnaryResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'Normal response)
+unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMessage
+  where
+    toNormalResult :: ParsedMQTTResponse response -> MQTTResult 'Normal response
+    toNormalResult ParsedMQTTResponse{..} =
+      case responseBody of
+        Nothing -> MQTTError "Empty response body"
+        (Just body) -> GRPCResult $ ClientNormalResponse body initMetadata trailMetadata statusCode statusDetails
+
+unwrapClientStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ClientStreaming response)
+unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toClientStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ClientStreaming response
+    toClientStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientWriterResponse responseBody initMetadata trailMetadata statusCode statusDetails
+
+unwrapServerStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ServerStreaming response)
+unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toServerStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ServerStreaming response
+    toServerStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientReaderResponse trailMetadata statusCode statusDetails
+
+unwrapBiDiStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'BiDiStreaming response)
+unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse wrappedMessage
+  where
+    toBiDiStreamResult :: ParsedMQTTResponse response -> MQTTResult 'BiDiStreaming response
+    toBiDiStreamResult ParsedMQTTResponse{..} =
+      GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
+
+-- Stream Chunks
+wrapStreamChunk :: Maybe (Vector ByteString) -> WrappedStreamChunk
+wrapStreamChunk chunks =
+  WrappedStreamChunk
+    (WrappedStreamChunkOrErrorElems . WrappedStreamChunk_Elems <$> chunks)
+
+unwrapStreamChunk :: forall a. (Message a) => LByteString -> Either RemoteError (Maybe (Vector a))
+unwrapStreamChunk msg =
+  fromLazyByteString msg >>= \case
+    WrappedStreamChunk Nothing -> Right Nothing
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
+    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorElems (WrappedStreamChunk_Elems chunks))) -> do
+      let parse :: ByteString -> Either RemoteError a
+          parse chunk =
+            case fromByteString chunk of
+              Left err -> Left $ parseErrorToRCE err
+              Right rsp -> Right rsp
+      Just <$> traverse parse chunks
+
+>>>>>>> tests-refactor
 -- Utilities
 remoteError :: LText -> RemoteError
 remoteError errMsg = RemoteError (Enumerated (Right RErrorMQTTFailure)) errMsg Nothing

@@ -1,6 +1,8 @@
-
 -- Basic verbosity
 :set -v1
+
+-- Compile to object code
+:set -fobject-code
 
 -- Silence warnings that are unhelpful in GHCi.
 :set -Wno-unused-packages

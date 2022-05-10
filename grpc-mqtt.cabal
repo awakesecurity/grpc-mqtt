@@ -15,10 +15,8 @@ extra-source-files:
   proto/*.proto
 
 common shared-settings
-  default-language: Haskell2010
-
+  default-language:   Haskell2010
   ghc-options:
-    -fshow-warning-groups
     -Wall
     -Wcompat
     -Werror
@@ -30,60 +28,56 @@ common shared-settings
     -Wpartial-fields
     -Wredundant-constraints
     -Wunused-packages
+    -fshow-warning-groups
 
   default-extensions:
-    BangPatterns DataKinds DefaultSignatures DeriveFoldable DeriveFunctor
-    DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies
+    BangPatterns BlockArguments DataKinds DefaultSignatures DeriveFoldable
+    DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies
     FlexibleContexts FlexibleInstances FunctionalDependencies GADTs
-    ImportQualifiedPost InstanceSigs GeneralizedNewtypeDeriving KindSignatures
-    LambdaCase MultiParamTypeClasses NamedFieldPuns OverloadedStrings
+    ImportQualifiedPost InstanceSigs KindSignatures LambdaCase
+    MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude OverloadedStrings
     PatternSynonyms RankNTypes ScopedTypeVariables StandaloneDeriving
     TupleSections TypeApplications TypeFamilies TypeOperators
 
   build-depends:
-      base >=4.14 && <4.15
+    , async
+    , base >=4.14 && <4.15
     , bytestring
     , containers
+    , deepseq
     , grpc-haskell
     , grpc-haskell-core
     , net-mqtt >= 0.8.1
     , proto3-suite
     , proto3-wire
     , relude
+    , safe-exceptions
+    , stm
     , text
+    , time
     , turtle
     , unliftio
+    , unordered-containers
     , vector
 
 library
-  import:         shared-settings
-  hs-source-dirs: src
+  import:             shared-settings
+  ghc-options:        -O2
 
-  ghc-options:
-    -O2
-
-  mixins:
-    , base hiding (Prelude)
-    , relude (Relude as Prelude)
-    , relude
-
-  build-depends:
-      conduit-extra
-    , connection
-    , grpc-mqtt-proto
-    , mtl
-    , network-conduit-tls
-    , nonce
-    , sorted-list
-    , template-haskell
-    , unordered-containers
+  hs-source-dirs:
+    src
+    gen/src
 
   exposed-modules:
+    Control.Concurrent.TMap
+    Network.GRPC.HighLevel.Extra
     Network.GRPC.MQTT
     Network.GRPC.MQTT.Client
     Network.GRPC.MQTT.Core
     Network.GRPC.MQTT.Logging
+    Network.GRPC.MQTT.Message.Request
     Network.GRPC.MQTT.RemoteClient
+    Network.GRPC.MQTT.RemoteClient.Session
     Network.GRPC.MQTT.Sequenced
     Network.GRPC.MQTT.TH.Client
     Network.GRPC.MQTT.TH.Proto
@@ -91,49 +85,65 @@ library
     Network.GRPC.MQTT.Types
     Network.GRPC.MQTT.Wrapping
 
-library grpc-mqtt-proto
-  default-language: Haskell2010
-  hs-source-dirs:   gen
-
-  build-depends:
-      base >=4.14 && <4.15
-    , bytestring
-    , containers
-    , deepseq
-    , proto3-wire
-    , proto3-suite
-    , text
-    , vector
-
-  exposed-modules:
+  other-modules:
     Proto.Mqtt
 
-test-suite grpc-mqtt-test
-  import:  shared-settings
-  type:    exitcode-stdio-1.0
-  main-is: Test.hs
+  build-depends:
+    , conduit-extra
+    , connection
+    , mtl
+    , network-conduit-tls
+    , nonce
+    , sorted-list
+    , template-haskell
+    , unliftio-core
+    , unordered-containers
+
+test-suite test
+  import:             shared-settings
+  type:               exitcode-stdio-1.0
+  main-is:            Test.hs
 
   hs-source-dirs:
     test
-    gen
+    gen/test
 
   ghc-options:
     -threaded
+    -rtsopts
     -with-rtsopts=-N2
+    -O2
+
+  other-modules:
+    Test.Proto.Clients
+    Test.Proto.RemoteClients
+    Test.Proto.Service
+
+    Test.Network.GRPC.HighLevel.Extra
+    Test.Network.GRPC.HighLevel.Extra.Gen
+    Test.Network.GRPC.MQTT.Message.Request
+    Test.Network.GRPC.MQTT.Message.Request.Gen
+
+    Test.Service
+    Test.Message.Gen
+    Test.Request.Gen
+
+    Test.Suite.Config
+    Test.Suite.Fixture
+
+    Proto.Service
+    Proto.Message
 
   build-depends:
-      grpc-mqtt
     , connection
     , data-default
+    , grpc-mqtt
+    , hedgehog
+    , mtl
     , tasty
+    , tasty-hedgehog
     , tasty-hunit
     , time
     , tls
+    , unliftio-core
     , x509-store
-
-  other-modules:
-    Proto.Test
-    Test.GRPCServers
-    Test.Helpers
-    Test.ProtoClients
-    Test.ProtoRemoteClients

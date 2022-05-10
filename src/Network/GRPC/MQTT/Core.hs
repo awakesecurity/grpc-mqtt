@@ -2,9 +2,13 @@
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ImplicitPrelude #-}
 
--- |
+-- | TODO
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
@@ -14,7 +18,13 @@ module Network.GRPC.MQTT.Core
   )
 where
 
+--------------------------------------------------------------------------------
+
 import Control.Exception (throw)
+
+import Control.Monad (unless)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+
 import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
   ( TLSClientConfig
@@ -24,9 +34,17 @@ import Data.Conduit.Network.TLS
       ),
     runTLSClient,
     tlsClientConfig,
-  )
+
+import Data.Bifunctor (first)
+import Data.Either (lefts)
+import Data.Time.Clock (NominalDiffTime)
+
+import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.List qualified as L
+import Data.Text qualified as Text
+
 import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
+
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTConduit,
@@ -55,11 +73,12 @@ import Network.MQTT.Client
   )
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
-import Turtle (NominalDiffTime)
 
 --------------------------------------------------------------------------------
 
 -- | Superset of 'MQTTConfig'
+--
+-- @since 1.0.0
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
@@ -81,6 +100,9 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , _tlsSettings :: TLSSettings
   }
 
+-- | TODO
+--
+-- @since 1.0.0
 defaultMGConfig :: MQTTGRPCConfig
 defaultMGConfig =
   MQTTGRPCConfig
@@ -102,10 +124,14 @@ defaultMGConfig =
     }
 
 -- | Project 'MQTTConfig' from 'MQTTGRPCConfig'
+--
+-- @since 1.0.0
 getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
+--
+-- @since 1.0.0
 connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTConfig cfg)
   where
@@ -114,7 +140,7 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
 
     tlsCfg :: TLSClientConfig
     tlsCfg =
-      (tlsClientConfig _port (encodeUtf8 _hostname))
+      (tlsClientConfig _port (ByteString.Char8.pack _hostname))
         { tlsClientTLSSettings = _tlsSettings
         , tlsClientUseTLS = useTLS
         , tlsClientSockSettings = brokerProxy
@@ -124,9 +150,14 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
     toMQTTConduit ad = (appSource ad, appSink ad)
 
 -- | Period for heartbeat messages
+--
+-- @since 1.0.0
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 
+-- | TODO
+--
+-- @since 1.0.0
 subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
 subscribeOrThrow client topics = do
   let subTopics = zip topics (repeat subOptions{_subQoS = QoS1})
@@ -138,4 +169,4 @@ subscribeOrThrow client topics = do
     throw $ MQTTException err
   where
     errMsg :: (Filter, SubErr) -> String
-    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
+    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> Text.unpack (unFilter topic) <> "Reason: " <> show subErr

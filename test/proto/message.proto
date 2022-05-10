@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+// Package declaration is only specified because the proto-suite code generator
+// requires it.
+package haskell.grpc.mqtt.test;
+
+message TwoInts {
+  int32 int1 = 1;
+  int32 int2 = 2;
+}
+
+message OneInt {
+  int32 result = 1;
+}
+
+message StreamRequest {
+  string name = 1;
+  uint32 num_replies = 2;
+}
+
+message StreamReply {
+  string reply = 1;
+}
+
+message BiDiRequestReply {
+  string reply = 1;
+}

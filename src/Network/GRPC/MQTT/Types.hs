@@ -1,6 +1,9 @@
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
+{-# LANGUAGE ImplicitPrelude #-}
 
 -- |
 module Network.GRPC.MQTT.Types
@@ -12,6 +15,13 @@ module Network.GRPC.MQTT.Types
     Batched (..),
   )
 where
+
+--------------------------------------------------------------------------------
+
+import Data.ByteString (ByteString)
+import Data.Text (Text)
+import Data.HashMap.Strict (HashMap)
+import Data.List (intercalate)
 
 import Language.Haskell.TH.Syntax (Lift)
 
@@ -25,6 +35,7 @@ import Network.GRPC.HighLevel.Client
     WritesDone,
   )
 import Network.GRPC.LowLevel (ClientCall)
+
 import Proto3.Suite (Message)
 
 --------------------------------------------------------------------------------
@@ -56,11 +67,27 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
     (MetadataMap -> StreamRecv rsp -> StreamSend rqt -> WritesDone -> IO ()) ->
     MQTTRequest 'BiDiStreaming rqt rsp
 
+-- | @since 1.0.0
+instance Show rqt => Show (MQTTRequest s rqt rsp) where
+  show (MQTTNormalRequest x timeout metadata) =
+    intercalate " " [show 'MQTTNormalRequest, show x, show timeout, show metadata]
+  show (MQTTWriterRequest timeout metadata _) =
+    intercalate " " [show 'MQTTWriterRequest, show timeout, show metadata]
+  show (MQTTReaderRequest x timeout metadata _) =
+    intercalate " " [show 'MQTTReaderRequest, show x, show timeout, show metadata]
+  show (MQTTBiDiRequest timeout metadata _) =
+    intercalate " " [show 'MQTTBiDiRequest, show timeout, show metadata]
+  {-# INLINE show #-}
+
+--------------------------------------------------------------------------------
+
 -- | The result of a gRPC request that makes a distinction between
 -- errors that occured as part of the GRPC call itself, or in the MQTT handling.
 data MQTTResult streamtype response
   = MQTTError Text
   | GRPCResult (ClientResult streamtype response)
+
+--------------------------------------------------------------------------------
 
 -- | A map from gRPC method names to their corresponding handler
 type MethodMap = HashMap ByteString ClientHandler
@@ -98,7 +125,5 @@ data ClientHandler where
 -- streamed in a short time. On the other hand, it is not a good idea to
 -- batch RPCs that send small messages infrequently (long-poll) because
 -- messages will not be published immediately.
-data Batched
-  = Unbatched
-  | Batched
+data Batched = Unbatched | Batched
   deriving (Eq, Ord, Lift)

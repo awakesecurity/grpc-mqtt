@@ -19,6 +19,7 @@ where
 --------------------------------------------------------------------------------
 
 import Data.ByteString (ByteString)
+import Data.Kind (Type)
 import Data.Text (Text)
 import Data.HashMap.Strict (HashMap)
 import Data.List (intercalate)

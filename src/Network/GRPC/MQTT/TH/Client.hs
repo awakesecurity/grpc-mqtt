@@ -12,6 +12,8 @@ module Network.GRPC.MQTT.TH.Client
   )
 where
 
+import Relude
+
 import Network.GRPC.MQTT.TH.Proto (forEachService)
 
 import Language.Haskell.TH

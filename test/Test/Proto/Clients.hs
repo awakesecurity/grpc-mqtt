@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
 module Test.Proto.Clients
   ( testServiceMqttClient,
   )

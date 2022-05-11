@@ -8,6 +8,8 @@
 -- |
 module Network.GRPC.MQTT.TH.Proto where
 
+import Relude
+
 import Network.GRPC.MQTT.Wrapping
   ( wrapBiDiStreamingClientHandler,
     wrapClientStreamingClientHandler,

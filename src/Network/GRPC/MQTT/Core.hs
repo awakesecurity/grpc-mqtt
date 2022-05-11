@@ -33,7 +33,8 @@ import Data.Conduit.Network.TLS
         tlsClientUseTLS
       ),
     runTLSClient,
-    tlsClientConfig,
+    tlsClientConfig
+  )
 
 import Data.Bifunctor (first)
 import Data.Either (lefts)

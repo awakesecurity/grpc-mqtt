@@ -253,7 +253,6 @@ handleControlMessage logger handle msg = do
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   request <- liftIO (runExceptT (withExceptT parseErrorToRCE (packetReader (hdlRqtChan handle))))
-  -- request <- liftIO (runExceptT readpkt)
 
   case decode =<< request of
     Left err -> do

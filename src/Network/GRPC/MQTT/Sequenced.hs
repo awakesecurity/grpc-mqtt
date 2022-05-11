@@ -1,6 +1,8 @@
--- Copyright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
+{-
+  Copyright (c) 2021 Arista Networks, Inc.
+  Use of this source code is governed by the Apache License 2.0
+  that can be found in the COPYING file.
+-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -28,7 +30,7 @@ import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 
 import Data.Foldable (foldl', toList)
-import Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
 import Data.Int (Int64)
 
 import Data.ByteString (ByteString)
@@ -54,11 +56,6 @@ import Proto3.Wire.Decode qualified as Decode
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
--- import Network.GRPC.MQTT.Message.StreamChunk
---   ( StreamChunk (StreamChunk),
---     wireUnwrapStreamChunk,
---     wireWrapStreamChunk,
---   )
 import Network.GRPC.MQTT.Types (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping
   ( wrapStreamChunk,
@@ -76,7 +73,7 @@ packetReader ::
   TChan Lazy.ByteString ->
   ExceptT Decode.ParseError IO Lazy.ByteString
 packetReader channel = do
-  payloads <- liftIO (orderPacketReader channel)
+  payloads <- liftIO (atomically (orderPacketReader channel))
   case payloads of
     Left err -> throwError err
     Right xs -> pure (ByteString.Builder.toLazyByteString (builder xs))
@@ -89,16 +86,17 @@ packetReader channel = do
 -- @since 1.0.0
 orderPacketReader ::
   TChan Lazy.ByteString ->
-  IO (Either Decode.ParseError [ByteString])
+  STM (Either Decode.ParseError [ByteString])
 orderPacketReader channel = do
-  buffer <- TMap.emptyIO
-  result <- atomically (collect buffer)
+  buffer <- TMap.empty
+  result <- collect buffer
 
   case result of
     Nothing -> do
-      chunks <- TMap.toAscListIO buffer
+      chunks <- TMap.toAscList buffer
       pure (Right (map snd chunks))
-    Just err -> pure (Left err)
+    Just err -> do
+      pure (Left err)
   where
     collect :: TMap Int ByteString -> STM (Maybe Decode.ParseError)
     collect buffer = do
@@ -150,7 +148,7 @@ mkStreamRead readRequest = liftIO do
             if Vector.null reqs
               then readNextChunk >> readStreamChunk
               else liftIO do
-                writeIORef reqsRef (Just $ Vector.tail reqs)
+                atomicWriteIORef reqsRef (Just $ Vector.tail reqs)
                 return (Just $ Vector.head reqs)
 
   return readStreamChunk

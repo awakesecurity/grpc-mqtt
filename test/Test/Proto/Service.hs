@@ -12,37 +12,19 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.Async qualified as Async
+import Control.Monad (forM_)
 
-import Control.Monad (forM, forM_)
-
-import Data.Foldable (for_)
 import Data.Function (fix)
-import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.Maybe (isJust)
 
-import Data.Either (fromRight)
 import Data.String (fromString)
-import Data.Text.Lazy qualified as Lazy (Text)
 import Data.Text.Lazy qualified as Lazy.Text
-import Data.ByteString.Lazy qualified as Lazy.ByteString
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
     StatusCode (StatusOk, StatusUnknown),
     StatusDetails,
-  )
-import Network.GRPC.HighLevel.Client
-  ( ClientConfig
-      ( ClientConfig,
-        clientArgs,
-        clientAuthority,
-        clientSSLConfig,
-        clientServerHost,
-        clientServerPort
-      ),
-    Port,
   )
 import Network.GRPC.HighLevel.Generated
   ( GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
@@ -63,7 +45,6 @@ import Network.GRPC.HighLevel.Server
       ),
   )
 
-import Proto3.Suite
 import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
@@ -73,7 +54,6 @@ import Proto.Message
     OneInt,
     StreamReply,
     StreamRequest,
-    TwoInts,
   )
 import Proto.Message qualified as Message
 import Proto.Service (TestService)

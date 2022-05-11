@@ -72,9 +72,9 @@ bidiRequestReply = fmap Message.BiDiRequestReply lazy'text
 size'list :: MonadGen m => m a -> m [a]
 size'list gen =
   Gen.sized \s -> do
-    let range = Range.constant 1 (fromIntegral s)
-    high <- Gen.int range
-    Gen.list range gen
+    let range :: Range Int
+        range = Range.constant 1 (fromIntegral s)
+     in Gen.list range gen
 
 lazy'text :: MonadGen m => m Lazy.Text
 lazy'text =

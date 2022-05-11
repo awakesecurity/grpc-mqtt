@@ -4,5 +4,8 @@
 -- Compile to object code
 :set -fobject-code
 
--- Silence warnings that are unhelpful in GHCi.
-:set -Wno-unused-packages
+-- Silence -Werror where it is unhelpful in GHCi.
+:set -Wno-error=unused-packages
+:set -Wno-error=unused-matches
+:set -Wno-error=unused-imports
+:set -Wno-error=unused-top-binds

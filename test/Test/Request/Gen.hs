@@ -14,32 +14,13 @@ where
 
 --------------------------------------------------------------------------------
 
-import Hedgehog (MonadGen, Range)
-import Hedgehog.Gen qualified as Gen
-import Hedgehog.Range qualified as Range
+import Hedgehog (MonadGen)
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.Async (Async)
-import Control.Concurrent.Async qualified as Async
-
-import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TQueue (TQueue, writeTQueue)
-
-import Control.Monad.IO.Class (MonadIO, liftIO)
-
 import Data.Foldable (traverse_)
-import Data.Function (fix)
 
-import Data.Either (lefts)
-import Data.IORef (IORef, atomicWriteIORef, modifyIORef')
-import Data.Text.Lazy qualified as Lazy.Text
-
-import Network.GRPC.HighLevel (GRPCIOError)
-import Network.GRPC.HighLevel.Client (GRPCMethodType)
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
-import Network.GRPC.HighLevel.Server (ServerRequest, ServerResponse)
-import Network.GRPC.HighLevel.Server qualified as GRPC.Server
 
 import Network.GRPC.MQTT.Types (MQTTRequest)
 import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
@@ -47,11 +28,6 @@ import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
 --------------------------------------------------------------------------------
 
 import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
-
---------------------------------------------------------------------------------
-
-import Proto.Message (BiDiRequestReply, StreamRequest, StreamReply)
-import Proto.Message qualified as Message
 
 --------------------------------------------------------------------------------
 

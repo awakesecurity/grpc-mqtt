@@ -11,7 +11,7 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Hedgehog (MonadGen, Property, forAll, property, tripping)
+import Hedgehog (Property, forAll, property, tripping)
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog (testProperty)
@@ -20,7 +20,6 @@ import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
 

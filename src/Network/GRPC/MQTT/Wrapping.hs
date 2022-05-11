@@ -1,20 +1,25 @@
--- Copright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
-{-# LANGUAGE ConstraintKinds #-}
+{-
+  Copyright (c) 2021 Arista Networks, Inc.
+  Use of this source code is governed by the Apache License 2.0
+  that can be found in the COPYING file.
+-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE RecordWildCards #-}
--- Disable import lists in order to avoid having to enumerate the constructors
--- for error handler types exported by 'grpc-haskell'.
-{-# OPTIONS_GHC -Wno-missing-import-lists #-}
 
--- |
 module Network.GRPC.MQTT.Wrapping
-  ( fromRemoteError,
-    toRemoteError,
+  ( fromLazyByteString,
+    fromRemoteError,
     parseMessageOrError,
     remoteError,
     toGRPCIOError,
+    toMetadataMap,
+    fromMetadataMap,
+    wrapStreamChunk,
+    unwrapStreamChunk,
+    wrapResponse,
+    unwrapUnaryResponse,
+    unwrapClientStreamResponse,
+    unwrapServerStreamResponse,
     wrapUnaryClientHandler,
     wrapClientStreamingClientHandler,
     wrapServerStreamingClientHandler,
@@ -24,54 +29,66 @@ module Network.GRPC.MQTT.Wrapping
   )
 where
 
-import Control.Exception (ErrorCall, try)
-import GHC.IO.Unsafe (unsafePerformIO)
-import Network.GRPC.HighLevel as HL
-  ( GRPCIOError (..),
-    MetadataMap,
-    StatusCode,
-    StatusDetails (StatusDetails, unStatusDetails),
-  )
-import Data.Text.Lazy qualified as Text.Lazy
-import Network.GRPC.HighLevel.Server (toBS)
-import Network.GRPC.Unsafe (CallError (..))
-import Proto3.Suite (Enumerated (Enumerated), Message, fromByteString)
-import Proto3.Wire.Decode (ParseError (..))
-import Proto3.Wire.Decode qualified as Wire.Decode
-import Network.GRPC.HighLevel.Client
-  ( ClientError (..),
-    ClientRequest (..),
-    ClientResult (..),
-    GRPCMethodType (..),
-  )
+import Relude
 
 import Network.GRPC.MQTT.Types
   ( Batched,
-    ClientHandler (..),
-    MQTTResult (GRPCResult, MQTTError),
+    ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+    MQTTResult (..),
   )
-import Network.GRPC.MQTT.Wrap qualified as Wrap
-import Network.GRPC.MQTT.Wrap
-  ( Wrap, WrapT
-  , parseErrorToRCE
-  , pattern WrapEither
-  , pattern WrapEitherT
-  , pattern WrapError
-  , pattern WrapRight, unwrap )
-import Proto.Mqtt
-  ( RError (..),
+
+import Proto.Mqtt as Proto
+  ( MQTTResponse (..),
+    MetadataMap (MetadataMap),
+    MetadataMap_Entry (MetadataMap_Entry),
+    RError (..),
     RemoteError (..),
     RemoteErrorExtra (..),
+    ResponseBody (ResponseBody, responseBodyValue),
+    WrappedResponse (WrappedResponse),
+    WrappedResponseOrError
+      ( WrappedResponseOrErrorError,
+        WrappedResponseOrErrorResponse
+      ),
+    WrappedStreamChunk (WrappedStreamChunk),
+    WrappedStreamChunkOrError
+      ( WrappedStreamChunkOrErrorElems,
+        WrappedStreamChunkOrErrorError
+      ),
+    WrappedStreamChunk_Elems (WrappedStreamChunk_Elems),
   )
 
---------------------------------------------------------------------------------
-
-import Network.GRPC.MQTT.RemoteClient.Handler
-
---------------------------------------------------------------------------------
-
-type Handler :: Type -> Type -> Constraint
-type Handler rqt rsp = (Message rqt, Message rsp)
+import Control.Exception (ErrorCall, try)
+import qualified Data.Map as M
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+import GHC.IO.Unsafe (unsafePerformIO)
+import Network.GRPC.HighLevel as HL
+  ( GRPCIOError (..),
+    MetadataMap (MetadataMap),
+    StatusCode,
+    StatusDetails (..),
+  )
+import Network.GRPC.HighLevel.Client
+  ( ClientError (..),
+    ClientRequest (ClientBiDiRequest, ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
+    ClientResult
+      ( ClientBiDiResponse,
+        ClientErrorResponse,
+        ClientNormalResponse,
+        ClientReaderResponse,
+        ClientWriterResponse
+      ),
+    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
+  )
+import Network.GRPC.HighLevel.Server (toBS)
+import Network.GRPC.Unsafe (CallError (..))
+import Proto3.Suite
+  ( Enumerated (Enumerated),
+    Message,
+    fromByteString,
+  )
+import Proto3.Wire.Decode (ParseError (..))
 
 ---------------------------------------------------------------------------------
 
@@ -80,9 +97,8 @@ type Handler rqt rsp = (Message rqt, Message rsp)
 
 -- Client Handler Wrappers
 wrapUnaryClientHandler ::
-  -- (Request ByteString -> IO (Response ByteString)) ->
-  Handler rqt rsp =>
-  (ClientRequest 'Normal rqt rsp -> IO (ClientResult 'Normal rsp)) ->
+  (Message request, Message response) =>
+  (ClientRequest 'Normal request response -> IO (ClientResult 'Normal response)) ->
   ClientHandler
 wrapUnaryClientHandler handler =
   ClientUnaryHandler $ \raw timeout metadata ->
@@ -91,28 +107,28 @@ wrapUnaryClientHandler handler =
       Right msg -> handler (ClientNormalRequest msg timeout metadata)
 
 wrapServerStreamingClientHandler ::
-  Handler rqt rsp =>
+  (Message request, Message response) =>
   Batched ->
-  (ClientRequest 'ServerStreaming rqt rsp -> IO (ClientResult 'ServerStreaming rsp)) ->
+  (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
   ClientHandler
 wrapServerStreamingClientHandler useBatchedStream handler =
-  ClientServerStreamHandler useBatchedStream $ \rawRqt timeout metadata recv ->
-    case fromByteString rawRqt of
+  ClientServerStreamHandler useBatchedStream $ \rawRequest timeout metadata recv ->
+    case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)
 
 wrapClientStreamingClientHandler ::
-  Handler rqt rsp =>
-  (ClientRequest 'ClientStreaming rqt rsp -> IO (ClientResult 'ClientStreaming rsp)) ->
+  (Message request, Message response) =>
+  (ClientRequest 'ClientStreaming request response -> IO (ClientResult 'ClientStreaming response)) ->
   ClientHandler
 wrapClientStreamingClientHandler handler =
   ClientClientStreamHandler $ \timeout metadata send -> do
     handler (ClientWriterRequest timeout metadata send)
 
 wrapBiDiStreamingClientHandler ::
-  Handler rqt rsp =>
+  (Message request, Message response) =>
   Batched ->
-  (ClientRequest 'BiDiStreaming rqt rsp -> IO (ClientResult 'BiDiStreaming rsp)) ->
+  (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
   ClientHandler
 wrapBiDiStreamingClientHandler useBatchedStream handler =
   ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
@@ -250,13 +266,39 @@ unwrapStreamChunk msg =
 
 -- Utilities
 remoteError :: LText -> RemoteError
-remoteError errMsg = RemoteError (Enumerated (Right RErrorMQTTFailure)) errMsg Nothing
+remoteError errMsg =
+  RemoteError
+    { remoteErrorErrorType = Enumerated $ Right RErrorMQTTFailure
+    , remoteErrorMessage = errMsg
+    , remoteErrorExtra = Nothing
+    }
 
--- FIXME: duplicated 'fromLazyByteString'?
-parseMessageOrError :: Message a => LByteString -> Either RemoteError a
-parseMessageOrError = unwrap . Wrap.fromLazyByteString
+parseMessageOrError :: (Message a) => LByteString -> Either RemoteError a
+parseMessageOrError msg =
+  case fromLazyByteString msg of
+    Right a -> Right a
+    Left err ->
+      case fromLazyByteString msg of
+        Left _ -> Left err
+        Right recvErr -> Left recvErr
+
+fromLazyByteString :: Message a => LByteString -> Either RemoteError a
+fromLazyByteString msg =
+  case fromByteString (toStrict msg) of
+    Left parseErr -> Left $ parseErrorToRCE parseErr
+    Right x -> Right x
 
 -- Protobuf type conversions
+
+toMetadataMap :: Proto.MetadataMap -> HL.MetadataMap
+toMetadataMap (Proto.MetadataMap m) = HL.MetadataMap $ foldMap toMap m
+  where
+    toMap (MetadataMap_Entry k v) = M.singleton k (V.toList v)
+
+fromMetadataMap :: HL.MetadataMap -> Proto.MetadataMap
+fromMetadataMap (HL.MetadataMap m) = Proto.MetadataMap $ foldMap toVec (M.toAscList m)
+  where
+    toVec (k, v) = V.singleton $ MetadataMap_Entry k (V.fromList v)
 
 toStatusCode :: Int32 -> Maybe StatusCode
 toStatusCode = toEnumMaybe . fromIntegral
@@ -310,7 +352,7 @@ toRemoteError (ClientIOError ge) =
     wrapRCE errType = RemoteError (Enumerated (Right errType))
     wrapPlainRCE errType = wrapRCE errType "" Nothing
 
-fromRemoteError :: RemoteError -> MQTTResult streamtype rsp
+fromRemoteError :: RemoteError -> MQTTResult streamtype response
 fromRemoteError (RemoteError (Enumerated errType) errMsg errExtra) =
   case errType of
     Right RErrorIOGRPCCallOk -> wrapGRPCResult $ GRPCIOCallError CallOk
@@ -359,6 +401,14 @@ handleEmbedded (RemoteErrorExtraEmbeddedError (RemoteError (Enumerated (Right er
     _ -> Nothing
 handleEmbedded _ = Nothing
 
+parseErrorToRCE :: ParseError -> RemoteError
+parseErrorToRCE (WireTypeError txt) = RemoteError (Enumerated (Right RErrorNoParseWireType)) txt Nothing
+parseErrorToRCE (BinaryError txt) = RemoteError (Enumerated (Right RErrorNoParseBinary)) txt Nothing
+parseErrorToRCE (EmbeddedError txt m_pe) =
+  RemoteError
+    (Enumerated (Right RErrorNoParseEmbedded))
+    txt
+    (RemoteErrorExtraEmbeddedError . parseErrorToRCE <$> m_pe)
 
 toGRPCIOError :: RemoteError -> GRPCIOError
 toGRPCIOError (RemoteError (Enumerated errType) errMsg errExtra) =

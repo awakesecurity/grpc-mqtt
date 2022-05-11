@@ -1,6 +1,10 @@
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
@@ -54,21 +58,12 @@ import Network.GRPC.HighLevel.Client
   )
 import Network.GRPC.HighLevel.Generated qualified as HL
 import Network.GRPC.MQTT.Core
-  ( Config (_msgCB),
+  ( MQTTGRPCConfig (_msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
     subscribeOrThrow,
   )
-
-import Network.GRPC.MQTT.Response.BiDiStreaming qualified as Response.BiDiStreaming
-import Network.GRPC.MQTT.Response.ClientStreaming qualified as Response.ClientStreaming
-import Network.GRPC.MQTT.Response.Normal qualified as Response.Normal
-import Network.GRPC.MQTT.Response.ServerStreaming qualified as Response.ServerStreaming
-
-import Network.GRPC.MQTT.Request (Request (Request))
-import Network.GRPC.MQTT.Request qualified as Request
-
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Types
   ( Batched,
@@ -175,8 +170,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
 
     -- `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
 
-    publishReq' <- mkPacketizedPublish mqttClient (fromIntegral msgSizeLimit) requestTopic
-
+    publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
     let publishToRequestTopic :: Message r => r -> IO ()
         publishToRequestTopic = publishReq' . Proto3.toLazyByteString
 
@@ -188,6 +182,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
           logDebug mqttLogger $ "Publishing message: " <> Text.pack (show encoded)
           publishReq' encoded
 
+    publishCtrl' <- mkPacketizedPublish mqttClient msgSizeLimit controlTopic
     let publishToControlTopic :: Message r => r -> IO ()
         publishToControlTopic = publishCtrl' . Proto3.toLazyByteString
 
@@ -197,13 +192,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
           logDebug mqttLogger $ "Publishing control message " <> Text.pack (show ctrl) <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
-    PublishToStream {..} <- publishStream (fromIntegral msgSizeLimit) useBatchedStream \chunk ->
-          publishReq' (Wire.Encode.toLazyByteString (Request.wireWrapRequest (Request chunk maxBound mempty)))
-
+    PublishToStream{publishToStream, publishToStreamCompleted} <-
+      mkStreamPublish msgSizeLimit useBatchedStream publishToRequestTopic
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
-        publishToRequestStream rqt = do
+        publishToRequestStream req = do
           logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-          publishToStream (toStrict $ toLazyByteString rqt)
+          publishToStream req
+          -- TODO: Fix this. Send errors won't be propagated to client's send handler
           return $ Right ()
 
     -- Subscribe to response topic
@@ -224,8 +219,10 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
         timeoutGRPC timeLimit $ do
           publishRequest Proto3.def timeLimit initMetadata
           withControlSignals publishControlMsg . exceptToResult $ do
-            liftIO do
+            liftIO $ do
+              -- do client streaming
               streamHandler publishToRequestStream
+              -- Send end of stream indicator
               publishToStreamCompleted
 
             rsp <- withExceptT parseErrorToRCE (packetReader responseChan)
@@ -274,15 +271,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
                   return $ Right ()
 
             -- Run user-provided stream handler
-            liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
-
-            rspBytes <- readResponseTopic
-            case Wire.Decode.parse Response.BiDiStreaming.wireDecodeBiDiStreamingResponse (toStrict rspBytes) of
-              Left err -> do
-                print ("client error: " ++ show err)
-                undefined
-              Right rsp -> do
-                pure (GRPCResult $ Response.BiDiStreaming.toBiDiStreamingResult rsp)
+            liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
 
             -- Return final result
             rsp <- withExceptT parseErrorToRCE (packetReader responseChan)

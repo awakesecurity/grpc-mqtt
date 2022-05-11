@@ -10,7 +10,8 @@ where
 
 --------------------------------------------------------------------------------
 
-import Test.Tasty (TestTree, TestName, DependencyType (AllFinish), after, testGroup)
+import Test.Tasty (TestTree, testGroup, after)
+import Test.Tasty qualified as Test
 import Test.Tasty.HUnit (assertFailure, (@?=))
 
 --------------------------------------------------------------------------------
@@ -92,55 +93,33 @@ import Proto.Service
 
 tests :: TestTree
 tests =
-  testGroup "Test.Service"
-    [ Suite.testFixture "Normal RPC Call" testNormalCall
-    , (testGroup "Client Stream Calls" . notParallel)
-        [ ("Unbatched", testClientStreamCall)
-        , ("Batched", testBatchClientStreamCall)
-        ]
-    , (testGroup "Server Stream RPC Calls" . notParallel)
-        [ ("Unbatched", testServerStreamCall)
-        , ("Batched", testBatchServerStreamCall)
-        ]
-    , (testGroup "BiDi Stream RPC Calls" . notParallel)
-        [ ("Unbatched", testBiDiCall)
-        , ("Batched", testBatchBiDiCall)
-        ]
-    , (testGroup "Error Cases" . notParallel)
-        [ ("Missing Client Method", testMissingClientMethod)
-        , ("Client Timeout", testClientTimeout)
-        , ("Malformed Message", testMalformedMessage)
-        ]
+  testGroup
+    "Test.Service"
+    [ after Test.AllSucceed "wire-format" testTreeNormal
+    , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
+    , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
+    , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
+    , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
     ]
-
-notParallel :: [(TestName, Fixture ())] -> [TestTree]
-notParallel = foldr f []
-  where
-    f :: (TestName, Fixture ()) -> [TestTree] -> [TestTree]
-    f (name, t) [] = [Suite.testFixture name t]
-    f (name, t) (lt : rest) = Suite.testFixture name t : after AllFinish name lt : rest
 
 withTestService :: (Async () -> IO a) -> Fixture a
 withTestService k = do
   svcOptions <- Suite.askServiceOptions
   liftIO (Async.withAsync (newTestService svcOptions) k)
 
-withServiceFixture :: String -> (MQTTGRPCClient -> IO a) -> Fixture a
-withServiceFixture name k = do
+withServiceFixture :: (MQTTGRPCClient -> IO a) -> Fixture a
+withServiceFixture k = do
   configGRPC <- Suite.askConfigClientGRPC
-  configMQTT <- Suite.askConfigClientMQTT
-
+  remoteConfig <- Suite.askRemoteConfigMQTT
+  clientConfig <- Suite.askClientConfigMQTT
   baseTopic <- asks Suite.testConfigBaseTopic
-
-  let remoteConfig = configMQTT{_connID = "test_machine_adaptor_" <> name}
-  let clientConfig = configMQTT{_connID = "test_machine_client_" <> name}
 
   withTestService \server -> do
     withGRPCClient configGRPC \client -> do
       methods <- testServiceRemoteClientMethodMap client
       Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
+        sleep 0.5
         Async.link2 server remote
-        sleep 1
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
@@ -148,19 +127,35 @@ withServiceFixture name k = do
 
 --------------------------------------------------------------------------------
 
+testTreeNormal :: TestTree
+testTreeNormal = Suite.testFixture "Test.Service.Normal" testNormalCall
+
 testNormalCall :: Fixture ()
 testNormalCall = do
   let msg = Message.TwoInts 5 10
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-  rsp <- makeMethodCall "normal" testServiceNormalCall rqt
+  rsp <- makeMethodCall testServiceNormalCall rqt
 
   checkNormalResponse msg rsp
+
+--------------------------------------------------------------------------------
+
+testTreeClientStream :: TestTree
+testTreeClientStream =
+  testGroup
+    "Test.Service.ClientStream"
+    [ Suite.testFixture "Test.Service.ClientStream.Unbatched" testClientStreamCall
+    , after
+        Test.AllSucceed
+        "Test.Service.ClientStream.Unbatched"
+        (Suite.testFixture "Batched" testBatchClientStreamCall)
+    ]
 
 testClientStreamCall :: Fixture ()
 testClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
   let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
-  rsp <- makeMethodCall "client_stream" testServiceClientStreamCall rqt
+  rsp <- makeMethodCall testServiceClientStreamCall rqt
 
   checkClientStreamResponse msg rsp
 
@@ -168,15 +163,28 @@ testBatchClientStreamCall :: Fixture ()
 testBatchClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
   let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
-  rsp <- makeMethodCall "batch_client_stream" testServiceBatchClientStreamCall rqt
+  rsp <- makeMethodCall testServiceBatchClientStreamCall rqt
 
   checkClientStreamResponse msg rsp
+
+--------------------------------------------------------------------------------
+
+testTreeServerStream :: TestTree
+testTreeServerStream =
+  testGroup
+    "Test.Service.ServerStream"
+    [ Suite.testFixture "Test.Service.ServerStream.Unbatched" testServerStreamCall
+    , after
+        Test.AllSucceed
+        "Test.Service.ServerStream.Unbatched"
+        (Suite.testFixture "Test.Service.ServerStream.Batched" testBatchServerStreamCall)
+    ]
 
 testServerStreamCall :: Fixture ()
 testServerStreamCall = do
   let msg = Message.StreamRequest "Alice" 3
   let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
-  rsp <- makeMethodCall "server_stream" testServiceServerStreamCall rqt
+  rsp <- makeMethodCall testServiceServerStreamCall rqt
 
   checkServerStreamResponse rsp
 
@@ -184,30 +192,60 @@ testBatchServerStreamCall :: Fixture ()
 testBatchServerStreamCall = do
   let msg = Message.StreamRequest "Alice" 3
   let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
-  rsp <- makeMethodCall "batch_server_stream" testServiceBatchServerStreamCall rqt
+  rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
 
   checkServerStreamResponse rsp
 
-testBiDiCall :: Fixture ()
-testBiDiCall = do
+--------------------------------------------------------------------------------
+
+testTreeBiDiStream :: TestTree
+testTreeBiDiStream =
+  testGroup
+    "Test.Service.BiDiStream"
+    [ Suite.testFixture "Test.Service.BiDiStream.Unbatched" testBiDiStreamCall
+    , after
+        Test.AllSucceed
+        "Test.Service.BiDiStream.Unbatched"
+        (Suite.testFixture "Batched" testBatchBiDiStreamCall)
+    ]
+
+testBiDiStreamCall :: Fixture ()
+testBiDiStreamCall = do
   let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall "bidi" testServiceBiDiStreamCall rqt
+  rsp <- makeMethodCall testServiceBiDiStreamCall rqt
 
   checkBiDiStreamResponse rsp
 
-testBatchBiDiCall :: Fixture ()
-testBatchBiDiCall = do
+testBatchBiDiStreamCall :: Fixture ()
+testBatchBiDiStreamCall = do
   let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall "batch_bidi" testServiceBatchBiDiStreamCall rqt
+  rsp <- makeMethodCall testServiceBatchBiDiStreamCall rqt
 
   checkBiDiStreamResponse rsp
+
+--------------------------------------------------------------------------------
+
+testTreeErrors :: TestTree
+testTreeErrors =
+  let timeout :: TestTree
+      timeout = Suite.testFixture "Test.Service.Errors.Timeout" testClientTimeout
+
+      missing :: TestTree
+      missing = Suite.testFixture "Test.Service.Errors.Missing" testMissingClientMethod
+
+      malform :: TestTree
+      malform = Suite.testFixture "Test.Service.Errors.Malform" testMalformedMessage
+   in testGroup
+        "Test.Service.Errors"
+        [ timeout
+        , after Test.AllSucceed "Errors.Timeout" missing
+        , after Test.AllSucceed "Errors.Missing" malform
+        ]
 
 testClientTimeout :: Fixture ()
 testClientTimeout = do
-  configMQTT <- Suite.askConfigClientMQTT
+  clientConfig <- Suite.askClientConfigMQTT
   baseTopic <- asks Suite.testConfigBaseTopic
-
-  let clientConfig = configMQTT{_connID = "test_machine_client_timeout"}
 
   rsp <- liftIO $ withMQTTGRPCClient logger clientConfig \client -> do
     let msg = Message.TwoInts 5 10
@@ -231,11 +269,9 @@ testClientTimeout = do
 testMissingClientMethod :: Fixture ()
 testMissingClientMethod = do
   configGRPC <- Suite.askConfigClientGRPC
-  configMQTT <- Suite.askConfigClientMQTT
+  remoteConfig <- Suite.askRemoteConfigMQTT
+  clientConfig <- Suite.askClientConfigMQTT
   baseTopic <- asks Suite.testConfigBaseTopic
-
-  let remoteConfig = configMQTT{_connID = "test_machine_adaptor_missing_method"}
-  let clientConfig = configMQTT{_connID = "test_machine_client_missing_method"}
 
   rsp <- withTestService \_ -> do
     withGRPCClient configGRPC \_ -> do
@@ -268,11 +304,9 @@ testMissingClientMethod = do
 testMalformedMessage :: Fixture ()
 testMalformedMessage = do
   configGRPC <- Suite.askConfigClientGRPC
-  configMQTT <- Suite.askConfigClientMQTT
+  remoteConfig <- Suite.askRemoteConfigMQTT
+  clientConfig <- Suite.askClientConfigMQTT
   baseTopic <- asks Suite.testConfigBaseTopic
-
-  let remoteConfig = configMQTT{_connID = "test_machine_adaptor_malformed"}
-  let clientConfig = configMQTT{_connID = "test_machine_client_malformed"}
 
   let msg = Message.TwoInts 5 10
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
@@ -363,13 +397,12 @@ checkBiDiStreamResponse rsp =
 type Handler s rqt rsp = MQTTRequest s rqt rsp -> IO (MQTTResult s rsp)
 
 makeMethodCall ::
-  String ->
   (TestService MQTTRequest MQTTResult -> Handler s rqt rsp) ->
   MQTTRequest s rqt rsp ->
   Fixture (MQTTResult s rsp)
-makeMethodCall name method request = do
+makeMethodCall method request = do
   baseTopic <- asks Suite.testConfigBaseTopic
-  withServiceFixture name \client -> do
+  withServiceFixture \client -> do
     method (testServiceMqttClient client baseTopic) request
 
 --------------------------------------------------------------------------------

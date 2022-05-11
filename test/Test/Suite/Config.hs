@@ -20,7 +20,9 @@ module Test.Suite.Config
     -- * Query Test Config
     askServiceOptions,
     askConfigClientGRPC,
-    askConfigClientMQTT,
+    askConfigMQTT,
+    askClientConfigMQTT,
+    askRemoteConfigMQTT,
 
     -- * Test Suite Options
     -- $test-suite-options
@@ -86,6 +88,8 @@ data TestConfig = TestConfig
   , testConfigServerPort :: Port
   , testConfigServerHost :: Host
   , testConfigBaseTopic :: Topic
+  , testConfigClientId :: String
+  , testConfigRemoteId :: String
   }
   deriving (Eq, Show)
 
@@ -96,6 +100,8 @@ withTestConfig = runCont do
   serverPort <- cont (askTestOption @"server-port")
   serverHost <- cont (askTestOption @"server-host")
   baseTopic <- cont (askTestOption @"base-topic")
+  clientId <- cont (askTestOption @"client-id")
+  remoteId <- cont (askTestOption @"remote-id")
   let config :: TestConfig
       config =
         TestConfig
@@ -103,6 +109,8 @@ withTestConfig = runCont do
           , testConfigServerPort = serverPort
           , testConfigServerHost = serverHost
           , testConfigBaseTopic = baseTopic
+          , testConfigClientId = clientId
+          , testConfigRemoteId = remoteId
           }
    in pure config
 
@@ -129,8 +137,8 @@ askConfigClientGRPC = do
    in pure config
 
 -- | TODO
-askConfigClientMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
-askConfigClientMQTT = do
+askConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
+askConfigMQTT = do
   GRPC.Client.Host host <- asks testConfigServerHost
   GRPC.Client.Port port <- asks testConfigBrokerPort
   let config :: MQTTGRPCConfig
@@ -145,6 +153,20 @@ askConfigClientMQTT = do
                   }
           }
    in pure config
+
+-- | TODO
+askClientConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
+askClientConfigMQTT = do
+  clientid <- asks testConfigClientId
+  config <- askConfigMQTT
+  pure (config {GRPC.MQTT._connID = clientid})
+
+-- | TODO
+askRemoteConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
+askRemoteConfigMQTT = do
+  remoteid <- asks testConfigRemoteId
+  config <- askConfigMQTT
+  pure (config {GRPC.MQTT._connID = remoteid})
 
 --------------------------------------------------------------------------------
 
@@ -208,3 +230,19 @@ instance IsOption (TestOption "base-topic" Topic) where
   defaultValue = TestOption @"base-topic" "testMachine/testclient"
 
   parseValue = Just . TestOption @"base-topic" . fromString
+
+instance IsOption (TestOption "client-id" String) where
+  optionName = "client-id"
+  optionHelp = "The connection ID used by the MQTT client."
+
+  defaultValue = TestOption @"client-id" "Test.Client"
+
+  parseValue = Just . TestOption @"client-id" . fromString
+
+instance IsOption (TestOption "remote-id" String) where
+  optionName = "remote-id"
+  optionHelp = "The connection ID used by the remote client."
+
+  defaultValue = TestOption @"remote-id" "Test.Adaptor"
+
+  parseValue = Just . TestOption @"remote-id" . fromString

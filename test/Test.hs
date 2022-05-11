@@ -15,6 +15,7 @@ import Test.Tasty
     includingOptions,
     testGroup,
   )
+import Test.Tasty.Runners (NumThreads)
 import Test.Tasty.Ingredients (Ingredient)
 import Test.Tasty.Ingredients.Basic (listingTests)
 import Test.Tasty.Ingredients.ConsoleReporter (consoleTestReporter)
@@ -59,8 +60,11 @@ testIngredients =
 
 testOptions :: [OptionDescription]
 testOptions =
-  [ Option (Proxy @(TestOption "broker-port" Port))
+  [ Option (Proxy @NumThreads)
+  , Option (Proxy @(TestOption "broker-port" Port))
   , Option (Proxy @(TestOption "server-port" Port))
   , Option (Proxy @(TestOption "server-host" Host))
   , Option (Proxy @(TestOption "base-topic" Topic))
+  , Option (Proxy @(TestOption "client-id" String))
+  , Option (Proxy @(TestOption "remote-id" String))
   ]

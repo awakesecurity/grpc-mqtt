@@ -38,9 +38,6 @@ import Test.Suite.Config
 
 --------------------------------------------------------------------------------
 
-
---------------------------------------------------------------------------------
-
 -- | TODO
 newtype Fixture (a :: Type) :: Type where
   Fixture :: {unFixture :: ReaderT TestConfig IO a} -> Fixture a
@@ -60,7 +57,3 @@ testFixture desc (Fixture m) =
     let prop :: Assertion
         prop = runReaderT m config
      in testCase desc prop
-
--- | TODO
--- forAll :: (Monad m, Show a, HasCallStack) => Gen a -> FixtureT m a
--- forAll gen = FixtureT (lift (Hedgehog.forAll gen))

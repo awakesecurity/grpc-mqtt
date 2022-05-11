@@ -40,7 +40,7 @@ tests :: TestTree
 tests =
   testGroup
     "Network.GRPC.HighLevel.Extra"
-    [ testProperty "wire encode round-trip" tripWireFormat
+    [ testProperty "wire-format" tripWireFormat
     ]
 
 -- | Round-trip testing on the encode and decode pair 'encodeMetadataMap'' and

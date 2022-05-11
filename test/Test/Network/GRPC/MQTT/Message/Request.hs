@@ -36,7 +36,7 @@ tests :: TestTree
 tests =
   testGroup
     "Network.GRPC.MQTT.Message.Request"
-    [ testProperty "wire wrap round-trip" tripWireFormat
+    [ testProperty "wire-format" tripWireFormat
     ]
 
 -- | Round-trip test on the encode and decode pair 'wrapRequest' and

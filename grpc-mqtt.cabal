@@ -1,4 +1,4 @@
-cabal-version:       3.0
+cabal-version: 3.0
 
 name:        grpc-mqtt
 description: A library for making gRPC requests over an MQTT connection
@@ -12,9 +12,15 @@ category:    Network
 build-type:  Simple
 
 extra-source-files:
-  proto/*.proto
+  README.md
+  proto/Mqtt.proto
+  test/proto/message.proto
+  test/proto/service.proto
 
-common shared-settings
+tested-with:
+  GHC == 8.10.4
+
+common common
   default-language:   Haskell2010
   ghc-options:
     -Wall
@@ -31,13 +37,13 @@ common shared-settings
     -fshow-warning-groups
 
   default-extensions:
-    BangPatterns BlockArguments DataKinds DefaultSignatures DeriveFoldable
-    DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies
-    FlexibleContexts FlexibleInstances FunctionalDependencies GADTs
-    ImportQualifiedPost InstanceSigs KindSignatures LambdaCase
-    MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude OverloadedStrings
-    PatternSynonyms RankNTypes ScopedTypeVariables StandaloneDeriving
-    TupleSections TypeApplications TypeFamilies TypeOperators
+    BangPatterns BlockArguments DataKinds DefaultSignatures DeriveDataTypeable
+    DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable
+    DerivingStrategies DerivingVia FlexibleContexts FlexibleInstances
+    FunctionalDependencies GADTs ImportQualifiedPost InstanceSigs KindSignatures
+    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude
+    OverloadedStrings PatternSynonyms RankNTypes ScopedTypeVariables
+    StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeOperators
 
   build-depends:
     , async
@@ -50,19 +56,13 @@ common shared-settings
     , net-mqtt >= 0.8.1
     , proto3-suite
     , proto3-wire
-    , relude
-    , safe-exceptions
-    , stm
     , text
-    , time
     , turtle
-    , unliftio
-    , unordered-containers
     , vector
 
 library
-  import:             shared-settings
-  ghc-options:        -O2
+  import:      common
+  ghc-options: -O2
 
   hs-source-dirs:
     src
@@ -76,6 +76,7 @@ library
     Network.GRPC.MQTT.Core
     Network.GRPC.MQTT.Logging
     Network.GRPC.MQTT.Message.Request
+    Network.GRPC.MQTT.Message.TH
     Network.GRPC.MQTT.RemoteClient
     Network.GRPC.MQTT.RemoteClient.Session
     Network.GRPC.MQTT.Sequenced
@@ -86,7 +87,13 @@ library
     Network.GRPC.MQTT.Wrapping
 
   other-modules:
+    Network.GRPC.HighLevel.Orphans
+    Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
+    Proto3.Wire.Decode.Extra
+    Proto3.Wire.Encode.Extra
+    Proto3.Wire.Types.Extra
+    Proto3.Wire.Types.Extra.TH
 
   build-depends:
     , conduit-extra
@@ -94,15 +101,18 @@ library
     , mtl
     , network-conduit-tls
     , nonce
-    , sorted-list
+    , relude
+    , safe-exceptions
+    , stm
     , template-haskell
+    , time
     , unliftio-core
     , unordered-containers
 
 test-suite test
-  import:             shared-settings
-  type:               exitcode-stdio-1.0
-  main-is:            Test.hs
+  import:  common
+  type:    exitcode-stdio-1.0
+  main-is: Test.hs
 
   hs-source-dirs:
     test
@@ -115,24 +125,20 @@ test-suite test
     -O2
 
   other-modules:
-    Test.Proto.Clients
-    Test.Proto.RemoteClients
-    Test.Proto.Service
-
+    Proto.Service
+    Proto.Message
     Test.Network.GRPC.HighLevel.Extra
     Test.Network.GRPC.HighLevel.Extra.Gen
     Test.Network.GRPC.MQTT.Message.Request
     Test.Network.GRPC.MQTT.Message.Request.Gen
-
     Test.Service
-    Test.Message.Gen
-    Test.Request.Gen
-
     Test.Suite.Config
     Test.Suite.Fixture
-
-    Proto.Service
-    Proto.Message
+    Test.Proto.Clients
+    Test.Proto.Message.Gen
+    Test.Proto.RemoteClients
+    Test.Proto.Request.Gen
+    Test.Proto.Service
 
   build-depends:
     , connection
@@ -143,7 +149,4 @@ test-suite test
     , tasty
     , tasty-hedgehog
     , tasty-hunit
-    , time
     , tls
-    , unliftio-core
-    , x509-store

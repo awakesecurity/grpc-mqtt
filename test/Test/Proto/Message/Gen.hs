@@ -5,7 +5,7 @@
 -- @test/proto/message.proto@ message.
 --
 -- @since 1.0.0
-module Test.Message.Gen
+module Test.Proto.Message.Gen
   ( -- * Message Generators
     oneInt,
     twoInts,

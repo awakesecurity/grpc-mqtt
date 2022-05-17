@@ -19,41 +19,29 @@ import Test.Tasty.HUnit (Assertion, testCase)
 --------------------------------------------------------------------------------
 
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader
-  ( MonadReader,
-    ReaderT (ReaderT),
-    ask,
-    runReader,
-    runReaderT,
-  )
-import Control.Monad.Trans (MonadTrans, lift)
+import Control.Monad.Reader (MonadReader, ReaderT (ReaderT))
 
 import Data.Kind (Type)
 
-import GHC.Stack (HasCallStack)
-
 --------------------------------------------------------------------------------
 
-import Test.Suite.Config
+import Test.Suite.Config (TestConfig, withTestConfig)
 
 --------------------------------------------------------------------------------
 
 -- | TODO
 newtype Fixture (a :: Type) :: Type where
-  Fixture :: {unFixture :: ReaderT TestConfig IO a} -> Fixture a
+  Fixture :: {unFixture :: TestConfig -> IO a} -> Fixture a
   deriving (Functor, Applicative, Monad)
+    via ReaderT TestConfig IO
   deriving
     (MonadIO, MonadReader TestConfig)
     via ReaderT TestConfig IO
 
 -- | TODO
-runFixture :: TestConfig -> Fixture a -> IO a
-runFixture config (Fixture m) = runReaderT m config
-
--- | TODO
 testFixture :: TestName -> Fixture () -> TestTree
-testFixture desc (Fixture m) =
+testFixture desc fixture =
   withTestConfig \config ->
     let prop :: Assertion
-        prop = runReaderT m config
+        prop = unFixture fixture config
      in testCase desc prop

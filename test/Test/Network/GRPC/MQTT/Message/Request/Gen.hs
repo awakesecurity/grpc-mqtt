@@ -1,21 +1,22 @@
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- |
---
---
+-- | Generators for 'Request' messages.
 module Test.Network.GRPC.MQTT.Message.Request.Gen
   ( -- * Generators
     request,
-    payload
+    requestMessage,
+    requestTimeout,
   )
 where
 
 ---------------------------------------------------------------------------------
 
-import Hedgehog (MonadGen)
+import Hedgehog (MonadGen, Range)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
 
+---------------------------------------------------------------------------------
 
 import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
 
@@ -34,16 +35,26 @@ import Network.GRPC.MQTT.Message.Request (Request (Request))
 -- request body.
 request :: MonadGen m => m (Request ByteString)
 request = do
-  xs <- payload
-  to <- Gen.int Range.constantBounded
-  ms <- Gen.metadataMap
-  pure (Request xs to ms)
+  message <- requestMessage
+  timeout <- requestTimeout
+  metadata <- Gen.metadataMap
+  pure (Request message timeout metadata)
 
--- | Generates 'ByteString' with a length bounded by the size parameter. The
--- 'payload' generator can be used to emulate a wire-encoded message body.
+-- | Generates possibly empty 'ByteString' with a length bounded by the size
+-- parameter.
 --
-payload :: MonadGen m => m ByteString
-payload = do
-  high <- Gen.sized (pure . fromIntegral)
-  size <- Gen.int (Range.linear 0 high)
-  Gen.bytes (Range.linear 0 size)
+-- Used to emulate a serialized protobuf message embedded in a 'Request'.
+requestMessage :: MonadGen m => m ByteString
+requestMessage = do
+  Gen.sized \size -> do
+    upper <- Gen.int (Range.constant 0 (fromIntegral size))
+    let range :: Range Int
+        range = Range.constant 0 upper
+     in Gen.bytes range
+
+-- | Generates a request timeout in seconds, bounded [0, maxBound @Int].
+requestTimeout :: MonadGen m => m Int
+requestTimeout =
+  let range :: Range Int
+      range = Range.constant 0 maxBound
+   in Gen.int range

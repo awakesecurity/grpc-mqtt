@@ -1,8 +1,6 @@
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
---
---
 module Test.Network.GRPC.HighLevel.Extra
   ( -- * Test Tree
     tests,
@@ -31,11 +29,7 @@ import Network.GRPC.HighLevel (MetadataMap)
 import Network.GRPC.HighLevel.Extra qualified as Extra
 
 ---------------------------------------------------------------------------------
---
--- Tests
---
 
---
 tests :: TestTree
 tests =
   testGroup
@@ -43,8 +37,7 @@ tests =
     [ testProperty "wire-format" tripWireFormat
     ]
 
--- | Round-trip testing on the encode and decode pair 'encodeMetadataMap'' and
--- 'decodeMetadataMap'
+-- | Round-trip testing on 'MetadataMap' wire serialization.
 tripWireFormat :: Property
 tripWireFormat = property do
   metadata <- forAll Gen.metadataMap

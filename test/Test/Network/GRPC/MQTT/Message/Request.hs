@@ -1,3 +1,4 @@
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
 -- | TODO
@@ -39,8 +40,7 @@ tests =
     [ testProperty "wire-format" tripWireFormat
     ]
 
--- | Round-trip test on the encode and decode pair 'wrapRequest' and
--- 'unwrapRequest'
+-- | Round-trip test on 'Request' serialization.
 tripWireFormat :: Property
 tripWireFormat = property do
   payload <- forAll Gen.request

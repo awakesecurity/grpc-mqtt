@@ -61,7 +61,6 @@ import Test.Suite.Fixture qualified as Suite
 
 import Network.GRPC.MQTT.Client (MQTTGRPCClient, withMQTTGRPCClient)
 import Network.GRPC.MQTT.Client qualified as GRPC.MQTT.Client
-import Network.GRPC.MQTT.Core
 import Network.GRPC.MQTT.Logging (Logger (Logger))
 import Network.GRPC.MQTT.Logging qualified as GRPC.MQTT.Logging
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)

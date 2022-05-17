@@ -5,7 +5,7 @@
 -- | TODO
 --
 -- @since 1.0.0
-module Test.Request.Gen
+module Test.Proto.Request.Gen
   ( -- * TODO
     normalRequest,
     clientStreamRequest,

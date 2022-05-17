@@ -122,7 +122,7 @@ withServiceFixture k = do
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent -- Debug
+    logger = Logger print GRPC.MQTT.Logging.Debug -- Silent -- Debug
 
 --------------------------------------------------------------------------------
 

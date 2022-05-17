@@ -69,7 +69,6 @@ library
     gen/src
 
   exposed-modules:
-    Control.Concurrent.TMap
     Network.GRPC.HighLevel.Extra
     Network.GRPC.MQTT
     Network.GRPC.MQTT.Client
@@ -83,10 +82,12 @@ library
     Network.GRPC.MQTT.TH.Client
     Network.GRPC.MQTT.TH.Proto
     Network.GRPC.MQTT.TH.RemoteClient
+    Network.GRPC.MQTT.Topic
     Network.GRPC.MQTT.Types
     Network.GRPC.MQTT.Wrapping
 
   other-modules:
+    Control.Concurrent.TMap
     Network.GRPC.HighLevel.Orphans
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
@@ -137,7 +138,6 @@ test-suite test
     Test.Proto.Clients
     Test.Proto.Message.Gen
     Test.Proto.RemoteClients
-    Test.Proto.Request.Gen
     Test.Proto.Service
 
   build-depends:

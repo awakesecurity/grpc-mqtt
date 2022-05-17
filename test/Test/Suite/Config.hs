@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
 module Test.Suite.Config
   ( -- * Test Suite Configuration
     -- $test-suite-configuration
@@ -78,11 +77,6 @@ import Network.GRPC.MQTT.Core qualified as GRPC.MQTT
 
 --------------------------------------------------------------------------------
 
--- $test-suite-configuration
---
--- TODO
-
--- | TODO
 data TestConfig = TestConfig
   { testConfigBrokerPort :: Port
   , testConfigServerPort :: Port
@@ -93,7 +87,6 @@ data TestConfig = TestConfig
   }
   deriving (Eq, Show)
 
--- | TODO
 withTestConfig :: (TestConfig -> TestTree) -> TestTree
 withTestConfig = runCont do
   brokerPort <- cont (askTestOption @"broker-port")
@@ -114,13 +107,11 @@ withTestConfig = runCont do
           }
    in pure config
 
--- | TODO
 askServiceOptions :: MonadReader TestConfig m => m ServiceOptions
 askServiceOptions = do
   port <- asks testConfigServerPort
   pure GRPC.Generated.defaultServiceOptions{GRPC.Generated.serverPort = port}
 
--- | TODO
 askConfigClientGRPC :: MonadReader TestConfig m => m ClientConfig
 askConfigClientGRPC = do
   host <- asks testConfigServerHost
@@ -136,7 +127,6 @@ askConfigClientGRPC = do
           }
    in pure config
 
--- | TODO
 askConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
 askConfigMQTT = do
   GRPC.Client.Host host <- asks testConfigServerHost
@@ -154,14 +144,12 @@ askConfigMQTT = do
           }
    in pure config
 
--- | TODO
 askClientConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
 askClientConfigMQTT = do
   clientid <- asks testConfigClientId
   config <- askConfigMQTT
   pure (config {GRPC.MQTT._connID = clientid})
 
--- | TODO
 askRemoteConfigMQTT :: MonadReader TestConfig m => m MQTTGRPCConfig
 askRemoteConfigMQTT = do
   remoteid <- asks testConfigRemoteId
@@ -170,11 +158,6 @@ askRemoteConfigMQTT = do
 
 --------------------------------------------------------------------------------
 
--- $test-suite-options
---
--- TODO
-
--- | TODO
 data TestOption (opt :: Symbol) (a :: Type) :: Type where
   TestOption :: forall opt a. {getTestOption :: a} -> TestOption opt a
   deriving (Typeable, Show)

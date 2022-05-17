@@ -8,7 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
+-- | The client API for making gRPC requests over MQTT.
 --
 -- @since 1.0.0
 module Network.GRPC.MQTT.Client
@@ -329,9 +329,6 @@ connectMQTTGRPC logger cfg = do
   uuid <- Nonce.new
   pure (MQTTGRPCClient conn chan uuid logger (fromIntegral (mqttMsgSizeLimit cfg)))
 
--- | TODO
---
--- @since 1.0.0
 disconnectMQTTGRPC :: MonadIO io => MQTTGRPCClient -> io ()
 disconnectMQTTGRPC client = liftIO (normalDisconnect (mqttClient client))
 

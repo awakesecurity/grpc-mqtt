@@ -3,10 +3,8 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
 module Test.Suite.Fixture
-  ( -- * TODO
-    Fixture (Fixture, unFixture),
+  ( Fixture (Fixture, unFixture),
     testFixture,
   )
 where
@@ -29,7 +27,6 @@ import Test.Suite.Config (TestConfig, withTestConfig)
 
 --------------------------------------------------------------------------------
 
--- | TODO
 newtype Fixture (a :: Type) :: Type where
   Fixture :: {unFixture :: TestConfig -> IO a} -> Fixture a
   deriving (Functor, Applicative, Monad)
@@ -38,7 +35,6 @@ newtype Fixture (a :: Type) :: Type where
     (MonadIO, MonadReader TestConfig)
     via ReaderT TestConfig IO
 
--- | TODO
 testFixture :: TestName -> Fixture () -> TestTree
 testFixture desc fixture =
   withTestConfig \config ->

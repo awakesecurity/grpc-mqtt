@@ -12,10 +12,8 @@ module Network.GRPC.MQTT.Sequenced
   ( PublishToStream (..),
     packetReader,
     mkPacketizedPublish,
-    -- mkPacketizedRead,
     mkStreamPublish,
     mkStreamRead,
-    -- mkSequencedRead,
   )
 where
 
@@ -66,7 +64,9 @@ import Proto.Mqtt (Packet (..), RemoteError)
 
 --------------------------------------------------------------------------------
 
--- | TODO
+-- | Reads, parses, and orders serialized 'Packet' messages from the source
+-- 'TChan'. Returns the serialized message reconstructed from each packet
+-- obtained from the channel.
 --
 -- @since 1.0.0
 packetReader ::
@@ -81,7 +81,10 @@ packetReader channel = do
     builder :: [ByteString] -> ByteString.Builder
     builder = foldl' (\xs x -> xs <> ByteString.Builder.byteString x) mempty
 
--- | TODO
+-- | Reads a complete sequence of serialized 'Packet' messages from the source
+-- 'TChan' given. Returns an 'STM' action of sequenced packets read from the
+-- 'TChan' or a 'Decode.ParseError' raised while attempt to parse one or more
+-- of the channel's 'ByteString' as a 'Packet'.
 --
 -- @since 1.0.0
 orderPacketReader ::

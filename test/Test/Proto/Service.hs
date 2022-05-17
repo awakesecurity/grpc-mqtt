@@ -5,8 +5,7 @@
 
 -- | Setup for the grpc-haskell service used by the testing suite.
 module Test.Proto.Service
-  ( -- * TODO
-    newTestService,
+  ( newTestService,
   )
 where
 

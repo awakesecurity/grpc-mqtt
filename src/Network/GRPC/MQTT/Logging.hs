@@ -4,7 +4,7 @@
 -- that can be found in the COPYING file.
 
 
--- | TODO
+-- | Definitions for the 'Logger' type and logging facilities.
 --
 -- @since 1.0.0
 module Network.GRPC.MQTT.Logging
@@ -33,7 +33,7 @@ import Data.Text (Text)
 
 --------------------------------------------------------------------------------
 
--- | TODO
+-- | Enumeration of logger verbosity levels.
 --
 -- @since 1.0.0
 data Verbosity
@@ -46,7 +46,8 @@ data Verbosity
 
 --------------------------------------------------------------------------------
 
--- | TODO
+-- | 'Logger' is IO action writing 'Text' to a log bundled with the minimum
+-- log verbosity level used filter which messages are logged.
 --
 -- @since 1.0.0
 data Logger = Logger
@@ -54,7 +55,7 @@ data Logger = Logger
   , verbosity :: Verbosity
   }
 
--- | TODO
+-- | The silent 'Logger'.
 --
 -- @since 1.0.0
 noLogging :: Logger
@@ -62,7 +63,7 @@ noLogging = Logger (\_ -> pure ()) Silent
 
 --------------------------------------------------------------------------------
 
--- | TODO
+-- | Writes a message with a specified 'Verbosity' to the given 'Logger'.
 --
 -- @since 1.0.0
 logVerbosity :: (MonadIO io) => Verbosity -> Logger -> Text -> io ()
@@ -70,25 +71,25 @@ logVerbosity v logger msg =
   when (verbosity logger >= v) do
     liftIO (runLog logger msg)
 
--- | TODO
+-- | Writes an error message to the 'Logger'.
 --
 -- @since 1.0.0
 logErr :: (MonadIO io) => Logger -> Text -> io ()
 logErr = logVerbosity Error
 
--- | TODO
+-- | Writes a warning to the 'Logger'.
 --
 -- @since 1.0.0
 logWarn :: (MonadIO io) => Logger -> Text -> io ()
 logWarn = logVerbosity Warn
 
--- | TODO
+-- | Writes a message to the 'Logger'.
 --
 -- @since 1.0.0
 logInfo :: (MonadIO io) => Logger -> Text -> io ()
 logInfo = logVerbosity Info
 
--- | TODO
+-- | Writes debug information to the 'Logger'.
 --
 -- @since 1.0.0
 logDebug :: (MonadIO io) => Logger -> Text -> io ()

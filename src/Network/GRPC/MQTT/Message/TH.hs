@@ -5,11 +5,12 @@
 -- See [NOTE: Enforcing Message Splice Order]
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 
--- | TODO
+-- | Definitions of template haskell splices used by 'Network.GRPC.MQTT.Message'
+-- message types.
 --
 -- @since 1.0.0
 module Network.GRPC.MQTT.Message.TH
-  ( -- * TODO
+  ( -- * Record Introspection
     reifyFieldNumber,
     reifyRecordField,
   )

@@ -6,7 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
+-- | Module defintions core components required by the library.
 --
 -- @since 1.0.0
 module Network.GRPC.MQTT.Core
@@ -101,7 +101,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , _tlsSettings :: TLSSettings
   }
 
--- | TODO
+-- | The default 'MQTTGRPCConfig'.
 --
 -- @since 1.0.0
 defaultMGConfig :: MQTTGRPCConfig
@@ -156,9 +156,6 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 
--- | TODO
---
--- @since 1.0.0
 subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
 subscribeOrThrow client topics = do
   let subTopics = zip topics (repeat subOptions{_subQoS = QoS1})

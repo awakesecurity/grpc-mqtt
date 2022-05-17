@@ -1,7 +1,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | TODO
 module Test.Network.GRPC.MQTT.Message.Request
   ( -- * Test Tree
     tests,
@@ -29,9 +28,6 @@ import Network.GRPC.MQTT.Message.Request qualified as Request
 import Proto3.Wire.Decode qualified as Decode
 
 ---------------------------------------------------------------------------------
---
--- Tests
---
 
 tests :: TestTree
 tests =

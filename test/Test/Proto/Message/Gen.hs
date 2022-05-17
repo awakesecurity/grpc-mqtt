@@ -41,11 +41,9 @@ import Proto.Message qualified as Message
 
 --------------------------------------------------------------------------------
 
--- | TODO
 oneInt :: MonadGen m => m OneInt
 oneInt = fmap Message.OneInt size'int32
 
--- | TODO
 twoInts :: MonadGen m => m TwoInts
 twoInts = do
   -- The upper and lower ranges are limit to half of the maximum and minimum
@@ -55,15 +53,12 @@ twoInts = do
       range = Range.constant (quot minBound 2 + 1) (quot maxBound 2)
    in liftA2 Message.TwoInts (Gen.int32 range) (Gen.int32 range)
 
--- | TODO
 streamRequest :: MonadGen m => m StreamRequest
 streamRequest = liftA2 Message.StreamRequest lazy'text size'word32
 
--- | TODO
 streamReply :: MonadGen m => m StreamReply
 streamReply = fmap Message.StreamReply lazy'text
 
--- | TODO
 bidiRequestReply :: MonadGen m => m BiDiRequestReply
 bidiRequestReply = fmap Message.BiDiRequestReply lazy'text
 

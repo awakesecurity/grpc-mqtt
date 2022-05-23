@@ -168,8 +168,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
       Nothing -> throw (MQTTException ("gRPC method forms invalid topic: " <> show method))
       Just topic -> pure topic
 
-    -- `whenNothing` throw (MQTTException $ "gRPC method forms invalid topic: " <> decodeUtf8 method)
-
     publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
     let publishToRequestTopic :: Message r => r -> IO ()
         publishToRequestTopic = publishReq' . Proto3.toLazyByteString
@@ -301,7 +299,7 @@ withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
 withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnException
   where
     withMQTTHeartbeat :: IO a -> IO a
-    withMQTTHeartbeat action = do
+    withMQTTHeartbeat action =
       Async.withAsync
         (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
         (const action)

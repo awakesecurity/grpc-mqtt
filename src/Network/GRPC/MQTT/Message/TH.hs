@@ -87,7 +87,7 @@ selectorsOf recNm = do
     throwMismatchCon :: Con -> Q a
     throwMismatchCon con =
       let expect = "expected " ++ TH.pprint recNm ++ " to be a record type"
-          actual = "instead god " ++ TH.pprint con
+          actual = "instead got " ++ TH.pprint con
        in throwQ 'selectorsOf (expect ++ ", " ++ actual)
 
 constructorsOf :: Name -> Q [Con]
@@ -101,7 +101,7 @@ constructorsOf tynm = do
     throwMismatchDec :: Dec -> Q a
     throwMismatchDec dec =
       let expect = "expected " ++ TH.pprint tynm ++ " to be newtype or datatype"
-          actual = "instead god " ++ TH.pprint dec
+          actual = "instead got " ++ TH.pprint dec
        in throwQ 'constructorsOf (expect ++ ", " ++ actual)
 
 reifyTyCon :: Name -> Q Dec

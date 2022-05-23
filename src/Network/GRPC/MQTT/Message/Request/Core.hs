@@ -36,7 +36,7 @@ data Request msg = Request
     -- message needed to perform the RPC call the client is requesting.
     message :: msg
   , -- | The request's 'timeout' is the timeout period in unit seconds the
-    -- requested gRPC call has to completed before deadline-exceeded error
+    -- requested gRPC call has to finished before a deadline-exceeded error
     -- response is sent back to the client.
     timeout :: {-# UNPACK #-} !Int
   , -- | The request's 'metadata' is the metadata bound to a request,

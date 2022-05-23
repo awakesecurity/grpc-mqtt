@@ -47,7 +47,7 @@ data Verbosity
 --------------------------------------------------------------------------------
 
 -- | 'Logger' is IO action writing 'Text' to a log bundled with the minimum
--- log verbosity level used filter which messages are logged.
+-- log verbosity level used to filter which messages are logged.
 --
 -- @since 1.0.0
 data Logger = Logger

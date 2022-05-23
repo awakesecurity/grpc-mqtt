@@ -35,12 +35,12 @@
 -- = Request Encoding
 --
 -- The __client is responsible for encoding 'Request'__ into a wire formatted
--- 'ByteString' that will be received and handled remote client. When the client
--- is preparing to request an RPC call, a new 'Request' will be constructed
--- carrying a type corresponding to the protobuf message the RPC is expecting as
--- an argument.This newly constructed 'Request' value packages the client's
--- message, the request properties, and gRPC metadata bound to the request as a
--- single entity that can be transmitted to the remote client.
+-- 'ByteString' that will be received and handled by the remote client. When the
+-- client is preparing a request for a RPC call, a new 'Request' will be
+-- constructed carrying a type corresponding to the protobuf message the RPC is
+-- expecting as an argument.This newly constructed 'Request' value packages the
+-- client's message, the request properties, and gRPC metadata bound to the
+-- request as a single entity that can be transmitted to the remote client.
 --
 -- === Example
 --
@@ -188,7 +188,7 @@ wireWrapRequest = Encode.toLazyByteString . wireBuildRequest
 wireWrapRequest' :: Request ByteString -> ByteString
 wireWrapRequest' = Lazy.ByteString.toStrict . wireWrapRequest
 
--- | 'MessageBulder' capable of partially serializing a 'Request'. The wrapped
+-- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
 -- 'message' 'ByteString' __must__ by a valid wire binary.
 --
 -- @since 1.0.0

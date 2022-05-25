@@ -4,7 +4,7 @@
 -- | Extensions to the proto-wire format encoders missing from the proto3-wire
 -- package.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Proto3.Wire.Encode.Extra
   ( -- * Primitive Message Builders
     sint,
@@ -23,7 +23,7 @@ import Proto3.Wire.Encode qualified as Encode
 
 -- | Serializes a 'Int' primitive as a fixed-width 64-bit integer.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 sint :: FieldNumber -> Int -> MessageBuilder
 sint field int = do
   let int64 :: Int64

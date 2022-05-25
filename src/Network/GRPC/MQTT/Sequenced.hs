@@ -28,7 +28,7 @@ import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 
 import Data.Foldable (foldl', toList)
-import Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
+import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import Data.Int (Int64)
 
 import Data.ByteString (ByteString)
@@ -56,8 +56,8 @@ import Control.Concurrent.TMap qualified as TMap
 
 import Network.GRPC.MQTT.Types (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping
-  ( wrapStreamChunk,
-    unwrapStreamChunk,
+  ( unwrapStreamChunk,
+    wrapStreamChunk,
   )
 
 import Proto.Mqtt (Packet (..), RemoteError)
@@ -68,7 +68,7 @@ import Proto.Mqtt (Packet (..), RemoteError)
 -- 'TChan'. Returns the serialized message reconstructed from each packet
 -- obtained from the channel.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 packetReader ::
   TChan Lazy.ByteString ->
   ExceptT Decode.ParseError IO Lazy.ByteString
@@ -86,7 +86,7 @@ packetReader channel = do
 -- 'TChan' or a 'Decode.ParseError' raised while attempt to parse one or more
 -- of the channel's 'ByteString' as a 'Packet'.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 orderPacketReader ::
   TChan Lazy.ByteString ->
   STM (Either Decode.ParseError [ByteString])
@@ -155,7 +155,6 @@ mkStreamRead readRequest = liftIO do
                 return (Just $ Vector.head reqs)
 
   return readStreamChunk
-
 
 mkPacketizedPublish :: (MonadIO io) => MQTTClient -> Int64 -> Topic -> io (Lazy.ByteString -> IO ())
 mkPacketizedPublish client msgLimit topic = liftIO do

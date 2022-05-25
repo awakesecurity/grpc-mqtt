@@ -14,7 +14,7 @@
 
 -- | TODO
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.RemoteClient
   ( runRemoteClient,
     runRemoteClientWithConnect,
@@ -230,7 +230,7 @@ handleControlMessage logger handle msg = do
 
 -- | TODO
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   request <- liftIO (runExceptT (withExceptT parseErrorToRCE (packetReader (hdlRqtChan handle))))
@@ -296,7 +296,7 @@ handleRequest handle = do
 
 -- | TODO
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
 dispatchClientHandler k = maybe onError k =<< askMethod
   where
@@ -327,7 +327,7 @@ publishPackets topic msg = do
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 publishRemoteError :: Topic -> RemoteError -> Session ()
 publishRemoteError topic err = do
   logger <- asks cfgLogger

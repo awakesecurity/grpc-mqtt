@@ -8,7 +8,7 @@
 
 -- | Module defintions core components required by the library.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
@@ -79,7 +79,7 @@ import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubE
 
 -- | Superset of 'MQTTConfig'
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
@@ -103,7 +103,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
 
 -- | The default 'MQTTGRPCConfig'.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 defaultMGConfig :: MQTTGRPCConfig
 defaultMGConfig =
   MQTTGRPCConfig
@@ -126,13 +126,13 @@ defaultMGConfig =
 
 -- | Project 'MQTTConfig' from 'MQTTGRPCConfig'
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTConfig cfg)
   where
@@ -152,7 +152,7 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
 
 -- | Period for heartbeat messages
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 

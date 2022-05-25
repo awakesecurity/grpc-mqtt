@@ -8,7 +8,7 @@
 -- | Definitions of template haskell splices used by 'Network.GRPC.MQTT.Message'
 -- message types.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.TH
   ( -- * Record Introspection
     reifyFieldNumber,

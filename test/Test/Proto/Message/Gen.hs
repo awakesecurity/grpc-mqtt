@@ -3,8 +3,6 @@
 
 -- | Hedgehog generators for the Haskell type generated from
 -- @test/proto/message.proto@ message.
---
--- @since 1.0.0
 module Test.Proto.Message.Gen
   ( -- * Message Generators
     oneInt,

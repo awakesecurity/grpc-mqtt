@@ -4,7 +4,7 @@
 
 -- | Type declarations extending the proto3-wire package.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Proto3.Wire.Types.Extra
   ( -- * RecordField
     RecordField
@@ -26,7 +26,7 @@ import Proto3.Wire (FieldNumber)
 -- the record type containing the field, the name of the field, and a compatible
 -- 'FieldNumber' indexing the record field.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 data RecordField = RecordField
   { -- | The name of a record type containing the record field, obtained by a
     -- template haskell quote:
@@ -42,7 +42,7 @@ data RecordField = RecordField
     recFieldNumber :: {-# UNPACK #-} !FieldNumber
   }
 
--- | @since 1.0.0
+-- | @since 0.1.0.0
 instance Show RecordField where
   show (RecordField par sel num) =
     "field #"

@@ -68,7 +68,7 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
     (MetadataMap -> StreamRecv rsp -> StreamSend rqt -> WritesDone -> IO ()) ->
     MQTTRequest 'BiDiStreaming rqt rsp
 
--- | @since 1.0.0
+-- | @since 0.1.0.0
 instance Show rqt => Show (MQTTRequest s rqt rsp) where
   show (MQTTNormalRequest x timeout metadata) =
     intercalate " " [show 'MQTTNormalRequest, show x, show timeout, show metadata]

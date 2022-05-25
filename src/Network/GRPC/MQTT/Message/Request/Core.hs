@@ -3,7 +3,7 @@
 
 -- | Core module defining the 'Request' type and 'Request' instances.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Request.Core
   ( -- * Request
     Request (Request, message, timeout, metadata),
@@ -30,7 +30,7 @@ import Network.GRPC.HighLevel.Orphans ()
 -- dictionary of gRPC metadata bound to the request, and properties configuring
 -- how the request is handled.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 data Request msg = Request
   { -- | The request's 'message' is a type representing the protocol buffer
     -- message needed to perform the RPC call the client is requesting.
@@ -52,7 +52,7 @@ data Request msg = Request
   deriving stock (Eq, Ord, Show)
   deriving stock (Data, Generic, Typeable)
 
--- | @since 1.0.0
+-- | @since 0.1.0.0
 instance Functor Request where
   fmap f (Request x t ms) = Request (f x) t ms
   {-# INLINE fmap #-}

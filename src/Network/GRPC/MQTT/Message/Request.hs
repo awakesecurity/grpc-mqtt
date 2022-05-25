@@ -98,7 +98,7 @@
 -- @SearchRequest@ sent by the client. The raw 'ByteString' @SearchRequest@
 -- message can then be provided to @callSearchRPC@ to complete the request.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Request
   ( -- * Requests
     Request (Request, message, timeout, metadata),
@@ -159,7 +159,7 @@ import Proto3.Wire.Types.Extra (RecordField)
 --
 -- >>> wireEncodeRequest ~ wireWrapRequest . fmap toStrict toLazyByteString
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireEncodeRequest :: forall a. Message a => Request a -> Lazy.ByteString
 wireEncodeRequest = wireWrapRequest . wireEncodeMessage
   where
@@ -168,7 +168,7 @@ wireEncodeRequest = wireWrapRequest . wireEncodeMessage
 
 -- | Like 'wireEncodeRequest', but the resulting 'ByteString' is strict.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireEncodeRequest' :: Message a => Request a -> ByteString
 wireEncodeRequest' = Lazy.ByteString.toStrict . wireEncodeRequest
 
@@ -178,20 +178,20 @@ wireEncodeRequest' = Lazy.ByteString.toStrict . wireEncodeRequest
 -- If the given request's 'message' is not a valid wire binary, then it is very
 -- likely the resulting 'ByteString' can never be decoded.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireWrapRequest :: Request ByteString -> Lazy.ByteString
 wireWrapRequest = Encode.toLazyByteString . wireBuildRequest
 
 -- | Like 'wireWrapRequest', but the resulting 'ByteString' is strict.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireWrapRequest' :: Request ByteString -> ByteString
 wireWrapRequest' = Lazy.ByteString.toStrict . wireWrapRequest
 
 -- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
 -- 'message' 'ByteString' __must__ by a valid wire binary.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireBuildRequest :: Request ByteString -> MessageBuilder
 wireBuildRequest rqt =
   wireBuildMessageField
@@ -226,13 +226,13 @@ wireBuildRequest rqt =
 -- | Partially decodes a 'Request' message, leaving wrapped 'message' wire
 -- binary.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireUnwrapRequest :: ByteString -> Either ParseError (Request ByteString)
 wireUnwrapRequest = Decode.parse wireParseRequest
 
 -- | Parses a serialized 'Request' message.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 wireParseRequest :: Parser RawMessage (Request ByteString)
 wireParseRequest = do
   payload <- wireParseMessageField

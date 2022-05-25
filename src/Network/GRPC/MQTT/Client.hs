@@ -6,23 +6,40 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
 -- | The client API for making gRPC requests over MQTT.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Client
   ( MQTTGRPCClient (..),
     mqttRequest,
     withMQTTGRPCClient,
     connectMQTTGRPC,
     disconnectMQTTGRPC,
+
+    -- * Topics
+    -- $client-topics
+    ClientTopicError
+      ( BadSessionIdTopicError,
+        BadRPCMethodTopicError
+      ),
+    makeSessionIdTopic,
+    makeMethodRequestTopic,
   )
 where
 
 ---------------------------------------------------------------------------------
 
-import Control.Exception (bracket, displayException, handle, onException, throw)
+import Control.Exception
+  ( Exception,
+    bracket,
+    displayException,
+    handle,
+    onException,
+    throwIO,
+  )
 
 import Control.Concurrent.Async qualified as Async
 
@@ -38,9 +55,12 @@ import Crypto.Nonce qualified as Nonce
 
 import Data.Int (Int64)
 import Data.Maybe (fromMaybe)
+import Data.Typeable (Typeable)
 
+import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
+import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 
@@ -72,7 +92,7 @@ import Network.GRPC.MQTT.Types
   )
 import Network.MQTT.Client
   ( MQTTClient,
-    MQTTException (MQTTException),
+    MQTTException,
     MessageCallback (SimpleCallback),
     normalDisconnect,
   )
@@ -95,6 +115,7 @@ import Network.GRPC.MQTT.Sequenced
     mkStreamRead,
     packetReader,
   )
+import Network.GRPC.MQTT.Topic qualified as Topic
 import Network.GRPC.MQTT.Wrapping
   ( fromRemoteError,
     parseErrorToRCE,
@@ -117,7 +138,7 @@ import Proto.Mqtt
 
 -- | Client for making gRPC calls over MQTT
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
@@ -135,7 +156,7 @@ data MQTTGRPCClient = MQTTGRPCClient
 -- `MQTTGRPCClient' to the supplied function, closing the connection for you when
 -- the function finishes.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
   bracket
@@ -145,7 +166,7 @@ withMQTTGRPCClient logger cfg =
 -- | Send a gRPC request over MQTT using the provided client This function makes
 -- synchronous requests.
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 mqttRequest ::
   forall request response streamtype.
   (Message request, Message response, HasDefault request) =>
@@ -155,18 +176,18 @@ mqttRequest ::
   Batched ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream request = do
-  logDebug mqttLogger $ "Making gRPC request for method: " <> Text.Encoding.decodeUtf8 method
+mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
+  print $ baseTopic
+  print $ nmMethod
+
+  logDebug mqttLogger $ "Making gRPC request for method: " <> Text.pack (show nmMethod)
 
   handle handleMQTTException $ do
-    sessionId <- generateSessionId rng
-    let responseTopic = baseTopic <> "grpc" <> "session" <> sessionId
-    let controlTopic = responseTopic <> "control"
-    let baseRequestTopic = baseTopic <> "grpc" <> "request" <> sessionId
+    sessionId <- makeSessionIdTopic rng
+    let responseTopic = Topic.makeResponseTopic baseTopic sessionId
+    let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
-    requestTopic <- case mkTopic (unTopic baseRequestTopic <> Text.Encoding.decodeUtf8 method) of
-      Nothing -> throw (MQTTException ("gRPC method forms invalid topic: " <> show method))
-      Just topic -> pure topic
+    requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
     publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
     let publishToRequestTopic :: Message r => r -> IO ()
@@ -284,7 +305,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic (MethodName method) useBatchedStream re
 -- | Helper function to run an 'ExceptT RemoteError' action and convert any failure
 -- to an 'MQTTResult'
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 exceptToResult ::
   Functor f =>
   ExceptT RemoteError f (MQTTResult s rsp) ->
@@ -294,7 +315,7 @@ exceptToResult = fmap (either fromRemoteError id) . runExceptT
 -- | Manages the control signals (Heartbeat and Terminate) asynchronously while
 -- the provided action performs a request
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
 withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnException
   where
@@ -311,7 +332,7 @@ withControlSignals publishControlMsg = withMQTTHeartbeat . sendTerminateOnExcept
 -- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
 -- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   chan <- liftIO newTChanIO
@@ -337,7 +358,7 @@ disconnectMQTTGRPC client = liftIO (normalDisconnect (mqttClient client))
 --
 -- prop> GRPCResult (ClientErrorResponse (ClientIOError GRPCIOTimeout))
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 timeoutGRPC ::
   MonadUnliftIO m =>
   TimeoutSeconds ->
@@ -353,7 +374,7 @@ timeoutGRPC timelimit'secs action = do
 -- | A variant of 'System.timeout' that accepts the timeout period in unit
 -- seconds (as opposed to microseconds).
 --
--- @since 1.0.0
+-- @since 0.1.0.0
 timeout'secs :: MonadUnliftIO m => TimeoutSeconds -> m a -> m (Maybe a)
 timeout'secs period'secs action =
   -- @System.timeout@ expects the timeout period given to be in unit
@@ -364,19 +385,84 @@ timeout'secs period'secs action =
    in withRunInIO \runIO ->
         System.timeout period'usecs (runIO action)
 
--- | Generates a new randomized 128-bit nonce word to use as a fresh remote
--- client session ID 'Topic'.
+--------------------------------------------------------------------------------
+
+-- $client-topics
 --
--- @since 1.0.0
-generateSessionId :: Nonce.Generator -> IO Topic
-generateSessionId gen = do
+-- MQTT topics used by the client in order to make requests to a remote client.
+
+-- | 'ClientTopicError' captures all exceptions that can be raised when
+-- constructing MQTT topics required by a client.
+--
+-- @since 0.1.0.0
+data ClientTopicError
+  = -- | Exception that is raised when the client generates a nonce that does
+    -- not form a valid MQTT topic (this should be impossible).
+    BadSessionIdTopicError Text
+  | -- | Exception that is raised when preparing a request for RPC method with a
+    -- name that does not form a valid MQTT topic.
+    BadRPCMethodTopicError Text
+  deriving stock (Eq, Ord, Typeable)
+
+-- | @since 0.1.0.0
+instance Exception ClientTopicError
+
+-- | @since 0.1.0.0
+instance Show ClientTopicError where
+  show e = case e of
+    BadSessionIdTopicError x ->
+      formatS ("session ID " ++ show x) ++ " (impossible)"
+    BadRPCMethodTopicError x ->
+      formatS ("method name " ++ show x)
+    where
+      formatS :: ShowS
+      formatS x = shows ''ClientTopicError ": " ++ x ++ " forms invalid topic"
+  {-# INLINE show #-}
+
+-- | Generates a new randomized 128-bit nonce word to use as a fresh session ID
+-- topic.
+--
+-- /Note:/ Although it should __never__ happen, function can potentially throw
+-- a 'BadSessionIdTopicError'.
+--
+-- >>> import qualified Crypto.Nonce -- from the package "nonce"
+-- >>> makeSessionIdTopic =<< Crypto.Nonce.new
+-- Topic {unTopic = "fA6L7xKY6_-qa7k3g3J7DZ-e"}
+--
+-- @since 0.1.0.0
+makeSessionIdTopic :: Nonce.Generator -> IO Topic
+makeSessionIdTopic gen = do
   uuid <- Nonce.nonce128urlT gen
-  maybe onError pure (mkTopic uuid)
+  maybe (onError uuid) pure (mkTopic uuid)
   where
-    onError :: IO a
-    onError =
-      -- If this is thrown, it is very likely the implementation of @mkTopic@
-      -- has changed, this is impossible for version 0.8.1.0 of net-mqtt.
-      let exc :: String
-          exc = "grpc-mqtt: internal error: session ID to generate (impossible)"
-       in throw (MQTTException exc)
+    -- The 'ByteString' produced by 'nonce128urlT' is known to alway form a
+    -- valid MQTT topic. If this is thrown, it is very likely the implementation
+    -- of @mkTopic@ has changed, this is impossible for version 0.8.1.0 of
+    -- net-mqtt.
+    onError :: Text -> IO a
+    onError uuid = throwIO (BadSessionIdTopicError uuid)
+
+-- | Constructs a session request topic for a given base topic, session ID, and
+-- the 'MethodName' of the RPC requested.
+--
+-- /Note:/ This function will throw a 'BadRPCMethodTopicError' 'IO' exception
+-- if the 'MethodName' provided would not form a valid MQTT topic.
+--
+-- >>> makeMethodRequestTopic "base.topic" "BgHY9DxnsLj7-IEq4IxTgqMg" "/proto.package.ServiceName/MyRPC"
+-- Topic {unTopic = "base.topic/grpc/request/BgHY9DxnsLj7-IEq4IxTgqMg/proto.package.ServiceName/MyRPC"}
+--
+-- >>> -- The method "/bad/#/topic" forms an invalid topic (contains a '#')
+-- >>> makeMethodRequestTopic "..." "..." "/bad/#/topic"
+-- *** Exception: Network.GRPC.MQTT.Client.ClientTopicError: gRPC method name"/bad/#/topic" forms invalid topic
+--
+-- @since 0.1.0.0
+makeMethodRequestTopic :: Topic -> Topic -> MethodName -> IO Topic
+makeMethodRequestTopic baseTopic sid (MethodName nm) =
+  -- The leading '/' character is removed via @drop 1@ since the 'Semigroup'
+  -- instance for 'Topic' automatically inserts '/' slashes when joining
+  -- topics.
+  let methodTopic :: Maybe Topic
+      methodTopic = mkTopic . Text.Encoding.decodeUtf8 . ByteString.drop 1 $ nm
+   in case methodTopic of
+        Nothing -> throwIO (BadRPCMethodTopicError (Text.Encoding.decodeUtf8 nm))
+        Just ts -> pure (baseTopic <> "grpc" <> "request" <> sid <> ts)

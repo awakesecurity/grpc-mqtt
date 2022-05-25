@@ -19,14 +19,14 @@ module Network.GRPC.MQTT.Topic
     makeRequestFilter,
 
     -- * Re-exports
-    Topic (Topic, unTopic),
-    Filter (Filter, unFilter),
+    Topic (unTopic),
+    Filter (unFilter),
   )
 where
 
 ---------------------------------------------------------------------------------
 
-import Network.MQTT.Topic (Filter (Filter, unFilter), Topic (Topic, unTopic))
+import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
 -- MQTT Topics ------------------------------------------------------------------

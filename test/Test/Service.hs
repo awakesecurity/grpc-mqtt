@@ -122,7 +122,7 @@ withServiceFixture k = do
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Debug -- Silent -- Debug
+    logger = Logger print GRPC.MQTT.Logging.Silent
 
 --------------------------------------------------------------------------------
 
@@ -161,7 +161,7 @@ testClientStreamCall = do
 testBatchClientStreamCall :: Fixture ()
 testBatchClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
-  let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
+  let rqt = GRPC.MQTT.MQTTWriterRequest 10 mempty (clientStreamHandler msg)
   rsp <- makeMethodCall testServiceBatchClientStreamCall rqt
 
   checkClientStreamResponse msg rsp
@@ -182,7 +182,7 @@ testTreeServerStream =
 testServerStreamCall :: Fixture ()
 testServerStreamCall = do
   let msg = Message.StreamRequest "Alice" 3
-  let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
+  let rqt = MQTTReaderRequest msg 10 mempty serverStreamHandler
   rsp <- makeMethodCall testServiceServerStreamCall rqt
 
   checkServerStreamResponse rsp
@@ -327,9 +327,7 @@ testMalformedMessage = do
   checkNormalResponse msg rsp
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Debug
-
--- logger = Logger print GRPC.MQTT.Logging.Silent
+    logger = Logger print GRPC.MQTT.Logging.Silent
 
 --------------------------------------------------------------------------------
 

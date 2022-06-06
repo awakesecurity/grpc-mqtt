@@ -142,13 +142,13 @@ import Network.GRPC.HighLevel.Extra (decodeMetadataMap, encodeMetadataMap)
 import Network.GRPC.MQTT.Message.Request.Core
   ( Request (Request, message, metadata, timeout),
   )
-import Network.GRPC.MQTT.Message.TH
+import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Encode.Extra qualified as Encode
 import Proto3.Wire.Types.Extra (RecordField)
 
--- Wire Format ------------------------------------------------------------------
+-- Wire Format - Encoding -------------------------------------------------------
 
 -- $request-wire-encoding
 --
@@ -172,7 +172,7 @@ wireEncodeRequest = wireWrapRequest . wireEncodeMessage
 wireEncodeRequest' :: Message a => Request a -> ByteString
 wireEncodeRequest' = Lazy.ByteString.toStrict . wireEncodeRequest
 
--- | Partially serializes a 'Request' carrying a wire-encoded 'ByteString'.
+-- | Partially serializes a 'Request' carrying a wire encoded 'ByteString'.
 -- If possible, 'wireEncodeRequest' should be used instead.
 --
 -- If the given request's 'message' is not a valid wire binary, then it is very
@@ -189,7 +189,7 @@ wireWrapRequest' :: Request ByteString -> ByteString
 wireWrapRequest' = Lazy.ByteString.toStrict . wireWrapRequest
 
 -- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
--- 'message' 'ByteString' __must__ by a valid wire binary.
+-- 'message' 'ByteString' __must__ be a valid wire binary.
 --
 -- @since 0.1.0.0
 wireBuildRequest :: Request ByteString -> MessageBuilder
@@ -216,15 +216,15 @@ wireBuildRequest rqt =
           fieldnum = $(reifyFieldNumber ''Request 'metadata)
        in encodeMetadataMap fieldnum (metadata rqt)
 
--- Wire Format - Message Parsers ------------------------------------------------
+-- Wire Format - Decoding -------------------------------------------------------
 
 -- $request-message-parsers
 --
 -- Wire parsers used to decode a serialized 'Request' message and 'Request'
 -- record fields.
 
--- | Partially decodes a 'Request' message, leaving wrapped 'message' wire
--- binary.
+-- | Partially decodes a 'Request' message, leaving wrapped 'message' in wire
+-- format.
 --
 -- @since 0.1.0.0
 wireUnwrapRequest :: ByteString -> Either ParseError (Request ByteString)

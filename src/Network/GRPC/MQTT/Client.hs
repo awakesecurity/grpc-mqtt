@@ -107,13 +107,13 @@ import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
 
+import Network.GRPC.MQTT.Message.Packet (packetReader)
 import Network.GRPC.MQTT.Message.Request (Request (Request), wireWrapRequest)
 import Network.GRPC.MQTT.Sequenced
   ( PublishToStream (..),
     mkPacketizedPublish,
     mkStreamPublish,
     mkStreamRead,
-    packetReader,
   )
 import Network.GRPC.MQTT.Topic qualified as Topic
 import Network.GRPC.MQTT.Wrapping

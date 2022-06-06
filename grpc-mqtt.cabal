@@ -34,6 +34,7 @@ common common
     -Wpartial-fields
     -Wredundant-constraints
     -Wunused-packages
+    -Wno-unused-top-binds
     -fshow-warning-groups
 
   default-extensions:
@@ -74,6 +75,7 @@ library
     Network.GRPC.MQTT.Client
     Network.GRPC.MQTT.Core
     Network.GRPC.MQTT.Logging
+    Network.GRPC.MQTT.Message.Packet
     Network.GRPC.MQTT.Message.Request
     Network.GRPC.MQTT.Message.TH
     Network.GRPC.MQTT.RemoteClient
@@ -89,6 +91,7 @@ library
   other-modules:
     Control.Concurrent.TMap
     Network.GRPC.HighLevel.Orphans
+    Network.GRPC.MQTT.Message.Packet.Core
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
     Proto3.Wire.Decode.Extra
@@ -107,6 +110,7 @@ library
     , stm
     , template-haskell
     , time
+    , unliftio
     , unliftio-core
     , unordered-containers
 
@@ -130,6 +134,8 @@ test-suite test
     Proto.Message
     Test.Network.GRPC.HighLevel.Extra
     Test.Network.GRPC.HighLevel.Extra.Gen
+    Test.Network.GRPC.MQTT.Message.Packet
+    Test.Network.GRPC.MQTT.Message.Packet.Gen
     Test.Network.GRPC.MQTT.Message.Request
     Test.Network.GRPC.MQTT.Message.Request.Gen
     Test.Service
@@ -146,6 +152,7 @@ test-suite test
     , grpc-mqtt
     , hedgehog
     , mtl
+    , stm
     , tasty
     , tasty-hedgehog
     , tasty-hunit

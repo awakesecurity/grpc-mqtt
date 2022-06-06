@@ -22,10 +22,15 @@ module Control.Concurrent.TMap
     delete,
 
     -- * Query
+    length,
+    member,
     lookup,
 
     -- * Folding
     ifoldr,
+
+    -- * Conversion
+    elems,
   )
 where
 
@@ -34,14 +39,15 @@ where
 import Control.Concurrent.STM (STM)
 import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
 
-import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef')
+import Data.Foldable qualified as Foldable
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 
 import GHC.Conc.Sync (unsafeIOToSTM)
 
-import Prelude hiding (lookup)
+import Prelude hiding (length, lookup)
 
 -- TMap ------------------------------------------------------------------------
 
@@ -111,6 +117,22 @@ delete k (TMap ref) = do
 
 -- TMap - Query -----------------------------------------------------------------
 
+-- | Return the number of elements in the 'TMap'.
+--
+-- @since 0.1.0.0
+length :: TMap k v -> STM Int
+length (TMap ref) = do
+  kvs <- unsafeIOToSTM (readIORef ref)
+  pure (Foldable.length kvs)
+
+-- | Is the the key an element of the 'TMap'?
+--
+-- @since 0.1.0.0
+member :: Ord k => k -> TMap k v -> STM Bool
+member k (TMap ref) = do
+  kvs <- unsafeIOToSTM (readIORef ref)
+  pure (Map.member k kvs)
+
 -- | Returns the value associated to the given key, if one exists.
 --
 -- @since 0.1.0.0
@@ -135,3 +157,15 @@ ifoldr cons nil (TMap ref) = do
     run i var xs = do
       x <- readTVar var
       xs >>= cons i x
+
+-- TMap - Conversion ------------------------------------------------------------
+
+-- | Retrieves a list of all mapped values in a 'TMap'.
+--
+-- prop> elems kvs ~ map snd (toAscList kvs)
+--
+-- @since 0.1.0.0
+elems :: TMap k v -> STM [v]
+elems (TMap ref) = do
+  kvs <- unsafeIOToSTM (readIORef ref)
+  traverse readTVar (Map.elems kvs)

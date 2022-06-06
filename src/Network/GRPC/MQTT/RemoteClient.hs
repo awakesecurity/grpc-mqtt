@@ -79,6 +79,7 @@ import Network.GRPC.MQTT.Core
   )
 import Network.GRPC.MQTT.Logging (Logger)
 import Network.GRPC.MQTT.Logging qualified as Logger
+import Network.GRPC.MQTT.Message.Packet (packetReader)
 import Network.GRPC.MQTT.Message.Request (Request (Request), wireUnwrapRequest)
 import Network.GRPC.MQTT.RemoteClient.Session
 import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
@@ -87,7 +88,6 @@ import Network.GRPC.MQTT.Sequenced
     mkPacketizedPublish,
     mkStreamPublish,
     mkStreamRead,
-    packetReader,
   )
 import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
 import Network.GRPC.MQTT.Types
@@ -255,8 +255,8 @@ handleRequest handle = do
           result <- liftIO (k rawmsg timeout metadata)
           rspPublish (wrapResponse result)
         ClientClientStreamHandler k -> do
-          readStream <- mkStreamRead (withExceptT parseErrorToRCE (packetReader (hdlRqtChan handle)))
-          sender <- clientStreamSender readStream
+          reader <- mkStreamRead (withExceptT parseErrorToRCE (packetReader (hdlRqtChan handle)))
+          sender <- clientStreamSender reader
           result <- liftIO (k timeout metadata sender)
           rspPublish (wrapResponse result)
         ClientServerStreamHandler batch k -> do

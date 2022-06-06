@@ -27,9 +27,6 @@ import Data.ByteString (ByteString)
 import Network.GRPC.MQTT.Message.Request (Request (Request))
 
 ---------------------------------------------------------------------------------
---
--- Generators
---
 
 -- | Generates an MQTT 'Request' wrapper with a random 'ByteString' as the
 -- request body.

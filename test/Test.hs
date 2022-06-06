@@ -31,6 +31,7 @@ import Network.MQTT.Topic (Topic)
 import Test.Suite.Config (TestOption)
 
 import qualified Test.Network.GRPC.HighLevel.Extra
+import qualified Test.Network.GRPC.MQTT.Message.Packet
 import qualified Test.Network.GRPC.MQTT.Message.Request
 import qualified Test.Service
 
@@ -47,6 +48,7 @@ testTree =
   testGroup
     "Tests: grpc-mqtt"
     [ Test.Network.GRPC.HighLevel.Extra.tests
+    , Test.Network.GRPC.MQTT.Message.Packet.tests
     , Test.Network.GRPC.MQTT.Message.Request.tests
     , Test.Service.tests
     ]

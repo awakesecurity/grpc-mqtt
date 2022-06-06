@@ -10,7 +10,6 @@
 
 module Network.GRPC.MQTT.Sequenced
   ( PublishToStream (..),
-    packetReader,
     mkPacketizedPublish,
     mkStreamPublish,
     mkStreamRead,
@@ -19,21 +18,17 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TChan (TChan, readTChan)
-import Control.Concurrent.STM.TVar (modifyTVar', newTVarIO, readTVar)
+import Control.Concurrent.Async qualified as Async
 
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 
-import Data.Foldable (foldl', toList)
+import Data.Foldable (toList)
 import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import Data.Int (Int64)
 
 import Data.ByteString (ByteString)
-import Data.ByteString.Builder qualified as ByteString (Builder)
-import Data.ByteString.Builder qualified as ByteString.Builder
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
 import Data.Sequence (Seq, (|>))
@@ -46,79 +41,21 @@ import Network.GRPC.HighLevel.Server (toBS)
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
 
-import Proto3.Suite (Message, fromByteString, toLazyByteString)
-import Proto3.Wire.Decode qualified as Decode
+import Proto3.Suite (Message, toLazyByteString)
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.TMap (TMap)
-import Control.Concurrent.TMap qualified as TMap
-
+import Network.GRPC.MQTT.Message.Packet (Packet)
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Network.GRPC.MQTT.Types (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping
   ( unwrapStreamChunk,
     wrapStreamChunk,
   )
 
-import Proto.Mqtt (Packet (..), RemoteError)
+import Proto.Mqtt (RemoteError)
 
 --------------------------------------------------------------------------------
-
--- | Reads, parses, and orders serialized 'Packet' messages from the source
--- 'TChan'. Returns the serialized message reconstructed from each packet
--- obtained from the channel.
---
--- @since 0.1.0.0
-packetReader ::
-  TChan Lazy.ByteString ->
-  ExceptT Decode.ParseError IO Lazy.ByteString
-packetReader channel = do
-  payloads <- liftIO (atomically (orderPacketReader channel))
-  case payloads of
-    Left err -> throwError err
-    Right xs -> pure (ByteString.Builder.toLazyByteString (builder xs))
-  where
-    builder :: [ByteString] -> ByteString.Builder
-    builder = foldl' (\xs x -> xs <> ByteString.Builder.byteString x) mempty
-
--- | Reads a complete sequence of serialized 'Packet' messages from the source
--- 'TChan' given. Returns an 'STM' action of sequenced packets read from the
--- 'TChan' or a 'Decode.ParseError' raised while attempt to parse one or more
--- of the channel's 'ByteString' as a 'Packet'.
---
--- @since 0.1.0.0
-orderPacketReader ::
-  TChan Lazy.ByteString ->
-  STM (Either Decode.ParseError [ByteString])
-orderPacketReader channel = do
-  buffer <- TMap.empty
-  result <- collect buffer
-
-  case result of
-    Nothing -> do
-      chunks <- TMap.toAscList buffer
-      pure (Right (map snd chunks))
-    Just err -> do
-      pure (Left err)
-  where
-    collect :: TMap Int ByteString -> STM (Maybe Decode.ParseError)
-    collect buffer = do
-      decoded <- decodePacket
-      case decoded of
-        Left perr -> pure (Just perr)
-        Right pkt -> do
-          insertPacket pkt buffer
-          if packetTerminal pkt
-            then pure Nothing
-            else collect buffer
-
-    insertPacket :: Packet -> TMap Int ByteString -> STM ()
-    insertPacket (Packet _ ix raw) = TMap.insert (fromIntegral ix) raw
-
-    decodePacket :: STM (Either Decode.ParseError Packet)
-    decodePacket = do
-      raw <- readTChan channel
-      pure (fromByteString (Lazy.ByteString.toStrict raw))
 
 mkStreamRead ::
   forall io a.
@@ -158,21 +95,14 @@ mkStreamRead readRequest = liftIO do
 
 mkPacketizedPublish :: (MonadIO io) => MQTTClient -> Int64 -> Topic -> io (Lazy.ByteString -> IO ())
 mkPacketizedPublish client msgLimit topic = liftIO do
-  seqVar <- newTVarIO 0
-
   let packetizedPublish :: Lazy.ByteString -> IO ()
-      packetizedPublish bs = do
-        let (chunk, rest) = Lazy.ByteString.splitAt msgLimit bs
-        let isLastPacket = Lazy.ByteString.null rest
-
-        rawPacket <- atomically $ do
-          curSeq <- readTVar seqVar
-          modifyTVar' seqVar (+ 1)
-          return $ toLazyByteString $ Packet isLastPacket curSeq (Lazy.ByteString.toStrict chunk)
-
-        publishq client topic rawPacket False QoS1 []
-
-        unless isLastPacket $ packetizedPublish rest
+      packetizedPublish bytes = do
+        let packets :: Vector (Packet ByteString)
+            packets = Packet.splitPackets (fromIntegral msgLimit) (Lazy.ByteString.toStrict bytes)
+         in Async.forConcurrently_ packets \packet -> do
+              let encoded :: Lazy.ByteString
+                  encoded = Packet.wireWrapPacket packet
+               in publishq client topic encoded False QoS1 []
 
   return packetizedPublish
 

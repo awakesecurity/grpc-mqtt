@@ -33,7 +33,7 @@ tests :: TestTree
 tests =
   testGroup
     "Network.GRPC.MQTT.Message.Request"
-    [ testProperty "wire-format" tripWireFormat
+    [ testProperty "Wire.Request" tripWireFormat
     ]
 
 -- | Round-trip test on 'Request' serialization.

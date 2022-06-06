@@ -104,6 +104,8 @@ import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
+import UnliftIO.Exception (finally)
+
 import System.Timeout qualified as System
 
 ----------------------------------------------------------------------------------
@@ -157,8 +159,7 @@ withSession k = do
     rec handle <- newSessionHandleIO thread
         thread <- Async.async $ runIO do
           insertSessionM sessionKey handle
-          k handle
-          deleteSessionM sessionKey
+          finally (k handle) (deleteSessionM sessionKey)
     pure ()
 
 -- | Querys the ambient sessions map for session with the given session id

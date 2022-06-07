@@ -189,9 +189,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
-    publishReq' <- mkPacketizedPublish mqttClient msgSizeLimit requestTopic
     let publishToRequestTopic :: Message r => r -> IO ()
-        publishToRequestTopic = publishReq' . Proto3.toLazyByteString
+        publishToRequestTopic = mkPacketizedPublish mqttClient msgSizeLimit requestTopic . Proto3.toLazyByteString
 
     let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
         publishRequest rqt timeout metadata = do
@@ -199,11 +198,10 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
           let encoded = wireWrapRequest (Request payload timeout metadata)
           logDebug mqttLogger $ "Publishing to topic: " <> unTopic requestTopic
           logDebug mqttLogger $ "Publishing message: " <> Text.pack (show encoded)
-          publishReq' encoded
+          mkPacketizedPublish mqttClient msgSizeLimit requestTopic encoded
 
-    publishCtrl' <- mkPacketizedPublish mqttClient msgSizeLimit controlTopic
     let publishToControlTopic :: Message r => r -> IO ()
-        publishToControlTopic = publishCtrl' . Proto3.toLazyByteString
+        publishToControlTopic = mkPacketizedPublish mqttClient msgSizeLimit controlTopic . Proto3.toLazyByteString
 
     let publishControlMsg :: AuxControl -> IO ()
         publishControlMsg ctrl = do

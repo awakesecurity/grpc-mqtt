@@ -93,18 +93,14 @@ mkStreamRead readRequest = liftIO do
 
   return readStreamChunk
 
-mkPacketizedPublish :: (MonadIO io) => MQTTClient -> Int64 -> Topic -> io (Lazy.ByteString -> IO ())
-mkPacketizedPublish client msgLimit topic = liftIO do
-  let packetizedPublish :: Lazy.ByteString -> IO ()
-      packetizedPublish bytes = do
-        let packets :: Vector (Packet ByteString)
-            packets = Packet.splitPackets (fromIntegral msgLimit) (Lazy.ByteString.toStrict bytes)
-         in Async.forConcurrently_ packets \packet -> do
-              let encoded :: Lazy.ByteString
-                  encoded = Packet.wireWrapPacket packet
-               in publishq client topic encoded False QoS1 []
-
-  return packetizedPublish
+mkPacketizedPublish :: MonadIO io => MQTTClient -> Int64 -> Topic -> Lazy.ByteString -> io ()
+mkPacketizedPublish client msgLimit topic bytes = liftIO do
+  let packets :: Vector (Packet ByteString)
+      packets = Packet.splitPackets (fromIntegral msgLimit) (Lazy.ByteString.toStrict bytes)
+   in Async.forConcurrently_ packets \packet -> do
+        let encoded :: Lazy.ByteString
+            encoded = Packet.wireWrapPacket packet
+         in publishq client topic encoded False QoS1 []
 
 data PublishToStream a = PublishToStream
   { -- | A function to publish one data element.

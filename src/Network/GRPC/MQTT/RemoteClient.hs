@@ -322,8 +322,7 @@ publishPackets :: Topic -> Lazy.ByteString -> Session ()
 publishPackets topic msg = do
   client <- asks cfgClient
   msglim <- asks (fromIntegral . cfgMsgSize)
-  pubmsg <- mkPacketizedPublish client msglim topic
-  liftIO (pubmsg msg)
+  mkPacketizedPublish client msglim topic msg
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --

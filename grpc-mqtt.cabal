@@ -154,6 +154,6 @@ test-suite test
     , mtl
     , stm
     , tasty
-    , tasty-hedgehog
+    , tasty-hedgehog < 1.1.0.0
     , tasty-hunit
     , tls

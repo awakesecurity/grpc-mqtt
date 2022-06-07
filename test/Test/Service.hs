@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- |
 module Test.Service
@@ -18,12 +17,6 @@ import Test.Tasty.HUnit (assertFailure, (@?=))
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
-
-import Control.Monad (forM_)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (asks)
-
-import Data.Function (fix)
 
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
@@ -48,6 +41,8 @@ import Network.GRPC.HighLevel.Generated
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
 
 import Network.MQTT.Client (QoS (QoS1), publishq)
+
+import Relude hiding (reader)
 
 import Turtle (sleep)
 

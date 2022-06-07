@@ -7,7 +7,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | The client API for making gRPC requests over MQTT.
 --
@@ -33,9 +32,7 @@ where
 ---------------------------------------------------------------------------------
 
 import Control.Exception
-  ( Exception,
-    bracket,
-    displayException,
+  ( bracket,
     handle,
     onException,
     throwIO,
@@ -43,24 +40,16 @@ import Control.Exception
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
 
-import Control.Monad (forever)
-import Control.Monad.Except (ExceptT, liftEither, runExceptT, withExceptT)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Except (liftEither, withExceptT)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Crypto.Nonce qualified as Nonce
 
-import Data.Int (Int64)
-import Data.Maybe (fromMaybe)
-import Data.Typeable (Typeable)
-
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
 
@@ -101,7 +90,12 @@ import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
 import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message)
 import Proto3.Suite qualified as Proto3
 
+import Relude
+
 import System.Timeout qualified as System (timeout)
+
+import Text.Show (ShowS, shows)
+import Text.Show qualified as Show
 
 import Turtle (sleep)
 

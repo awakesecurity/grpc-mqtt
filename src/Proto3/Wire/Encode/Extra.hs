@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Extensions to the proto-wire format encoders missing from the proto3-wire
 -- package.
@@ -13,11 +12,11 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.Int (Int64)
-
 import Proto3.Wire (FieldNumber)
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
+
+import Relude
 
 -- Primitive Message Builders ---------------------------------------------------
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Generators for 'Request' messages.
 module Test.Network.GRPC.MQTT.Message.Request.Gen
@@ -20,9 +19,9 @@ import Hedgehog.Range qualified as Range
 
 import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
 
----------------------------------------------------------------------------------
+import Relude
 
-import Data.ByteString (ByteString)
+---------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.Message.Request (Request (Request))
 

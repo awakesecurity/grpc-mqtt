@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Hedgehog generators for the Haskell type generated from
 -- @test/proto/message.proto@ message.
@@ -24,13 +23,11 @@ import Hedgehog.Range qualified as Range
 
 --------------------------------------------------------------------------------
 
-import Control.Applicative (liftA2)
-
-import Data.Int (Int32)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as Lazy (Text)
 import Data.Text.Lazy qualified as Lazy.Text
-import Data.Word (Word32)
+
+import Relude
 
 --------------------------------------------------------------------------------
 

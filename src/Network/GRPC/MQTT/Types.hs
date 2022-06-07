@@ -3,7 +3,6 @@
 -- that can be found in the COPYING file.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- |
 module Network.GRPC.MQTT.Types
@@ -17,12 +16,6 @@ module Network.GRPC.MQTT.Types
 where
 
 --------------------------------------------------------------------------------
-
-import Data.ByteString (ByteString)
-import Data.Kind (Type)
-import Data.Text (Text)
-import Data.HashMap.Strict (HashMap)
-import Data.List (intercalate)
 
 import Language.Haskell.TH.Syntax (Lift)
 
@@ -38,6 +31,10 @@ import Network.GRPC.HighLevel.Client
 import Network.GRPC.LowLevel (ClientCall)
 
 import Proto3.Suite (Message)
+
+import Relude
+
+import Text.Show qualified as Show
 
 --------------------------------------------------------------------------------
 

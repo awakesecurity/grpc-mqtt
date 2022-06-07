@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Test.Network.GRPC.MQTT.Message.Request
   ( -- * Test Tree
@@ -18,7 +17,6 @@ import Test.Network.GRPC.MQTT.Message.Request.Gen qualified as Gen
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
 
@@ -26,6 +24,8 @@ import Network.GRPC.MQTT.Message.Request (Request)
 import Network.GRPC.MQTT.Message.Request qualified as Request
 
 import Proto3.Wire.Decode qualified as Decode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

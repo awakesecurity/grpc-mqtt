@@ -1,7 +1,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Extensions to the proto-wire format decoders missing from the proto3-wire
 -- package.
@@ -30,14 +29,14 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.Int (Int64)
-
 import Data.Text.Lazy qualified as Lazy.Text
 
 import Language.Haskell.TH (Name)
 
 import Proto3.Wire.Decode (ParseError, Parser, RawField, RawMessage, RawPrimitive)
 import Proto3.Wire.Decode qualified as Decode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

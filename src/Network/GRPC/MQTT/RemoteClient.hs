@@ -6,7 +6,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
@@ -26,23 +25,15 @@ where
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.STM.TChan (writeTChan)
-import Control.Concurrent.STM.TMVar (tryPutTMVar)
 
-import Control.Exception (SomeException, bracket, displayException)
+import Control.Exception (bracket)
 import Control.Exception.Safe (handleAny)
 
-import Control.Monad (when)
-import Control.Monad.Except (ExceptT, runExceptT, withExceptT)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ask, asks)
-import Control.Monad.STM (atomically)
-import Control.Monad.Trans (lift)
+import Control.Monad.Except (withExceptT)
 
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
 import Data.List (stripPrefix)
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Lazy qualified as Lazy.Text
 
@@ -64,6 +55,8 @@ import Proto3.Suite (Enumerated (Enumerated), Message)
 import Proto3.Suite qualified as Proto3
 
 import Proto3.Wire.Decode qualified as Decode
+
+import Relude hiding (reader)
 
 ---------------------------------------------------------------------------------
 
@@ -244,10 +237,10 @@ handleRequest handle = do
     Right (Request rawmsg timeout metadata) -> do
       logger <- asks cfgLogger
       Logger.logDebug logger $
-        (Text.pack . unlines)
+        unlines
           [ "Wrapped request data: "
-          , "  Timeout: " ++ show timeout
-          , "  Metadata: " ++ show metadata
+          , "  Timeout: " <> show timeout
+          , "  Metadata: " <> show metadata
           ]
 
       dispatchClientHandler \case

@@ -4,7 +4,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Module defintions core components required by the library.
 --
@@ -22,9 +21,6 @@ where
 
 import Control.Exception (throw)
 
-import Control.Monad (unless)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-
 import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
   ( TLSClientConfig
@@ -36,8 +32,6 @@ import Data.Conduit.Network.TLS
     tlsClientConfig
   )
 
-import Data.Bifunctor (first)
-import Data.Either (lefts)
 import Data.Time.Clock (NominalDiffTime)
 
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -74,6 +68,8 @@ import Network.MQTT.Client
   )
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
+
+import Relude
 
 --------------------------------------------------------------------------------
 

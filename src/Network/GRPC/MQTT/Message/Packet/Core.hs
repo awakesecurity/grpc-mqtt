@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | TODO
 --
@@ -16,19 +15,13 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Monad (when)
-
 import Data.Data (Data)
-import Data.Typeable (Typeable)
 
 import Data.List qualified as List
-import Data.String (fromString)
 import Data.Text.Lazy qualified as Lazy.Text
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
-
-import GHC.Generics (Generic)
 
 import Proto3.Suite.Class
   ( MessageField,
@@ -43,7 +36,9 @@ import Proto3.Wire.Decode (Parser, RawField)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode qualified as Encode
 
--- ------------------------------------------------------------------------------
+import Relude
+
+---------------------------------------------------------------------------------
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 

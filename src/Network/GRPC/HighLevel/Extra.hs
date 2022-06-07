@@ -1,7 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Definitions extending to grpc-haskell.
 --
@@ -17,7 +16,6 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.Map.Strict qualified as Map
@@ -31,6 +29,8 @@ import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Decode qualified as Wire (Parser, RawField)
 import Proto3.Wire.Encode qualified as Encode
 import Proto3.Wire.Encode qualified as Wire (MessageBuilder)
+
+import Relude
 
 -- Wire Encoding ----------------------------------------------------------------
 

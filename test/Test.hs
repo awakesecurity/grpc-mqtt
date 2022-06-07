@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
@@ -21,10 +20,10 @@ import Test.Tasty.Ingredients.Basic (listingTests)
 import Test.Tasty.Ingredients.ConsoleReporter (consoleTestReporter)
 import Test.Tasty.Options (OptionDescription (Option))
 
-import Data.Proxy (Proxy (Proxy))
-
 import Network.GRPC.HighLevel.Client (Host, Port)
 import Network.MQTT.Topic (Topic)
+
+import Relude hiding (Option)
 
 ---------------------------------------------------------------------------------
 

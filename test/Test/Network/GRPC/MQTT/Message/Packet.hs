@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Test.Network.GRPC.MQTT.Message.Packet
   ( -- * Test Tree
@@ -23,14 +22,8 @@ import Test.Network.GRPC.MQTT.Message.Packet.Gen qualified as Gen
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TChan (newTChanIO, writeTChan)
 
-import Control.Monad.Except (runExceptT)
-
-import Data.Foldable (for_)
-
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
@@ -38,6 +31,8 @@ import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
 import Proto3.Wire.Decode qualified as Decode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

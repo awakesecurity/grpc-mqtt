@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | This module exports templates for constructing frequently MQTT topics and
 -- filters that are frequently needed by clients and remote clients.
@@ -28,6 +27,8 @@ where
 
 import Network.MQTT.Topic (Filter (unFilter), Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
+
+import Relude
 
 -- MQTT Topics ------------------------------------------------------------------
 

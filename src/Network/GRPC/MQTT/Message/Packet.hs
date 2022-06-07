@@ -1,7 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | TODO
 --
@@ -45,24 +44,10 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (STM, atomically)
-
 import Control.Concurrent.STM.TChan (TChan, readTChan)
-import Control.Concurrent.STM.TMVar
-  ( TMVar,
-    newEmptyTMVarIO,
-    putTMVar,
-    tryReadTMVar,
-  )
 
-import Control.Monad (unless, when)
-import Control.Monad.Except (ExceptT, MonadError, throwError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
+import Control.Monad.Except (MonadError, throwError)
 
-import Data.Foldable (foldMap')
-
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
 import Data.ByteString.Builder qualified as ByteString.Builder
@@ -77,6 +62,8 @@ import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

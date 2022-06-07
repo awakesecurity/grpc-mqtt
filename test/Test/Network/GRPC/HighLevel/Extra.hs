@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Test.Network.GRPC.HighLevel.Extra
   ( -- * Test Tree
@@ -22,6 +21,8 @@ import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
 
 import Proto3.Wire.Decode qualified as Decode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

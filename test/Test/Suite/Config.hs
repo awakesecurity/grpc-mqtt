@@ -2,7 +2,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Test.Suite.Config
   ( -- * Test Suite Configuration
@@ -49,11 +48,8 @@ import Control.Monad.Cont (cont, runCont)
 import Control.Monad.Reader
 
 import Data.Default (def)
-import Data.Kind (Type)
-import Data.Typeable (Typeable)
 
 import Data.ByteString.Char8 qualified as ByteString.Char8
-import Data.String (fromString)
 
 import GHC.TypeLits (Symbol)
 
@@ -69,6 +65,8 @@ import Network.MQTT.Topic (Topic)
 import Network.TLS (defaultParamsClient)
 import Network.TLS qualified as TLS
 import Network.TLS.Extra.Cipher (ciphersuite_default)
+
+import Relude
 
 --------------------------------------------------------------------------------
 

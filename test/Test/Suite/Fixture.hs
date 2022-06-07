@@ -1,7 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Test.Suite.Fixture
   ( Fixture (Fixture, unFixture),
@@ -16,10 +15,7 @@ import Test.Tasty.HUnit (Assertion, testCase)
 
 --------------------------------------------------------------------------------
 
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (MonadReader, ReaderT (ReaderT))
-
-import Data.Kind (Type)
+import Relude
 
 --------------------------------------------------------------------------------
 

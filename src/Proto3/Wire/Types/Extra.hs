@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Type declarations extending the proto3-wire package.
 --
@@ -19,6 +18,11 @@ where
 ---------------------------------------------------------------------------------
 
 import Proto3.Wire (FieldNumber)
+
+import Relude
+
+import Text.Show (shows)
+import Text.Show qualified as Show
 
 ---------------------------------------------------------------------------------
 

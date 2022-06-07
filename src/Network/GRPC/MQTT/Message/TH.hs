@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- See [NOTE: Enforcing Message Splice Order]
 {-# OPTIONS_GHC -Wno-unused-imports #-}
@@ -26,6 +25,10 @@ import Proto3.Wire qualified as Proto3
 
 import Language.Haskell.TH (Bang, Con, Dec, Exp, Info, Name, Q, Type)
 import Language.Haskell.TH qualified as TH
+
+import Relude hiding (Type)
+
+import Text.Show (shows)
 
 ---------------------------------------------------------------------------------
 

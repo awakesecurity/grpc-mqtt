@@ -1,7 +1,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Setup for the grpc-haskell service used by the testing suite.
 module Test.Proto.Service
@@ -11,13 +10,6 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Monad (forM_)
-
-import Data.Function (fix)
-import Data.Int (Int32)
-import Data.Maybe (isJust)
-
-import Data.String (fromString)
 import Data.Text.Lazy qualified as Lazy.Text
 
 import Network.GRPC.HighLevel
@@ -45,6 +37,8 @@ import Network.GRPC.HighLevel.Server
   )
 
 import Turtle (sleep)
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

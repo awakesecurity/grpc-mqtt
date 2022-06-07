@@ -5,7 +5,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- |
 --
@@ -78,24 +77,16 @@ import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.STM.TChan (TChan, newTChanIO)
-import Control.Concurrent.STM.TMVar (TMVar, newTMVarIO, takeTMVar)
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
-import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, runReaderT)
-import Control.Monad.STM (atomically)
 
 import Data.Time.Clock (NominalDiffTime)
 
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
-import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding (encodeUtf8)
-
-import GHC.Generics (Generic)
 
 import Language.Haskell.TH.Syntax (Name)
 import Language.Haskell.TH.Syntax qualified as TH.Syntax
@@ -105,6 +96,8 @@ import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
 import UnliftIO.Exception (finally)
+
+import Relude
 
 import System.Timeout qualified as System
 

@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Generators for 'Packet' messages.
 module Test.Network.GRPC.MQTT.Message.Packet.Gen
@@ -21,10 +20,11 @@ import Hedgehog.Range qualified as Range
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

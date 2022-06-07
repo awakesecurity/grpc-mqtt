@@ -6,7 +6,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 module Network.GRPC.MQTT.Sequenced
   ( PublishToStream (..),
@@ -20,18 +19,11 @@ where
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Monad (unless)
-import Control.Monad.Except (ExceptT, throwError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Except (throwError)
 
-import Data.Foldable (toList)
-import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
-import Data.Int (Int64)
-
-import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
-import Data.Sequence (Seq, (|>))
+import Data.Sequence ((|>))
 import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
@@ -42,6 +34,8 @@ import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
 
 import Proto3.Suite (Message, toLazyByteString)
+
+import Relude
 
 --------------------------------------------------------------------------------
 

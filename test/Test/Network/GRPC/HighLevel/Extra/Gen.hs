@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Generators for @grpc-haskell@ types.
 module Test.Network.GRPC.HighLevel.Extra.Gen
@@ -19,14 +18,12 @@ import Hedgehog.Range qualified as Range
 
 ---------------------------------------------------------------------------------
 
-import Data.Char (ord)
-import Data.Word (Word8)
-
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.Map qualified as Map
 
 import Network.GRPC.HighLevel (MetadataMap (MetadataMap))
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

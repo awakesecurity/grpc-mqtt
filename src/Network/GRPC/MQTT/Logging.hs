@@ -1,8 +1,6 @@
-{-# LANGUAGE ImplicitPrelude #-}
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
-
 
 -- | Definitions for the 'Logger' type and logging facilities.
 --
@@ -26,10 +24,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Monad (when)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-
-import Data.Text (Text)
+import Relude
 
 --------------------------------------------------------------------------------
 
@@ -94,4 +89,3 @@ logInfo = logVerbosity Info
 -- @since 0.1.0.0
 logDebug :: (MonadIO io) => Logger -> Text -> io ()
 logDebug = logVerbosity Debug
-

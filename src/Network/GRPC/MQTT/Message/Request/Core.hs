@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Core module defining the 'Request' type and 'Request' instances.
 --
@@ -13,11 +12,10 @@ where
 ---------------------------------------------------------------------------------
 
 import Data.Data (Data)
-import Data.Typeable (Typeable)
-
-import GHC.Generics (Generic)
 
 import Network.GRPC.HighLevel (MetadataMap)
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

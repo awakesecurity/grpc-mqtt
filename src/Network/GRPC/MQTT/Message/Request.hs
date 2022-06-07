@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Definitions for the 'Request' message type.
 --
@@ -120,7 +119,6 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
@@ -134,6 +132,8 @@ import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
+
+import Relude
 
 ---------------------------------------------------------------------------------
 

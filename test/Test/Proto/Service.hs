@@ -10,7 +10,6 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.Text.Lazy qualified as Lazy.Text
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
@@ -110,7 +109,7 @@ handleClientStream (ServerReaderRequest _ recv) = loop 0
 handleServerStream :: Handler 'ServerStreaming StreamRequest StreamReply
 handleServerStream (ServerWriterRequest _ (Message.StreamRequest name n) ssend) = do
   forM_ @[] [1 .. n] \i -> do
-    let greet = name <> Lazy.Text.pack (show i)
+    let greet = name <> show i
     _ <- ssend (Message.StreamReply greet)
     sleep 0.1
 

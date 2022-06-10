@@ -17,7 +17,6 @@ where
 ---------------------------------------------------------------------------------
 
 import Data.ByteString qualified as ByteString
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.Map.Strict qualified as Map
 import Data.Vector qualified as Vector
 
@@ -34,7 +33,7 @@ import Relude
 
 -- Wire Encoding ----------------------------------------------------------------
 
-wireEncodeMetadataMap :: MetadataMap -> Lazy.ByteString
+wireEncodeMetadataMap :: MetadataMap -> LByteString
 wireEncodeMetadataMap = Encode.toLazyByteString . encodeMetadataMap 1
 
 wireDecodeMetadataMap :: ByteString -> Either Decode.ParseError MetadataMap

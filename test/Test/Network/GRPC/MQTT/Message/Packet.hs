@@ -26,7 +26,7 @@ import Control.Concurrent.STM.TChan (newTChanIO, writeTChan)
 
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
+import Data.ByteString.Lazy qualified as LByteString
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
@@ -57,11 +57,11 @@ tripWireFormatPacket = property do
   payload <- forAll Gen.packet
   tripping payload to from
   where
-    to :: Packet ByteString -> Lazy.ByteString
+    to :: Packet ByteString -> LByteString
     to = Packet.wireWrapPacket
 
-    from :: Lazy.ByteString -> Either Decode.ParseError (Packet ByteString)
-    from = Packet.wireUnwrapPacket . Lazy.ByteString.toStrict
+    from :: LByteString -> Either Decode.ParseError (Packet ByteString)
+    from = Packet.wireUnwrapPacket . toStrict
 
 propPacketOrdering :: Property
 propPacketOrdering = property do
@@ -81,8 +81,8 @@ propPacketOrdering = property do
 
   -- If 'Packet.packetReader' is able to correctly order packets it recieves,
   -- then @result@ should be equal to the unshuffled vector of packets.
-  let expect :: Lazy.ByteString
-      expect = Lazy.ByteString.fromStrict (foldMap Packet.payload pxs)
+  let expect :: LByteString
+      expect = fromStrict (foldMap Packet.payload pxs)
    in Right expect === result
 
 -- | Splitting an empty 'ByteString' into packets yields a singleton vector

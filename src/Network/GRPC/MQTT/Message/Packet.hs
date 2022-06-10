@@ -51,8 +51,6 @@ import Control.Monad.Except (MonadError, throwError)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
 import Data.ByteString.Builder qualified as ByteString.Builder
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
@@ -120,14 +118,14 @@ splitPackets size bytes
 -- | Encodes 'Packet' message in the wire binary format.
 --
 -- @since 0.1.0.0
-wireWrapPacket :: Packet ByteString -> Lazy.ByteString
+wireWrapPacket :: Packet ByteString -> LByteString
 wireWrapPacket = Encode.toLazyByteString . wireBuildPacket
 
 -- | Like 'wireWrapPacket', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
 wireWrapPacket' :: Packet ByteString -> ByteString
-wireWrapPacket' = Lazy.ByteString.toStrict . wireWrapPacket
+wireWrapPacket' = toStrict . wireWrapPacket
 
 -- | 'MessageBuilder' combinator capable of serializing a 'Packet' message.
 --
@@ -178,10 +176,10 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
 -- | TODO
 --
 -- @since 0.1.0.0
-packetReader :: TChan Lazy.ByteString -> ExceptT ParseError IO Lazy.ByteString
+packetReader :: TChan LByteString -> ExceptT ParseError IO LByteString
 packetReader = runPacketReader loop
   where
-    loop :: PacketReader Lazy.ByteString
+    loop :: PacketReader LByteString
     loop = do
       missing <- isMissingPackets
       if missing
@@ -214,7 +212,7 @@ emptyPacketSetIO = fmap PacketSet TMap.emptyIO
 -- | TODO
 --
 -- @since 0.1.0.0
-mergePacketSet :: PacketSet ByteString -> STM Lazy.ByteString
+mergePacketSet :: PacketSet ByteString -> STM LByteString
 mergePacketSet (PacketSet pxs) = do
   parts <- TMap.elems pxs
   let builder :: ByteString.Builder
@@ -254,15 +252,12 @@ newtype PacketReader a = PacketReader
 --
 -- @since 0.1.0.0
 data PacketReaderEnv = PacketReaderEnv
-  { channel :: {-# UNPACK #-} !(TChan Lazy.ByteString)
+  { channel :: {-# UNPACK #-} !(TChan LByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
-runPacketReader ::
-  PacketReader a ->
-  TChan Lazy.ByteString ->
-  ExceptT ParseError IO a
+runPacketReader :: PacketReader a -> TChan LByteString -> ExceptT ParseError IO a
 runPacketReader (PacketReader m) channel = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
@@ -284,8 +279,8 @@ readNextPacket = do
               putTMVar var (position info)
         insertPacketSet px pxs
   where
-    decodePacket :: Lazy.ByteString -> Either Decode.ParseError (Packet ByteString)
-    decodePacket = wireUnwrapPacket . Lazy.ByteString.toStrict
+    decodePacket :: LByteString -> Either Decode.ParseError (Packet ByteString)
+    decodePacket = wireUnwrapPacket . toStrict
 
 isMissingPackets :: PacketReader Bool
 isMissingPackets = do

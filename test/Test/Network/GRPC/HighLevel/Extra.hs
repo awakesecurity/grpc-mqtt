@@ -17,9 +17,6 @@ import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
-
 import Proto3.Wire.Decode qualified as Decode
 
 import Relude
@@ -44,8 +41,8 @@ tripWireFormat = property do
   metadata <- forAll Gen.metadataMap
   tripping metadata to from
   where
-    to :: MetadataMap -> Lazy.ByteString
+    to :: MetadataMap -> LByteString
     to = Extra.wireEncodeMetadataMap
 
-    from :: Lazy.ByteString -> Either Decode.ParseError MetadataMap
-    from = Extra.wireDecodeMetadataMap . Lazy.ByteString.toStrict
+    from :: LByteString -> Either Decode.ParseError MetadataMap
+    from = Extra.wireDecodeMetadataMap . toStrict

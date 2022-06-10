@@ -48,10 +48,6 @@ import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 import Crypto.Nonce qualified as Nonce
 
 import Data.ByteString qualified as ByteString
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text.Encoding
 
 import Network.GRPC.HighLevel
   ( GRPCIOError (GRPCIOTimeout),
@@ -137,7 +133,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | Channel for passing MQTT messages back to calling thread
-    responseChan :: TChan Lazy.ByteString
+    responseChan :: TChan LByteString
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -171,10 +167,7 @@ mqttRequest ::
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
 mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
-  print $ baseTopic
-  print $ nmMethod
-
-  logDebug mqttLogger $ "Making gRPC request for method: " <> Text.pack (show nmMethod)
+  logDebug mqttLogger $ "Making gRPC request for method: " <> show nmMethod
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
@@ -188,10 +181,10 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
 
     let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
         publishRequest rqt timeout metadata = do
-          let payload = Lazy.ByteString.toStrict (Proto3.toLazyByteString rqt)
+          let payload = toStrict (Proto3.toLazyByteString rqt)
           let encoded = wireWrapRequest (Request payload timeout metadata)
           logDebug mqttLogger $ "Publishing to topic: " <> unTopic requestTopic
-          logDebug mqttLogger $ "Publishing message: " <> Text.pack (show encoded)
+          logDebug mqttLogger $ "Publishing message: " <> show encoded
           mkPacketizedPublish mqttClient msgSizeLimit requestTopic encoded
 
     let publishToControlTopic :: Message r => r -> IO ()
@@ -200,7 +193,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
     let publishControlMsg :: AuxControl -> IO ()
         publishControlMsg ctrl = do
           let ctrlMessage = AuxControlMessage (Enumerated (Right ctrl))
-          logDebug mqttLogger $ "Publishing control message " <> Text.pack (show ctrl) <> " to topic: " <> unTopic controlTopic
+          logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic controlTopic
           publishToControlTopic ctrlMessage
 
     PublishToStream{publishToStream, publishToStreamCompleted} <-
@@ -290,7 +283,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
   where
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do
-      let errMsg = Text.pack (displayException e)
+      let errMsg = toText (displayException e)
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
 
@@ -333,7 +326,7 @@ connectMQTTGRPC logger cfg = do
       clientCallback =
         SimpleCallback \_ topic msg _ -> do
           logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
-          logDebug logger $ " Raw: " <> Text.Encoding.decodeUtf8 (Lazy.ByteString.toStrict msg)
+          logDebug logger $ " Raw: " <> decodeUtf8 (toStrict msg)
           atomically $ writeTChan chan msg
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
@@ -454,7 +447,7 @@ makeMethodRequestTopic baseTopic sid (MethodName nm) =
   -- instance for 'Topic' automatically inserts '/' slashes when joining
   -- topics.
   let methodTopic :: Maybe Topic
-      methodTopic = mkTopic . Text.Encoding.decodeUtf8 . ByteString.drop 1 $ nm
+      methodTopic = mkTopic . decodeUtf8 . ByteString.drop 1 $ nm
    in case methodTopic of
-        Nothing -> throwIO (BadRPCMethodTopicError (Text.Encoding.decodeUtf8 nm))
+        Nothing -> throwIO (BadRPCMethodTopicError (decodeUtf8 nm))
         Just ts -> pure (baseTopic <> "grpc" <> "request" <> sid <> ts)

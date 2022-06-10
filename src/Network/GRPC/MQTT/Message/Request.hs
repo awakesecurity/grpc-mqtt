@@ -120,8 +120,6 @@ where
 ---------------------------------------------------------------------------------
 
 import Data.ByteString qualified as ByteString
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
 
 import Network.GRPC.HighLevel (MetadataMap)
 
@@ -160,17 +158,14 @@ import Proto3.Wire.Types.Extra (RecordField)
 -- >>> wireEncodeRequest ~ wireWrapRequest . fmap toStrict toLazyByteString
 --
 -- @since 0.1.0.0
-wireEncodeRequest :: forall a. Message a => Request a -> Lazy.ByteString
-wireEncodeRequest = wireWrapRequest . wireEncodeMessage
-  where
-    wireEncodeMessage :: Request a -> Request ByteString
-    wireEncodeMessage = fmap (Lazy.ByteString.toStrict . toLazyByteString)
+wireEncodeRequest :: Message a => Request a -> LByteString
+wireEncodeRequest = wireWrapRequest . fmap (toStrict . toLazyByteString)
 
 -- | Like 'wireEncodeRequest', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
 wireEncodeRequest' :: Message a => Request a -> ByteString
-wireEncodeRequest' = Lazy.ByteString.toStrict . wireEncodeRequest
+wireEncodeRequest' = toStrict . wireEncodeRequest
 
 -- | Partially serializes a 'Request' carrying a wire encoded 'ByteString'.
 -- If possible, 'wireEncodeRequest' should be used instead.
@@ -179,14 +174,14 @@ wireEncodeRequest' = Lazy.ByteString.toStrict . wireEncodeRequest
 -- likely the resulting 'ByteString' can never be decoded.
 --
 -- @since 0.1.0.0
-wireWrapRequest :: Request ByteString -> Lazy.ByteString
+wireWrapRequest :: Request ByteString -> LByteString
 wireWrapRequest = Encode.toLazyByteString . wireBuildRequest
 
 -- | Like 'wireWrapRequest', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
 wireWrapRequest' :: Request ByteString -> ByteString
-wireWrapRequest' = Lazy.ByteString.toStrict . wireWrapRequest
+wireWrapRequest' = toStrict . wireWrapRequest
 
 -- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
 -- 'message' 'ByteString' __must__ be a valid wire binary.

@@ -29,8 +29,6 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.Text.Lazy qualified as Lazy.Text
-
 import Language.Haskell.TH (Name)
 
 import Proto3.Wire.Decode (ParseError, Parser, RawField, RawMessage, RawPrimitive)
@@ -114,9 +112,9 @@ sint =
 -- @since 0.1.0.0
 wireErrorRecordField :: RecordField -> ParseError -> ParseError
 wireErrorRecordField recField e =
-  let issue :: String
-      issue = "decoding " ++ show recField ++ " raised"
-   in Decode.EmbeddedError (Lazy.Text.pack issue) (Just e)
+  let issue :: LText
+      issue = "decoding " <> show recField <> " raised"
+   in Decode.EmbeddedError issue (Just e)
 
 -- | Takes a parse error @e@, and the name of the enclosing parser. Returns a new
 -- 'ParseError' annotating @e@ with a qualified name.
@@ -130,9 +128,9 @@ wireErrorRecordField recField e =
 -- @since 0.1.0.0
 wireErrorLabel :: Name -> ParseError -> ParseError
 wireErrorLabel nm e =
-  let issue :: String
-      issue = "decoding " ++ show nm ++ " raised"
-   in Decode.EmbeddedError (Lazy.Text.pack issue) (Just e)
+  let issue :: LText
+      issue = "decoding " <> show nm <> " raised"
+   in Decode.EmbeddedError issue (Just e)
 
 ---------------------------------------------------------------------------------
 

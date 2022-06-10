@@ -18,7 +18,6 @@ where
 import Data.Data (Data)
 
 import Data.List qualified as List
-import Data.Text.Lazy qualified as Lazy.Text
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
@@ -106,6 +105,6 @@ instance MessageField PacketInfo where
 
 throwMissingPacketInfo :: Int -> Parser RawField a
 throwMissingPacketInfo nfields =
-  let count = Lazy.Text.pack (show nfields)
+  let count = show nfields
       issue = Decode.BinaryError ("expected 2 varints but got " <> count)
    in Decode.throwE (Decode.wireErrorLabel ''PacketInfo issue)

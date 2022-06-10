@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE ImplicitPrelude #-}
 
 -- | Definitions for the 'TMap' container.
 --
@@ -36,18 +35,13 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (STM)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
-
 import Data.Foldable qualified as Foldable
-import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 
 import GHC.Conc.Sync (unsafeIOToSTM)
 
-import Prelude hiding (length, lookup)
+import Relude hiding (empty, length)
 
 -- TMap ------------------------------------------------------------------------
 

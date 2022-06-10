@@ -31,11 +31,8 @@ import Control.Exception.Safe (handleAny)
 
 import Control.Monad.Except (withExceptT)
 
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
 import Data.List (stripPrefix)
 import Data.Text qualified as Text
-import Data.Text.Lazy qualified as Lazy.Text
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
@@ -205,7 +202,7 @@ pattern AuxMessageTerminate :: AuxControlMessage
 pattern AuxMessageTerminate = AuxControlMessage (Enumerated (Right AuxControlTerminate))
 
 -- | Handles AuxControl signals from the "/control" topic
-handleControlMessage :: Logger -> SessionHandle -> Lazy.ByteString -> IO ()
+handleControlMessage :: Logger -> SessionHandle -> LByteString -> IO ()
 handleControlMessage logger handle msg = do
   case fromLazyByteString msg of
     Right AuxMessageTerminate -> do
@@ -217,9 +214,9 @@ handleControlMessage logger handle msg = do
         _ <- tryPutTMVar (hdlHeartbeat handle) ()
         pure ()
     Right ctrl ->
-      Logger.logWarn logger $ "Received unknown control message: " <> Text.pack (show ctrl)
+      Logger.logWarn logger $ "Received unknown control message: " <> show ctrl
     Left err ->
-      Logger.logErr logger $ "Failed to parse control message: " <> Text.pack (show err)
+      Logger.logErr logger $ "Failed to parse control message: " <> show err
 
 -- | TODO
 --
@@ -231,7 +228,7 @@ handleRequest handle = do
   case decode =<< request of
     Left err -> do
       let errmsg :: Text
-          errmsg = Text.pack ("proto3-wire parse error (" ++ show err ++ ")")
+          errmsg = "proto3-wire parse error (" <> show err <> ")"
        in Session.logError 'handleRequest errmsg
       pubRemoteError err
     Right (Request rawmsg timeout metadata) -> do
@@ -270,7 +267,7 @@ handleRequest handle = do
     rspPublish :: Message a => a -> Session ()
     rspPublish rsp = do
       topic <- askResponseTopic
-      let encoded :: Lazy.ByteString
+      let encoded :: LByteString
           encoded = Proto3.toLazyByteString rsp
        in publishPackets topic encoded
 
@@ -279,10 +276,10 @@ handleRequest handle = do
       topic <- askResponseTopic
       publishRemoteError topic err
 
-    decode :: Lazy.ByteString -> Either RemoteError (Request ByteString)
+    decode :: LByteString -> Either RemoteError (Request ByteString)
     decode msg =
       let decoded :: Either Decode.ParseError (Request ByteString)
-          decoded = wireUnwrapRequest (Lazy.ByteString.toStrict msg)
+          decoded = wireUnwrapRequest (toStrict msg)
        in case decoded of
             Left err -> Left (parseErrorToRCE err)
             Right xs -> Right xs
@@ -305,13 +302,13 @@ dispatchClientHandler k = maybe onError k =<< askMethod
       --   3. A gRPC status code 12 for an "unimplemented" call as per gRPC status
       --      code docs: https://grpc.github.io/grpc/core/md_doc_statuscodes.html
       let etype = Proto3.Enumerated (Right Proto.RErrorIOGRPCCallError)
-          ecall = Lazy.Text.fromStrict ("/" <> Topic.unTopic mthTopic)
+          ecall = fromStrict ("/" <> Topic.unTopic mthTopic)
           extra = Just (Proto.RemoteErrorExtraStatusCode 12)
        in publishRemoteError rspTopic (Proto.RemoteError etype ecall extra)
 
 ---------------------------------------------------------------------------------
 
-publishPackets :: Topic -> Lazy.ByteString -> Session ()
+publishPackets :: Topic -> LByteString -> Session ()
 publishPackets topic msg = do
   client <- asks cfgClient
   msglim <- asks (fromIntegral . cfgMsgSize)
@@ -324,8 +321,8 @@ publishRemoteError :: Topic -> RemoteError -> Session ()
 publishRemoteError topic err = do
   logger <- asks cfgLogger
   let prefix = "Network.GRPC.MQTT.RemoteClient.publishRemoteError: "
-      errmsg = "publishing remote error: " ++ show err
-   in Logger.logErr logger (Text.pack (prefix <> errmsg))
+      errmsg = "publishing remote error: " <> show err
+   in Logger.logErr logger (prefix <> errmsg)
 
   let errmsg :: Proto.WrappedResponse
       errmsg = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError $ err
@@ -336,7 +333,7 @@ publishRemoteError topic err = do
 bidiHandler ::
   Message rsp =>
   ExceptT RemoteError Session (Maybe rqt) ->
-  (Lazy.ByteString -> Session ()) ->
+  (LByteString -> Session ()) ->
   Batched ->
   clientcall ->
   MetadataMap ->
@@ -372,7 +369,7 @@ streamReader reader = do
 serverStreamReader ::
   forall a clientcall.
   Message a =>
-  (Lazy.ByteString -> Session ()) ->
+  (LByteString -> Session ()) ->
   Batched ->
   clientcall ->
   MetadataMap ->

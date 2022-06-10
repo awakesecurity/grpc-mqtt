@@ -29,14 +29,13 @@ import Data.Conduit.Network.TLS
         tlsClientUseTLS
       ),
     runTLSClient,
-    tlsClientConfig
+    tlsClientConfig,
   )
 
 import Data.Time.Clock (NominalDiffTime)
 
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.List qualified as L
-import Data.Text qualified as Text
 
 import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
 
@@ -163,4 +162,8 @@ subscribeOrThrow client topics = do
     throw $ MQTTException err
   where
     errMsg :: (Filter, SubErr) -> String
-    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> Text.unpack (unFilter topic) <> "Reason: " <> show subErr
+    errMsg (topic, subErr) =
+      "Failed to subscribe to the topic: "
+        <> toString (unFilter topic)
+        <> "Reason: "
+        <> show subErr

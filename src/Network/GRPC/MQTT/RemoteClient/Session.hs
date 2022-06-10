@@ -82,11 +82,8 @@ import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Data.Time.Clock (NominalDiffTime)
 
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text.Encoding (encodeUtf8)
 
 import Language.Haskell.TH.Syntax (Name)
 import Language.Haskell.TH.Syntax qualified as TH.Syntax
@@ -192,8 +189,8 @@ logError name msg = do
   logger <- asks cfgLogger
   let qname :: Text
       qname = case TH.Syntax.nameModule name of
-        Nothing -> Text.pack (TH.Syntax.nameBase name)
-        Just xs -> Text.pack (xs ++ "." ++ TH.Syntax.nameBase name)
+        Nothing -> toText (TH.Syntax.nameBase name)
+        Just xs -> toText (xs ++ "." ++ TH.Syntax.nameBase name)
    in Logging.logErr logger (qname <> ": " <> msg)
 
 -- 'Session' ---------------------------------------------------------------------
@@ -220,7 +217,7 @@ askMethodKey = do
   --
   -- prop> askMethodKey ~ pure "/service/rpc"
   topic <- Topic.unTopic <$> askMethodTopic
-  pure ("/" <> Text.Encoding.encodeUtf8 topic)
+  pure ("/" <> encodeUtf8 topic)
 
 -- Session - MQTT Topics --------------------------------------------------------
 
@@ -276,7 +273,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 0.1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtChan :: TChan Lazy.ByteString
+  , hdlRqtChan :: TChan LByteString
   , hdlHeartbeat :: TMVar ()
   }
 

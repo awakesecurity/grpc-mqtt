@@ -23,10 +23,6 @@ import Hedgehog.Range qualified as Range
 
 --------------------------------------------------------------------------------
 
-import Data.Text qualified as Text
-import Data.Text.Lazy qualified as Lazy (Text)
-import Data.Text.Lazy qualified as Lazy.Text
-
 import Relude
 
 --------------------------------------------------------------------------------
@@ -66,12 +62,12 @@ size'list gen =
         range = Range.constant 1 (fromIntegral s)
      in Gen.list range gen
 
-lazy'text :: MonadGen m => m Lazy.Text
+lazy'text :: MonadGen m => m LText
 lazy'text =
   Gen.sized \s -> do
     high <- Gen.int (Range.constant 1 (fromIntegral s))
     text <- Gen.string (Range.constant 1 (1 + high)) Gen.alpha
-    pure (Lazy.Text.fromStrict (Text.pack text))
+    pure (toLText text)
 
 size'int32 :: MonadGen m => m Int32
 size'int32 =

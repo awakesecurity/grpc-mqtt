@@ -17,12 +17,9 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.Async qualified as Async
-
 import Control.Monad.Except (throwError)
 
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as Lazy.ByteString
+import Data.ByteString.Lazy qualified as LByteString
 import Data.Sequence ((|>))
 import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
@@ -36,6 +33,9 @@ import Network.MQTT.Topic (Topic)
 import Proto3.Suite (Message, toLazyByteString)
 
 import Relude
+
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async qualified as Async
 
 --------------------------------------------------------------------------------
 
@@ -54,9 +54,9 @@ import Proto.Mqtt (RemoteError)
 mkStreamRead ::
   forall io a.
   (MonadIO io, Message a) =>
-  ExceptT RemoteError IO Lazy.ByteString ->
+  ExceptT RemoteError IO LByteString ->
   io (ExceptT RemoteError IO (Maybe a))
-mkStreamRead readRequest = liftIO do
+mkStreamRead readRequest = do
   -- NOTE: The type signature should be left here to bind the message type
   -- @a@, otherwise it is easy for the @Message@ instance used by the
   -- @fromByteString@ in @unwrapStreamChunk@ to resolve to some other type,
@@ -69,14 +69,14 @@ mkStreamRead readRequest = liftIO do
         bytes <- readRequest
         case unwrapStreamChunk bytes of
           Left err -> do
-            liftIO (atomicWriteIORef reqsRef Nothing)
+            atomicWriteIORef reqsRef Nothing
             throwError err
           Right xs -> do
-            liftIO (atomicWriteIORef reqsRef xs)
+            atomicWriteIORef reqsRef xs
 
   let readStreamChunk :: ExceptT RemoteError IO (Maybe a)
       readStreamChunk =
-        liftIO (readIORef reqsRef) >>= \case
+        readIORef reqsRef >>= \case
           Nothing -> pure Nothing
           Just reqs ->
             if Vector.null reqs
@@ -87,14 +87,20 @@ mkStreamRead readRequest = liftIO do
 
   return readStreamChunk
 
-mkPacketizedPublish :: MonadIO io => MQTTClient -> Int64 -> Topic -> Lazy.ByteString -> io ()
-mkPacketizedPublish client msgLimit topic bytes = liftIO do
+mkPacketizedPublish ::
+  MonadUnliftIO io =>
+  MQTTClient ->
+  Int64 ->
+  Topic ->
+  LByteString ->
+  io ()
+mkPacketizedPublish client msgLimit topic bytes =
   let packets :: Vector (Packet ByteString)
-      packets = Packet.splitPackets (fromIntegral msgLimit) (Lazy.ByteString.toStrict bytes)
+      packets = Packet.splitPackets (fromIntegral msgLimit) (toStrict bytes)
    in Async.forConcurrently_ packets \packet -> do
-        let encoded :: Lazy.ByteString
+        let encoded :: LByteString
             encoded = Packet.wireWrapPacket packet
-         in publishq client topic encoded False QoS1 []
+         in liftIO (publishq client topic encoded False QoS1 [])
 
 data PublishToStream a = PublishToStream
   { -- | A function to publish one data element.
@@ -111,7 +117,7 @@ mkStreamPublish ::
   Batched ->
   (forall t. Message t => t -> IO ()) ->
   io (PublishToStream r)
-mkStreamPublish msgLimit useBatch publish = liftIO do
+mkStreamPublish msgLimit useBatch publish = do
   chunksRef <- newIORef ((Seq.empty, 0) :: (Seq ByteString, Int64))
 
   let seqToVector :: Seq t -> Vector t
@@ -121,14 +127,14 @@ mkStreamPublish msgLimit useBatch publish = liftIO do
       accumulatedSend a = do
         (accChunks, accSize) <- readIORef chunksRef
         let chunk = toLazyByteString a
-            sz = Lazy.ByteString.length chunk
+            sz = LByteString.length chunk
         if accSize + sz > msgLimit
           then do
             unless (Seq.null accChunks) $
               publish $ wrapStreamChunk $ Just $ seqToVector accChunks
-            atomicWriteIORef chunksRef (Seq.singleton (Lazy.ByteString.toStrict chunk), sz)
+            atomicWriteIORef chunksRef (Seq.singleton (toStrict chunk), sz)
           else do
-            atomicWriteIORef chunksRef (accChunks |> Lazy.ByteString.toStrict chunk, accSize + sz)
+            atomicWriteIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
 
   let unaccumulatedSend :: r -> IO ()
       unaccumulatedSend = publish . wrapStreamChunk . Just . Vector.singleton . toBS

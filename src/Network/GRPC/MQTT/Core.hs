@@ -1,11 +1,13 @@
-{-
-  Copyright (c) 2021 Arista Networks, Inc.
-  Use of this source code is governed by the Apache License 2.0
-  that can be found in the COPYING file.
--}
+-- Copyright (c) 2021 Arista Networks, Inc.
+-- Use of this source code is governed by the Apache License 2.0
+-- that can be found in the COPYING file.
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
 
+-- | Module defintions core components required by the library.
+--
+-- @since 0.1.0.0
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
@@ -15,25 +17,46 @@ module Network.GRPC.MQTT.Core
   )
 where
 
-import Relude
+--------------------------------------------------------------------------------
 
 import Control.Exception (throw)
-import Data.Conduit.Network
-  ( AppData,
-    appSink,
-    appSource,
-  )
+
+import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
-  ( TLSClientConfig (..),
+  ( TLSClientConfig
+      ( tlsClientSockSettings,
+        tlsClientTLSSettings,
+        tlsClientUseTLS
+      ),
     runTLSClient,
     tlsClientConfig,
   )
-import qualified Data.List as L
+
+import Data.Time.Clock (NominalDiffTime)
+
+import Data.ByteString.Char8 qualified as ByteString.Char8
+import Data.List qualified as L
+
 import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
+
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTConduit,
-    MQTTConfig (..),
+    MQTTConfig
+      ( MQTTConfig,
+        _cleanSession,
+        _connID,
+        _connProps,
+        _connectTimeout,
+        _hostname,
+        _lwt,
+        _msgCB,
+        _password,
+        _port,
+        _protocol,
+        _tlsSettings,
+        _username
+      ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
     QoS (QoS1),
@@ -44,11 +67,14 @@ import Network.MQTT.Client
   )
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
-import Turtle (NominalDiffTime)
 
-{- |
-  Superset of 'MQTTConfig'
--}
+import Relude
+
+--------------------------------------------------------------------------------
+
+-- | Superset of 'MQTTConfig'
+--
+-- @since 0.1.0.0
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
@@ -70,6 +96,9 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , _tlsSettings :: TLSSettings
   }
 
+-- | The default 'MQTTGRPCConfig'.
+--
+-- @since 0.1.0.0
 defaultMGConfig :: MQTTGRPCConfig
 defaultMGConfig =
   MQTTGRPCConfig
@@ -91,10 +120,14 @@ defaultMGConfig =
     }
 
 -- | Project 'MQTTConfig' from 'MQTTGRPCConfig'
+--
+-- @since 0.1.0.0
 getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
+--
+-- @since 0.1.0.0
 connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTConfig cfg)
   where
@@ -103,7 +136,7 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
 
     tlsCfg :: TLSClientConfig
     tlsCfg =
-      (tlsClientConfig _port (encodeUtf8 _hostname))
+      (tlsClientConfig _port (ByteString.Char8.pack _hostname))
         { tlsClientTLSSettings = _tlsSettings
         , tlsClientUseTLS = useTLS
         , tlsClientSockSettings = brokerProxy
@@ -113,6 +146,8 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
     toMQTTConduit ad = (appSource ad, appSink ad)
 
 -- | Period for heartbeat messages
+--
+-- @since 0.1.0.0
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 
@@ -127,4 +162,8 @@ subscribeOrThrow client topics = do
     throw $ MQTTException err
   where
     errMsg :: (Filter, SubErr) -> String
-    errMsg (topic, subErr) = "Failed to subscribe to the topic: " <> toString (unFilter topic) <> "Reason: " <> show subErr
+    errMsg (topic, subErr) =
+      "Failed to subscribe to the topic: "
+        <> toString (unFilter topic)
+        <> "Reason: "
+        <> show subErr

@@ -15,5 +15,6 @@ in grpc-mqtt.env.overrideAttrs (old: {
     pkgs.haskell-language-server
     pkgs.haskellPackages.c2hs
     pkgs.haskellPackages.proto3-suite
+    pkgs.mosquitto
   ];
 })

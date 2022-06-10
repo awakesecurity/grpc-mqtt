@@ -25,6 +25,7 @@ module Network.GRPC.MQTT.Wrapping
     wrapServerStreamingClientHandler,
     wrapBiDiStreamingClientHandler,
     unwrapBiDiStreamResponse,
+    parseErrorToRCE,
   )
 where
 
@@ -89,16 +90,21 @@ import Proto3.Suite
   )
 import Proto3.Wire.Decode (ParseError (..))
 
+---------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------
+
 -- Client Handler Wrappers
 wrapUnaryClientHandler ::
   (Message request, Message response) =>
   (ClientRequest 'Normal request response -> IO (ClientResult 'Normal response)) ->
   ClientHandler
 wrapUnaryClientHandler handler =
-  ClientUnaryHandler $ \rawRequest timeout metadata ->
-    case fromByteString rawRequest of
+  ClientUnaryHandler $ \raw timeout metadata ->
+    case fromByteString raw of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
-      Right req -> handler (ClientNormalRequest req timeout metadata)
+      Right msg -> handler (ClientNormalRequest msg timeout metadata)
 
 wrapServerStreamingClientHandler ::
   (Message request, Message response) =>
@@ -196,7 +202,7 @@ unwrapResponse wrappedMessage = do
 
   statusCode <-
     case toStatusCode mqttresponseResponseCode of
-      Nothing -> Left $ remoteError ("Invalid reponse code: " <> show mqttresponseResponseCode)
+      Nothing -> Left $ remoteError ("Invalid reponse code: " <> Relude.show mqttresponseResponseCode)
       Just sc -> Right sc
 
   let statusDetails = toStatusDetails mqttresponseDetails
@@ -252,9 +258,10 @@ unwrapStreamChunk msg =
     WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
     WrappedStreamChunk (Just (WrappedStreamChunkOrErrorElems (WrappedStreamChunk_Elems chunks))) -> do
       let parse :: ByteString -> Either RemoteError a
-          parse chunk = case fromByteString chunk of
-            Left err -> Left $ parseErrorToRCE err
-            Right rsp -> Right rsp
+          parse chunk =
+            case fromByteString chunk of
+              Left err -> Left $ parseErrorToRCE err
+              Right rsp -> Right rsp
       Just <$> traverse parse chunks
 
 -- Utilities

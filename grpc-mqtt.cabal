@@ -1,116 +1,159 @@
-cabal-version:       2.2
-name:                grpc-mqtt
-description:         A library for making gRPC requests over an MQTT connection
-version:             0.1.0.0
-synopsis:            Run gRPC services over an MQTT connection
-license:             Apache-2.0
-author:              Arista Networks
-maintainer:          opensource@awakesecurity.com
-copyright:           2021 Arista Networks
-category:            Network
-build-type:          Simple
-extra-source-files:  proto/*.proto
+cabal-version: 3.0
 
-common shared-settings
-  default-language:   Haskell2010 
-  ghc-options:        -Wall
-                      -Wcompat
-                      -Werror
-                      -Widentities
-                      -Wincomplete-record-updates
-                      -Wincomplete-uni-patterns
-                      -Wmissing-fields
-                      -Wmissing-home-modules
-                      -Wpartial-fields
-                      -Wredundant-constraints
-                      -Wunused-packages
-                      -fshow-warning-groups
+name:        grpc-mqtt
+description: A library for making gRPC requests over an MQTT connection
+version:     0.1.0.0
+synopsis:    Run gRPC services over an MQTT connection
+license:     Apache-2.0
+author:      Arista Networks
+maintainer:  opensource@awakesecurity.com
+copyright:   2021 Arista Networks
+category:    Network
+build-type:  Simple
 
-  default-extensions: BangPatterns
-                      DataKinds
-                      DefaultSignatures
-                      DeriveFoldable
-                      DeriveFunctor
-                      DeriveGeneric
-                      DeriveLift
-                      DeriveTraversable
-                      DerivingStrategies
-                      FlexibleContexts
-                      FlexibleInstances
-                      FunctionalDependencies
-                      GADTs
-                      InstanceSigs
-                      KindSignatures
-                      LambdaCase
-                      MultiParamTypeClasses
-                      NamedFieldPuns
-                      NoImplicitPrelude
-                      OverloadedStrings
-                      PatternSynonyms
-                      RankNTypes
-                      ScopedTypeVariables
-                      StandaloneDeriving
-                      TupleSections
-                      TypeApplications
-                      TypeFamilies
-                      TypeOperators
+extra-source-files:
+  README.md
+  proto/Mqtt.proto
+  test/proto/message.proto
+  test/proto/service.proto
 
-  build-depends:      base >=4.14 && <4.15
-                    , bytestring
-                    , containers
-                    , deepseq
-                    , grpc-haskell
-                    , grpc-haskell-core
-                    , net-mqtt >= 0.8.1
-                    , proto3-suite
-                    , proto3-wire
-                    , relude
-                    , text
-                    , turtle
-                    , unliftio
-                    , vector
+tested-with:
+  GHC == 8.10.4
+
+common common
+  default-language:   Haskell2010
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Werror
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-fields
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Wunused-packages
+    -Wno-unused-top-binds
+    -fshow-warning-groups
+
+  default-extensions:
+    BangPatterns BlockArguments DataKinds DefaultSignatures DeriveDataTypeable
+    DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable
+    DerivingStrategies DerivingVia FlexibleContexts FlexibleInstances
+    FunctionalDependencies GADTs ImportQualifiedPost InstanceSigs KindSignatures
+    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude
+    OverloadedStrings PatternSynonyms RankNTypes ScopedTypeVariables
+    StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeOperators
+
+  build-depends:
+    , async
+    , base >=4.14 && <4.15
+    , bytestring
+    , containers
+    , deepseq
+    , grpc-haskell
+    , grpc-haskell-core
+    , net-mqtt >= 0.8.1
+    , proto3-suite
+    , proto3-wire
+    , relude
+    , text
+    , turtle
+    , vector
 
 library
-  import:             shared-settings
-  exposed-modules:    Network.GRPC.MQTT
-                      Network.GRPC.MQTT.Client
-                      Network.GRPC.MQTT.Core
-                      Network.GRPC.MQTT.Logging
-                      Network.GRPC.MQTT.RemoteClient
-                      Network.GRPC.MQTT.Sequenced
-                      Network.GRPC.MQTT.TH.Client
-                      Network.GRPC.MQTT.TH.Proto
-                      Network.GRPC.MQTT.TH.RemoteClient
-                      Network.GRPC.MQTT.Types
-                      Network.GRPC.MQTT.Wrapping
-  other-modules:      Proto.Mqtt
-  ghc-options:        -O2
-  hs-source-dirs:     src gen
-  build-depends:      conduit-extra
-                    , connection
-                    , mtl
-                    , network-conduit-tls
-                    , nonce
-                    , sorted-list
-                    , template-haskell
-                    , unordered-containers
+  import:      common
+  ghc-options: -O2
 
-test-suite grpc-mqtt-test
-  import:             shared-settings
-  ghc-options:        -threaded -with-rtsopts=-N2
-  type:               exitcode-stdio-1.0
-  hs-source-dirs:     test gen
-  main-is:            Test.hs
-  other-modules:      Proto.Test
-                      Test.GRPCServers
-                      Test.Helpers
-                      Test.ProtoClients
-                      Test.ProtoRemoteClients
-  build-depends:      grpc-mqtt   
-                    , connection
-                    , data-default
-                    , tasty
-                    , tasty-hunit
-                    , time
-                    , tls
-                    , x509-store
+  hs-source-dirs:
+    src
+    gen/src
+
+  exposed-modules:
+    Network.GRPC.HighLevel.Extra
+    Network.GRPC.MQTT
+    Network.GRPC.MQTT.Client
+    Network.GRPC.MQTT.Core
+    Network.GRPC.MQTT.Logging
+    Network.GRPC.MQTT.Message.Packet
+    Network.GRPC.MQTT.Message.Request
+    Network.GRPC.MQTT.Message.TH
+    Network.GRPC.MQTT.RemoteClient
+    Network.GRPC.MQTT.RemoteClient.Session
+    Network.GRPC.MQTT.Sequenced
+    Network.GRPC.MQTT.TH.Client
+    Network.GRPC.MQTT.TH.Proto
+    Network.GRPC.MQTT.TH.RemoteClient
+    Network.GRPC.MQTT.Topic
+    Network.GRPC.MQTT.Types
+    Network.GRPC.MQTT.Wrapping
+
+  other-modules:
+    Control.Concurrent.TMap
+    Network.GRPC.HighLevel.Orphans
+    Network.GRPC.MQTT.Message.Packet.Core
+    Network.GRPC.MQTT.Message.Request.Core
+    Proto.Mqtt
+    Proto3.Wire.Decode.Extra
+    Proto3.Wire.Encode.Extra
+    Proto3.Wire.Types.Extra
+    Proto3.Wire.Types.Extra.TH
+
+  build-depends:
+    , conduit-extra
+    , connection
+    , mtl
+    , network-conduit-tls
+    , nonce
+    , safe-exceptions
+    , stm
+    , template-haskell
+    , time
+    , unliftio
+    , unliftio-core
+    , unordered-containers
+
+test-suite test
+  import:  common
+  type:    exitcode-stdio-1.0
+  main-is: Test.hs
+
+  hs-source-dirs:
+    test
+    gen/test
+
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N2
+    -O2
+
+  other-modules:
+    Proto.Service
+    Proto.Message
+    Test.Network.GRPC.HighLevel.Extra
+    Test.Network.GRPC.HighLevel.Extra.Gen
+    Test.Network.GRPC.MQTT.Message.Packet
+    Test.Network.GRPC.MQTT.Message.Packet.Gen
+    Test.Network.GRPC.MQTT.Message.Request
+    Test.Network.GRPC.MQTT.Message.Request.Gen
+    Test.Service
+    Test.Suite.Config
+    Test.Suite.Fixture
+    Test.Proto.Clients
+    Test.Proto.Message.Gen
+    Test.Proto.RemoteClients
+    Test.Proto.Service
+
+  build-depends:
+    , connection
+    , data-default
+    , grpc-mqtt
+    , hedgehog
+    , mtl
+    , stm
+    , tasty
+    , tasty-hedgehog < 1.1.0.0
+    , tasty-hunit
+    , tls

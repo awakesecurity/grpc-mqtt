@@ -1,0 +1,14 @@
+-- Basic verbosity
+:set -v1
+
+-- Compile to object code
+:set -fobject-code
+
+-- Silence -Werror where it is unhelpful in GHCi.
+:set -Wno-error=unused-packages
+:set -Wno-error=unused-matches
+:set -Wno-error=unused-imports
+:set -Wno-error=unused-top-binds
+
+-- Set prompt to hide modules in the repl's namespace.
+:set prompt "*> "

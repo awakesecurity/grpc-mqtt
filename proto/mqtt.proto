@@ -1,18 +1,6 @@
 syntax = "proto3";
+
 package mqtt;
-
-
-message Packet {
-  bool terminal = 1;
-  int32 sequence_num = 2;
-  bytes payload = 3;
-}
-
-message MQTTRequest {
-  int64 timeout = 1;
-  MetadataMap metamap = 2;
-  bytes payload = 3;
-}
 
 message ResponseBody {
   bytes value = 1;
@@ -92,6 +80,7 @@ enum RError {
   IOGRPCHandlerException = 26;
   MQTTFailure = 27;
 }
+
 message RemoteError {
   RError error_type = 1;
   string message = 2;

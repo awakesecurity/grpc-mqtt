@@ -4,152 +4,103 @@
   that can be found in the COPYING file.
 -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.GRPC.MQTT.Sequenced where
+module Network.GRPC.MQTT.Sequenced
+  ( PublishToStream (..),
+    mkPacketizedPublish,
+    mkStreamPublish,
+    mkStreamRead,
+  )
+where
+
+--------------------------------------------------------------------------------
+
+import Control.Monad.Except (throwError)
+
+import Data.ByteString.Lazy qualified as LByteString
+import Data.Sequence ((|>))
+import Data.Sequence qualified as Seq
+import Data.Vector (Vector)
+import Data.Vector qualified as Vector
+
+import Network.GRPC.HighLevel.Server (toBS)
+
+import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
+import Network.MQTT.Topic (Topic)
+
+import Proto3.Suite (Message, toLazyByteString)
 
 import Relude
 
-import qualified Data.ByteString.Builder as Builder
-import qualified Data.ByteString.Lazy as LBS
-import Data.Sequence ((|>))
-import qualified Data.Sequence as Seq
-import qualified Data.SortedList as SL
-import Data.Vector (Vector)
-import qualified Data.Vector as Vector
-import Network.GRPC.HighLevel.Server (toBS)
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async qualified as Async
+
+--------------------------------------------------------------------------------
+
+import Network.GRPC.MQTT.Message.Packet (Packet)
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Network.GRPC.MQTT.Types (Batched (Batched))
-import Network.GRPC.MQTT.Wrapping (fromLazyByteString, unwrapStreamChunk, wrapStreamChunk)
-import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
-import Network.MQTT.Topic (Topic)
-import Proto.Mqtt (Packet (..), RemoteError)
-import Proto3.Suite (Message, toLazyByteString)
-import UnliftIO.STM (TChan, readTChan)
+import Network.GRPC.MQTT.Wrapping
+  ( unwrapStreamChunk,
+    wrapStreamChunk,
+  )
 
-data SequenceIdx = Unsequenced | SequencedIdx Natural
-  deriving stock (Eq, Ord)
+import Proto.Mqtt (RemoteError)
 
--- | A class representing types that have some form of sequence id
-class Sequenced a where
-  type Payload a
-  seqNum :: a -> SequenceIdx
-  seqPayload :: a -> Payload a
+--------------------------------------------------------------------------------
 
--- | A newtype wrapper to use 'seqNum` for its 'Ord' and 'Eq' instances
-newtype SequencedWrap a = SequencedWrap a
-  deriving stock (Show)
-  deriving newtype (Sequenced)
-
-instance (Sequenced sa) => Eq (SequencedWrap sa) where
-  (==) = (==) `on` seqNum
-
-instance (Sequenced sa) => Ord (SequencedWrap sa) where
-  (<=) = (<=) `on` seqNum
-
--- 'Either' can be sequenced where 'Left' represents an error and will
--- always be given first in the sequence
-instance (Sequenced a) => Sequenced (Either e a) where
-  type Payload (Either e a) = Either e (Payload a)
-  seqNum (Left _) = Unsequenced
-  seqNum (Right a) = seqNum a
-  seqPayload = fmap seqPayload
-
-instance Sequenced Packet where
-  type Payload Packet = ByteString
-  seqNum Packet{..} =
-    if packetSequenceNum < 0
-      then Unsequenced
-      else SequencedIdx (fromIntegral packetSequenceNum)
-
-  seqPayload = packetPayload
-
-mkPacketizedRead :: forall io. (MonadIO io) => TChan LByteString -> io (ExceptT RemoteError io LByteString)
-mkPacketizedRead chan = do
-  let read = fromLazyByteString @Packet <$> readTChan chan
-  readSeq <- mkSequencedRead read
-
-  let readMessage :: Builder.Builder -> ExceptT RemoteError io LByteString
-      readMessage acc = do
-        (Packet isLastPacket _ chunk) <- ExceptT readSeq
-        let builder = acc <> Builder.byteString chunk
-        if isLastPacket
-          then pure $ Builder.toLazyByteString builder
-          else readMessage builder
-
-  return $ readMessage mempty
-
-{- | Given an 'STM' action that gets a 'Sequenced' object, creates a new wrapped action that will
- read the objects in order even if they are received out of order
- NB: Objects with negative sequence numbers are always returned immediately
--}
-mkSequencedRead :: forall io a. (MonadIO io, Sequenced a) => STM a -> io (io a)
-mkSequencedRead read = do
-  seqVar <- newTVarIO 0
-  bufferVar <- newTVarIO $ SL.toSortedList @(SequencedWrap a) []
-
-  let orderedRead :: STM a
-      orderedRead = do
-        curSeq <- readTVar seqVar
-        buffer <- readTVar bufferVar
-
-        sa <- case SL.uncons buffer of
-          Just (sa, rest)
-            | SequencedIdx idx <- seqNum sa
-              , curSeq == idx ->
-              writeTVar bufferVar rest $> sa
-          _ -> coerce read
-
-        case seqNum sa of
-          Unsequenced -> return $ coerce sa
-          SequencedIdx idx ->
-            case idx `compare` curSeq of
-              -- If sequence number is less than current, it must be a duplicate, so we discard it and read again
-              LT -> orderedRead
-              EQ -> modifyTVar' seqVar (+ 1) $> coerce sa
-              GT -> modifyTVar' bufferVar (SL.insert sa) >> orderedRead
-
-  return $ atomically orderedRead
-
-mkStreamRead :: forall r io. (Message r, MonadIO io) => ExceptT RemoteError IO LByteString -> io (ExceptT RemoteError IO (Maybe r))
+mkStreamRead ::
+  forall io a.
+  (MonadIO io, Message a) =>
+  ExceptT RemoteError IO LByteString ->
+  io (ExceptT RemoteError IO (Maybe a))
 mkStreamRead readRequest = do
-  reqsRef :: IORef (Maybe (Vector r)) <- newIORef (Just Vector.empty)
+  -- NOTE: The type signature should be left here to bind the message type
+  -- @a@, otherwise it is easy for the @Message@ instance used by the
+  -- @fromByteString@ in @unwrapStreamChunk@ to resolve to some other type,
+  -- resulting in a parse error.
+
+  reqsRef :: IORef (Maybe (Vector a)) <- newIORef (Just Vector.empty)
 
   let readNextChunk :: ExceptT RemoteError IO ()
       readNextChunk = do
-        res <- readRequest
-        cs <- hoistEither $ unwrapStreamChunk res
-        writeIORef reqsRef cs
+        bytes <- readRequest
+        case unwrapStreamChunk bytes of
+          Left err -> do
+            atomicWriteIORef reqsRef Nothing
+            throwError err
+          Right xs -> do
+            atomicWriteIORef reqsRef xs
 
-  let readStreamChunk :: ExceptT RemoteError IO (Maybe r)
+  let readStreamChunk :: ExceptT RemoteError IO (Maybe a)
       readStreamChunk =
         readIORef reqsRef >>= \case
           Nothing -> pure Nothing
           Just reqs ->
             if Vector.null reqs
               then readNextChunk >> readStreamChunk
-              else writeIORef reqsRef (Just $ Vector.tail reqs) >> return (Just $ Vector.head reqs)
+              else liftIO do
+                atomicWriteIORef reqsRef (Just $ Vector.tail reqs)
+                return (Just $ Vector.head reqs)
 
   return readStreamChunk
 
-mkPacketizedPublish :: (MonadIO io) => MQTTClient -> Int64 -> Topic -> io (LByteString -> IO ())
-mkPacketizedPublish client msgLimit topic = do
-  seqVar <- newTVarIO 0
-
-  let packetizedPublish :: LByteString -> IO ()
-      packetizedPublish bs = do
-        let (chunk, rest) = LBS.splitAt msgLimit bs
-        let isLastPacket = LBS.null rest
-
-        rawPacket <- atomically $ do
-          curSeq <- readTVar seqVar
-          modifyTVar' seqVar (+ 1)
-          return $ toLazyByteString $ Packet isLastPacket curSeq (toStrict chunk)
-
-        publishq client topic rawPacket False QoS1 []
-
-        unless isLastPacket $ packetizedPublish rest
-
-  return packetizedPublish
+mkPacketizedPublish ::
+  MonadUnliftIO io =>
+  MQTTClient ->
+  Int64 ->
+  Topic ->
+  LByteString ->
+  io ()
+mkPacketizedPublish client msgLimit topic bytes =
+  let packets :: Vector (Packet ByteString)
+      packets = Packet.splitPackets (fromIntegral msgLimit) (toStrict bytes)
+   in Async.forConcurrently_ packets \packet -> do
+        let encoded :: LByteString
+            encoded = Packet.wireWrapPacket packet
+         in liftIO (publishq client topic encoded False QoS1 [])
 
 data PublishToStream a = PublishToStream
   { -- | A function to publish one data element.
@@ -170,19 +121,20 @@ mkStreamPublish msgLimit useBatch publish = do
   chunksRef <- newIORef ((Seq.empty, 0) :: (Seq ByteString, Int64))
 
   let seqToVector :: Seq t -> Vector t
-      seqToVector = fromList . toList
+      seqToVector = Vector.fromList . toList
 
   let accumulatedSend :: r -> IO ()
       accumulatedSend a = do
         (accChunks, accSize) <- readIORef chunksRef
         let chunk = toLazyByteString a
-            sz = LBS.length chunk
+            sz = LByteString.length chunk
         if accSize + sz > msgLimit
           then do
             unless (Seq.null accChunks) $
               publish $ wrapStreamChunk $ Just $ seqToVector accChunks
-            writeIORef chunksRef (Seq.singleton (toStrict chunk), sz)
-          else writeIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
+            atomicWriteIORef chunksRef (Seq.singleton (toStrict chunk), sz)
+          else do
+            atomicWriteIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
 
   let unaccumulatedSend :: r -> IO ()
       unaccumulatedSend = publish . wrapStreamChunk . Just . Vector.singleton . toBS
@@ -194,7 +146,7 @@ mkStreamPublish msgLimit useBatch publish = do
           publish $ wrapStreamChunk $ Just $ seqToVector accChunks
         -- Send end of stream indicator
         publish $ wrapStreamChunk Nothing
-        writeIORef chunksRef (Seq.empty, 0)
+        atomicWriteIORef chunksRef (Seq.empty, 0)
 
   return $
     PublishToStream

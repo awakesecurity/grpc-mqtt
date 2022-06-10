@@ -25,8 +25,6 @@ import Test.Network.GRPC.MQTT.Message.Packet.Gen qualified as Gen
 import Control.Concurrent.STM.TChan (newTChanIO, writeTChan)
 
 import Data.ByteString qualified as ByteString
-import Data.ByteString.Lazy qualified as Lazy (ByteString)
-import Data.ByteString.Lazy qualified as LByteString
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 

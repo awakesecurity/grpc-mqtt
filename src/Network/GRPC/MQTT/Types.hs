@@ -17,8 +17,6 @@ where
 
 --------------------------------------------------------------------------------
 
-import Language.Haskell.TH.Syntax (Lift)
-
 import Network.GRPC.HighLevel.Client
   ( ClientResult,
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
@@ -35,6 +33,10 @@ import Proto3.Suite (Message)
 import Relude
 
 import Text.Show qualified as Show
+
+--------------------------------------------------------------------------------
+
+import Network.GRPC.MQTT.Option (Batched (Batched, Unbatched))
 
 --------------------------------------------------------------------------------
 
@@ -123,5 +125,5 @@ data ClientHandler where
 -- streamed in a short time. On the other hand, it is not a good idea to
 -- batch RPCs that send small messages infrequently (long-poll) because
 -- messages will not be published immediately.
-data Batched = Unbatched | Batched
-  deriving (Eq, Ord, Lift)
+-- data Batched = Unbatched | Batched
+--   deriving (Eq, Ord, Lift)

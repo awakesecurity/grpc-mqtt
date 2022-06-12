@@ -80,6 +80,8 @@ library
     Network.GRPC.MQTT.Message.Request
     Network.GRPC.MQTT.Message.TH
     Network.GRPC.MQTT.Option.Batched
+    Network.GRPC.MQTT.Option.CLevel
+    Network.GRPC.MQTT.Proto
     Network.GRPC.MQTT.RemoteClient
     Network.GRPC.MQTT.RemoteClient.Session
     Network.GRPC.MQTT.Sequenced
@@ -105,6 +107,7 @@ library
   build-depends:
     , conduit-extra
     , connection
+    , ghc-prim
     , mtl
     , network-conduit-tls
     , nonce
@@ -115,6 +118,7 @@ library
     , unliftio
     , unliftio-core
     , unordered-containers
+    , zstd
 
 test-suite test
   import:  common

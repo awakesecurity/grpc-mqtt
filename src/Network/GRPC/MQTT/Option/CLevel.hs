@@ -1,5 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
@@ -55,6 +55,9 @@ module Network.GRPC.MQTT.Option.CLevel
 
     -- * Conversion
     toProtoValue,
+
+    -- * Wire Format
+    throwCLevelBoundsError,
   )
 where
 
@@ -79,6 +82,7 @@ import Proto3.Suite.DotProto (DotProtoValue, Path)
 import Proto3.Suite.DotProto qualified as DotProto
 
 import Proto3.Wire.Class (ProtoEnum (fromProtoEnum, toProtoEnumMay))
+import Proto3.Wire.Decode (ParseError, Parser)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode qualified as Encode
 
@@ -154,10 +158,7 @@ instance Primitive CLevel where
     result <- Decode.enum
     case result of
       Right enum -> pure enum
-      Left int32 ->
-        let issue :: LText
-            issue = "CLevel invalid " <> show int32 <> " (out of bounds)"
-         in Decode.throwE (Decode.WireTypeError issue)
+      Left int32 -> throwCLevelBoundsError int32
 
   primType proxy =
     let name = nameOf @CLevel proxy
@@ -223,3 +224,16 @@ toProtoValue x =
   let path :: Path
       path = DotProto.Path ["haskell", "grpc", "mqtt", show x]
    in DotProto.Identifier (DotProto.Dots path)
+
+-- CLevel - Wire Format ---------------------------------------------------------
+
+-- | Throws a 'Decode.WireTypeError' 'ParseError' reporting that a 'CLevel'
+-- failed to be deserialized because the parsed enum value was outside of the
+-- supported range for compression levels.
+--
+-- @since 0.1.0.0
+throwCLevelBoundsError :: Show a => a -> Parser i b
+throwCLevelBoundsError x =
+  let issue :: ParseError
+      issue = Decode.WireTypeError ("CLevel invalid " <> show x <> " (out of bounds)")
+   in Decode.throwE (Decode.wireErrorLabel ''CLevel issue)

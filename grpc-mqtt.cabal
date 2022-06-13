@@ -79,6 +79,7 @@ library
     Network.GRPC.MQTT.Message.Packet
     Network.GRPC.MQTT.Message.Request
     Network.GRPC.MQTT.Message.TH
+    Network.GRPC.MQTT.Option
     Network.GRPC.MQTT.Option.Batched
     Network.GRPC.MQTT.Option.CLevel
     Network.GRPC.MQTT.Proto

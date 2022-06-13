@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
@@ -51,6 +52,9 @@ module Network.GRPC.MQTT.Option.CLevel
 
     -- * Predicates
     isCLevel,
+
+    -- * Conversion
+    toProtoValue,
   )
 where
 
@@ -60,6 +64,10 @@ import Codec.Compression.Zstd qualified as Zstd
 
 import Data.Data (Data)
 
+import Data.List qualified as List
+
+import GHC.Prim (proxy#)
+
 import Language.Haskell.TH.Syntax (Lift)
 
 import Proto3.Suite.Class
@@ -67,6 +75,7 @@ import Proto3.Suite.Class
     Named (nameOf),
     Primitive (decodePrimitive, encodePrimitive, primType),
   )
+import Proto3.Suite.DotProto (DotProtoValue, Path)
 import Proto3.Suite.DotProto qualified as DotProto
 
 import Proto3.Wire.Class (ProtoEnum (fromProtoEnum, toProtoEnumMay))
@@ -83,8 +92,8 @@ import Network.GRPC.MQTT.Proto
   ( DatumRep (DRepIdent),
     ProtoDatum,
     castDatum,
-    castFiniteRep,
     datumRep,
+    toProtoNameList,
   )
 
 import Proto3.Wire.Decode.Extra qualified as Decode
@@ -116,11 +125,11 @@ instance Bounded CLevel where
 
 -- |
 -- >>> show (CLevel 10)
--- "CLevel10"
+-- "CLEVEL_10"
 --
 -- @since 0.1.0.0
 instance Show CLevel where
-  show (CLevel x) = "CLevel" ++ show x
+  show (CLevel x) = "CLEVEL_" ++ show x
 
 -- | @since 0.1.0.0
 instance ProtoEnum CLevel where
@@ -154,6 +163,16 @@ instance Primitive CLevel where
     let name = nameOf @CLevel proxy
         path = DotProto.Path ["haskell", "grpc", "mqtt", name]
      in DotProto.Named (DotProto.Dots path)
+
+-- | @since 0.1.0.0
+instance ProtoDatum CLevel where
+  datumRep = DRepIdent
+
+  castDatum val = do
+    idts <- toProtoNameList <$> castDatum val
+    [nm] <- List.stripPrefix ["haskell", "grpc", "mqtt"] idts
+    enum <- List.lookup nm (enumerate @CLevel proxy#)
+    toProtoEnumMay enum
 
 -- CLevel - Construction --------------------------------------------------------
 
@@ -190,3 +209,17 @@ isCLevel x =
   let lower = fromCLevel minBound
       upper = fromCLevel maxBound
    in lower <= x && x <= upper
+
+-- CLevel - Conversion ----------------------------------------------------------
+
+-- | Convert a 'CLevel' to it's 'DotProtoValue' representation.
+--
+-- >>> toProtoValue (CLevel 10)
+-- Identifier (Dots (Path {components = "haskell" :| ["grpc","mqtt","CLEVEL_10"]}))
+--
+-- @since 0.1.0.0
+toProtoValue :: CLevel -> DotProtoValue
+toProtoValue x =
+  let path :: Path
+      path = DotProto.Path ["haskell", "grpc", "mqtt", show x]
+   in DotProto.Identifier (DotProto.Dots path)

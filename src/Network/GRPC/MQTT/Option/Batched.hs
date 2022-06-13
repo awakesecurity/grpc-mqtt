@@ -54,7 +54,10 @@
 module Network.GRPC.MQTT.Option.Batched
   ( -- * Batched
     -- $option-batched
-    Batched (Batch, Batched, Unbatched, getBatched)
+    Batched (Batch, Batched, Unbatched, getBatched),
+
+    -- * Conversion
+    toProtoValue,
   )
 where
 
@@ -63,6 +66,9 @@ where
 import Data.Data (Data)
 
 import Language.Haskell.TH.Syntax (Lift)
+
+import Proto3.Suite.DotProto (DotProtoValue)
+import Proto3.Suite.DotProto qualified as DotProto
 
 import Relude
 
@@ -81,7 +87,7 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 --
 -- @since 0.1.0.0
 newtype Batched = Batch {getBatched :: Bool}
-  deriving newtype (Eq, Ord, Primitive)
+  deriving newtype (Eq, Ord, Primitive, ProtoDatum)
   deriving stock (Data, Generic, Lift, Typeable)
 
 -- | Pattern synonym for enabled batching.
@@ -129,3 +135,14 @@ instance HasDefault Batched where
 instance Show Batched where
   show Unbatched = "Unbatched"
   show Batched = "Batched"
+
+-- Batched - Conversion ---------------------------------------------------------
+
+-- | Convert a 'Batched' value to it's 'DotProtoValue' representation.
+--
+-- >>> toProtoValue Batched
+-- BoolLit True
+--
+-- @since 0.1.0.0
+toProtoValue :: Batched -> DotProtoValue
+toProtoValue (Batch x) = DotProto.BoolLit x

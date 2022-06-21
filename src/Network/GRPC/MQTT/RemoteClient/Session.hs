@@ -356,7 +356,10 @@ fromRqtTopic base topic = do
   ["grpc", "request", sid, escapedSvc, rpc] <- stripPrefix (Topic.split base) (Topic.split topic)
 
   let unescapeDots :: Text -> Text
-      unescapeDots = Text.map (\c -> if c == '-' then '.' else c)
+      unescapeDots =
+        Text.map \case
+          '-' -> '.'
+          c -> c
 
   svc <- Topic.mkTopic $ unescapeDots $ Topic.unTopic escapedSvc
   pure (SessionTopic base sid svc rpc)

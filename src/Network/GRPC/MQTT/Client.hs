@@ -49,6 +49,8 @@ import Crypto.Nonce qualified as Nonce
 
 import Data.ByteString qualified as ByteString
 
+import Data.Text qualified as Text
+
 import Network.GRPC.HighLevel
   ( GRPCIOError (GRPCIOTimeout),
     MethodName (MethodName),
@@ -446,16 +448,16 @@ makeMethodRequestTopic baseTopic sid (MethodName nm) =
   -- Some MQTT implementations (for e.g. RabbitMQ) can't handle dots
   -- in topic names. We replace them with hyphens. This is unambiguous
   -- because hyphens cannot occur in method names.
-  let escapeDots :: Word8 -> Word8
-      escapeDots c
-        | c == fromIntegral (ord '.') = fromIntegral (ord '-')
-        | otherwise = c
+  let escapeDots :: Text -> Text
+      escapeDots = Text.map \case
+        '.' -> '-'
+        c -> c
 
       -- The leading '/' character is removed via @drop 1@ since the 'Semigroup'
       -- instance for 'Topic' automatically inserts '/' slashes when joining
       -- topics.
       methodTopic :: Maybe Topic
-      methodTopic = mkTopic . decodeUtf8 . ByteString.map escapeDots . ByteString.drop 1 $ nm
+      methodTopic = mkTopic . escapeDots . decodeUtf8 . ByteString.drop 1 $ nm
    in case methodTopic of
         Nothing -> throwIO (BadRPCMethodTopicError (decodeUtf8 nm))
         Just ts -> pure (baseTopic <> "grpc" <> "request" <> sid <> ts)

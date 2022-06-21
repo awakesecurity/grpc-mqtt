@@ -231,7 +231,7 @@ handleRequest handle = do
           errmsg = "proto3-wire parse error (" <> show err <> ")"
        in Session.logError 'handleRequest errmsg
       pubRemoteError err
-    Right (Request rawmsg timeout metadata) -> do
+    Right (Request rawmsg opts timeout metadata) -> do
       logger <- asks cfgLogger
       Logger.logDebug logger $
         unlines

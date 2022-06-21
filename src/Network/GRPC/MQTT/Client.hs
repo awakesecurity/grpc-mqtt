@@ -71,8 +71,7 @@ import Network.GRPC.MQTT.Core
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.GRPC.MQTT.Types
-  ( Batched,
-    MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.MQTT.Client
@@ -106,6 +105,8 @@ import Network.GRPC.MQTT.Sequenced
     mkStreamRead,
   )
 import Network.GRPC.MQTT.Topic qualified as Topic
+import Network.GRPC.MQTT.Option (ProtoOptions)
+import Network.GRPC.MQTT.Option qualified as Option
 import Network.GRPC.MQTT.Wrapping
   ( fromRemoteError,
     parseErrorToRCE,
@@ -163,10 +164,10 @@ mqttRequest ::
   MQTTGRPCClient ->
   Topic ->
   MethodName ->
-  Batched ->
+  ProtoOptions ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
+mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> show nmMethod
 
   handle handleMQTTException $ do
@@ -182,7 +183,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
     let publishRequest :: request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
         publishRequest rqt timeout metadata = do
           let payload = toStrict (Proto3.toLazyByteString rqt)
-          let encoded = wireWrapRequest (Request payload timeout metadata)
+          let encoded = wireWrapRequest (Request payload opts timeout metadata)
           logDebug mqttLogger $ "Publishing to topic: " <> unTopic requestTopic
           logDebug mqttLogger $ "Publishing message: " <> show encoded
           mkPacketizedPublish mqttClient msgSizeLimit requestTopic encoded
@@ -197,7 +198,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod useBatchedStream request = do
           publishToControlTopic ctrlMessage
 
     PublishToStream{publishToStream, publishToStreamCompleted} <-
-      mkStreamPublish msgSizeLimit useBatchedStream publishToRequestTopic
+      mkStreamPublish msgSizeLimit (Option.rpcBatchStream opts) publishToRequestTopic
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream req = do
           logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic

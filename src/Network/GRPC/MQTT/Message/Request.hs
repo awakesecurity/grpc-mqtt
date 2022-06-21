@@ -100,7 +100,7 @@
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Request
   ( -- * Requests
-    Request (Request, message, timeout, metadata),
+    Request (Request, message, options, timeout, metadata),
 
     -- * Wire Encoding
     -- $request-wire-encoding
@@ -138,9 +138,14 @@ import Relude
 import Network.GRPC.HighLevel.Extra (decodeMetadataMap, encodeMetadataMap)
 
 import Network.GRPC.MQTT.Message.Request.Core
-  ( Request (Request, message, metadata, timeout),
+  ( Request (Request, message, metadata, options, timeout),
   )
 import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
+import Network.GRPC.MQTT.Option
+  ( ProtoOptions,
+    wireBuildProtoOptions,
+    wireParseProtoOptions,
+  )
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Encode.Extra qualified as Encode
@@ -190,6 +195,7 @@ wireWrapRequest' = toStrict . wireWrapRequest
 wireBuildRequest :: Request ByteString -> MessageBuilder
 wireBuildRequest rqt =
   wireBuildMessageField
+    <> wireBuildOptionsField
     <> wireBuildTimeoutField
     <> wireBuildMetadataField
   where
@@ -198,6 +204,12 @@ wireBuildRequest rqt =
       let fieldnum :: FieldNumber
           fieldnum = $(reifyFieldNumber ''Request 'message)
        in Encode.byteString fieldnum (message rqt)
+
+    wireBuildOptionsField :: MessageBuilder
+    wireBuildOptionsField =
+      let fieldnum :: FieldNumber
+          fieldnum = $(reifyFieldNumber ''Request 'options)
+       in wireBuildProtoOptions fieldnum (options rqt)
 
     wireBuildTimeoutField :: MessageBuilder
     wireBuildTimeoutField =
@@ -230,16 +242,23 @@ wireUnwrapRequest = Decode.parse wireParseRequest
 -- @since 0.1.0.0
 wireParseRequest :: Parser RawMessage (Request ByteString)
 wireParseRequest = do
-  payload <- wireParseMessageField
-  timeout <- wireParseTimeoutField
-  metadata <- wireParseMetadataField
-  pure (Request payload timeout metadata)
+  Request
+    <$> wireParseMessageField
+    <*> wireParseOptionsField
+    <*> wireParseTimeoutField
+    <*> wireParseMetadataField
   where
     wireParseMessageField :: Parser RawMessage ByteString
     wireParseMessageField =
       let recField :: RecordField
           recField = $(reifyRecordField ''Request 'message)
        in Decode.primOptField recField Decode.byteString ByteString.empty
+
+    wireParseOptionsField :: Parser RawMessage ProtoOptions
+    wireParseOptionsField =
+      let recField :: RecordField
+          recField = $(reifyRecordField ''Request 'options)
+       in Decode.msgOneField recField wireParseProtoOptions
 
     wireParseTimeoutField :: Parser RawMessage Int
     wireParseTimeoutField =

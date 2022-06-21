@@ -69,6 +69,9 @@ import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
 import Network.GRPC.MQTT.Message.Packet.Core
+  ( Packet (Packet, metadata, payload),
+    PacketInfo (PacketInfo, npackets, position),
+  )
 import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
 
 import Proto3.Wire.Decode.Extra qualified as Decode

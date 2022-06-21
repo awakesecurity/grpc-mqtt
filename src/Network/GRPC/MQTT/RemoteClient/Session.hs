@@ -85,6 +85,8 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
 
+import Data.Text qualified as Text
+
 import Language.Haskell.TH.Syntax (Name)
 import Language.Haskell.TH.Syntax qualified as TH.Syntax
 
@@ -351,5 +353,10 @@ data SessionTopic = SessionTopic
 -- @since 0.1.0.0
 fromRqtTopic :: Topic -> Topic -> Maybe SessionTopic
 fromRqtTopic base topic = do
-  ["grpc", "request", sid, svc, rpc] <- stripPrefix (Topic.split base) (Topic.split topic)
+  ["grpc", "request", sid, escapedSvc, rpc] <- stripPrefix (Topic.split base) (Topic.split topic)
+
+  let unescapeDots :: Text -> Text
+      unescapeDots = Text.map (\c -> if c == '-' then '.' else c)
+
+  svc <- Topic.mkTopic $ unescapeDots $ Topic.unTopic escapedSvc
   pure (SessionTopic base sid svc rpc)

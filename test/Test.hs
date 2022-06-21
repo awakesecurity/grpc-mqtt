@@ -32,6 +32,7 @@ import Test.Suite.Config (TestOption)
 import qualified Test.Network.GRPC.HighLevel.Extra
 import qualified Test.Network.GRPC.MQTT.Message.Packet
 import qualified Test.Network.GRPC.MQTT.Message.Request
+import qualified Test.Network.GRPC.MQTT.Option
 import qualified Test.Service
 
 ---------------------------------------------------------------------------------
@@ -49,6 +50,7 @@ testTree =
     [ Test.Network.GRPC.HighLevel.Extra.tests
     , Test.Network.GRPC.MQTT.Message.Packet.tests
     , Test.Network.GRPC.MQTT.Message.Request.tests
+    , Test.Network.GRPC.MQTT.Option.tests
     , Test.Service.tests
     ]
 

@@ -145,6 +145,9 @@ test-suite test
     Test.Network.GRPC.MQTT.Message.Packet.Gen
     Test.Network.GRPC.MQTT.Message.Request
     Test.Network.GRPC.MQTT.Message.Request.Gen
+    Test.Network.GRPC.MQTT.Option
+    Test.Network.GRPC.MQTT.Option.CLevel
+    Test.Network.GRPC.MQTT.Option.Gen
     Test.Service
     Test.Suite.Config
     Test.Suite.Fixture

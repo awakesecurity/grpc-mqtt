@@ -23,6 +23,22 @@ module Network.GRPC.MQTT.Proto
 
     -- * Proto Names
     toProtoNameList,
+
+    -- * Proto Options
+    ProtoOptionSet (ProtoOptionSet, getProtoOptionSet),
+    insertOption,
+    lookupOption,
+
+    -- * Proto Files
+    getFileServices,
+    getFileOptions,
+
+    -- * Proto Services
+    ProtoService (ProtoService, serviceName, serviceDefs),
+    getServiceOptions,
+
+    -- * Proto Methods
+    getMethodOptions,
   )
 where
 
@@ -32,8 +48,21 @@ import Data.Data (cast, eqT, gmapQ)
 import Data.Type.Equality ((:~:) (Refl))
 
 import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map qualified as Map
 
-import Proto3.Suite.DotProto (DotProtoIdentifier, DotProtoValue)
+import Network.GRPC.HighLevel.Generated
+  ( GRPCMethodType (Normal, ClientStreaming, ServerStreaming, BiDiStreaming)
+  )
+
+import Proto3.Suite.DotProto
+  ( DotProto,
+    DotProtoDefinition,
+    DotProtoIdentifier,
+    RPCMethod,
+    DotProtoOption,
+    DotProtoServicePart,
+    DotProtoValue,
+  )
 import Proto3.Suite.DotProto qualified as DotProto
 
 import Relude
@@ -174,3 +203,104 @@ toProtoNameList idt = case idt of
     let nms0 = toProtoNameList idts0
         nms1 = toProtoNameList idts1
      in nms0 ++ nms1
+
+-- Proto Options ----------------------------------------------------------------
+
+-- | TODO
+--
+-- @since 0.1.0.0
+newtype ProtoOptionSet = ProtoOptionSet
+  {getProtoOptionSet :: Map DotProtoIdentifier DotProtoValue}
+  deriving
+    (Semigroup, Monoid)
+    via Map DotProtoIdentifier DotProtoValue
+
+-- | TODO
+--
+-- @since 0.1.0.0
+insertOption :: DotProtoOption -> ProtoOptionSet -> ProtoOptionSet
+insertOption opt (ProtoOptionSet kvs) =
+  let key = DotProto.dotProtoOptionIdentifier opt
+      val = DotProto.dotProtoOptionValue opt
+   in ProtoOptionSet (Map.insert key val kvs)
+
+-- | TODO
+--
+-- @since 0.1.0.0
+lookupOption :: DotProtoIdentifier -> ProtoOptionSet -> Maybe DotProtoValue
+lookupOption key (ProtoOptionSet kvs) = Map.lookup key kvs
+
+-- Proto Files ------------------------------------------------------------------
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getFileServices :: DotProto -> [ProtoService]
+getFileServices dotproto =
+  foldMap toService (DotProto.protoDefinitions dotproto)
+  where
+    toService :: DotProtoDefinition -> [ProtoService]
+    toService (DotProto.DotProtoService _ idt ps) = [ProtoService idt ps]
+    toService _ = []
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getFileOptions :: DotProto -> ProtoOptionSet
+getFileOptions dotproto =
+  let opts :: [DotProtoOption]
+      opts = DotProto.protoOptions dotproto
+   in foldr insertOption mempty opts
+
+-- Proto Services ---------------------------------------------------------------
+
+-- | TODO
+--
+-- @since 0.1.0.0
+data ProtoService = ProtoService
+  { serviceName :: DotProtoIdentifier
+  , serviceDefs :: [DotProtoServicePart]
+  }
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getServiceMethods :: ProtoService -> [RPCMethod]
+getServiceMethods (ProtoService _ ps) = foldr toRPCs mempty ps
+  where
+    toRPCs :: DotProtoServicePart -> [RPCMethod] -> [RPCMethod]
+    toRPCs (DotProto.DotProtoServiceRPCMethod rpc) rpcs = rpc : rpcs
+    toRPCs _ rpcs = rpcs
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getServiceOptions :: ProtoService -> ProtoOptionSet
+getServiceOptions (ProtoService _ ps) = foldr toOptions mempty ps
+  where
+    toOptions :: DotProtoServicePart -> ProtoOptionSet -> ProtoOptionSet
+    toOptions (DotProto.DotProtoServiceOption opt) opts = insertOption opt opts
+    toOptions _ opts = opts
+
+-- Proto Methods ---------------------------------------------------------------
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getMethodType :: RPCMethod -> GRPCMethodType
+getMethodType rpc =
+  case DotProto.rpcMethodRequestStreaming rpc of
+    DotProto.NonStreaming ->
+      case DotProto.rpcMethodResponseStreaming rpc of
+        DotProto.NonStreaming -> Normal
+        DotProto.Streaming -> ServerStreaming
+    DotProto.Streaming ->
+      case DotProto.rpcMethodResponseStreaming rpc of
+        DotProto.NonStreaming -> ClientStreaming
+        DotProto.Streaming -> BiDiStreaming
+
+-- | TODO
+--
+-- @since 0.1.0.0
+getMethodOptions :: RPCMethod -> ProtoOptionSet
+getMethodOptions rpc = foldr insertOption mempty (DotProto.rpcMethodOptions rpc)

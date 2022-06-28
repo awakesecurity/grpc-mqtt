@@ -6,12 +6,20 @@
 
 -- |
 module Network.GRPC.MQTT.Types
-  ( MQTTResult (..),
+  ( -- * Session Id
+    SessionId,
+
+    -- * MQTT Requests
+    MQTTRequest
+      ( MQTTNormalRequest,
+        MQTTWriterRequest,
+        MQTTReaderRequest,
+        MQTTBiDiRequest
+      ),
+    requestTimeout,
+    MQTTResult (..),
     MethodMap,
     ClientHandler (..),
-    MQTTRequest (..),
-    SessionId,
-    Batched (..),
   )
 where
 
@@ -36,7 +44,7 @@ import Text.Show qualified as Show
 
 --------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Option (Batched (Batched, Unbatched))
+import Network.GRPC.MQTT.Option.Batched (Batched)
 
 --------------------------------------------------------------------------------
 
@@ -66,6 +74,15 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
     MetadataMap ->
     (MetadataMap -> StreamRecv rsp -> StreamSend rqt -> WritesDone -> IO ()) ->
     MQTTRequest 'BiDiStreaming rqt rsp
+
+-- | TODO
+--
+-- @since 0.1.0.0
+requestTimeout :: MQTTRequest s rqt rsp -> TimeoutSeconds
+requestTimeout (MQTTNormalRequest _ t _) = t
+requestTimeout (MQTTWriterRequest t _ _) = t
+requestTimeout (MQTTReaderRequest _ t _ _) = t
+requestTimeout (MQTTBiDiRequest t _ _) = t
 
 -- | @since 0.1.0.0
 instance Show rqt => Show (MQTTRequest s rqt rsp) where

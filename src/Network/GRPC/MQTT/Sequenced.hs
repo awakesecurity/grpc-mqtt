@@ -41,7 +41,7 @@ import UnliftIO.Async qualified as Async
 
 import Network.GRPC.MQTT.Message.Packet (Packet)
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
-import Network.GRPC.MQTT.Types (Batched (Batched))
+import Network.GRPC.MQTT.Option.Batched (Batched (Batched))
 import Network.GRPC.MQTT.Wrapping
   ( unwrapStreamChunk,
     wrapStreamChunk,

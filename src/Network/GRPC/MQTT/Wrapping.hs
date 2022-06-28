@@ -89,7 +89,6 @@ import Network.GRPC.HighLevel.Client
       ),
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
-import Network.GRPC.HighLevel.Server (toBS)
 import Network.GRPC.Unsafe (CallError (..))
 import Proto3.Suite
   ( Enumerated (Enumerated),
@@ -100,7 +99,6 @@ import Proto3.Wire.Decode (ParseError (..))
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Option (ProtoOptions)
 import Network.GRPC.MQTT.Option.Batched (Batched)
 
 ---------------------------------------------------------------------------------

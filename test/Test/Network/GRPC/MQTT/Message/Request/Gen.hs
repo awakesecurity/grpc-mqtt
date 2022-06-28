@@ -18,6 +18,7 @@ import Hedgehog.Range qualified as Range
 ---------------------------------------------------------------------------------
 
 import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
+import Test.Network.GRPC.MQTT.Option.Gen qualified as Gen
 
 import Relude
 
@@ -31,10 +32,11 @@ import Network.GRPC.MQTT.Message.Request (Request (Request))
 -- request body.
 request :: MonadGen m => m (Request ByteString)
 request = do
-  message <- requestMessage
-  timeout <- requestTimeout
-  metadata <- Gen.metadataMap
-  pure (Request message timeout metadata)
+  Request 
+    <$> requestMessage
+    <*> Gen.protoOptions
+    <*> requestTimeout
+    <*> Gen.metadataMap 
 
 -- | Generates possibly empty 'ByteString' with a length bounded by the size
 -- parameter.

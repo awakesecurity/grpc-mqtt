@@ -9,17 +9,17 @@
 module Network.GRPC.MQTT
   ( -- * 'net-mqtt' Re-exports
     module Network.MQTT.Client,
-    module Network.MQTT.Topic
+    module Network.MQTT.Topic,
   )
 where
 
 --------------------------------------------------------------------------------
 
 import Network.MQTT.Client
-  ( MQTTException (..),
-    ProtocolLevel (..),
+  ( LastWill (..),
+    MQTTException (..),
     Property (..),
-    LastWill (..)
+    ProtocolLevel (..),
   )
 import Network.MQTT.Topic
   ( Topic (unTopic),

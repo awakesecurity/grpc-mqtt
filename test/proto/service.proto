@@ -8,29 +8,37 @@ package haskell.grpc.mqtt.test;
 
 service TestService {
   /* Unary Service */
-  rpc NormalCall(TwoInts) returns (OneInt) {}
+  rpc NormalCall(TwoInts) returns (OneInt) {
+  }
 
   /* Server Streaming Service */
-  rpc ServerStreamCall(StreamRequest) returns (stream StreamReply) {}
+  rpc ServerStreamCall(StreamRequest) returns (stream StreamReply) {
+  }
 
   /* Client Streaming Service */
-  rpc ClientStreamCall(stream OneInt) returns (OneInt) {}
+  rpc ClientStreamCall(stream OneInt) returns (OneInt) {
+  }
 
   /* Simple bidi streaming: ping-pong echo */
-  rpc BiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {}
+  rpc BiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
+    option haskell.grpc.mqtt.client_clevel = CLEVEL_10;
+    option haskell.grpc.mqtt.server_clevel = CLEVEL_10;
+  }
 
   /* Server Streaming with batching */
   rpc BatchServerStreamCall(StreamRequest) returns (stream StreamReply) {
-    option hs_grpc_mqtt_batched_stream = true;
+    option haskell.grpc.mqtt.batch_stream = true;
   }
 
   /* Client Streaming with batching */
   rpc BatchClientStreamCall (stream OneInt) returns (OneInt) {
-    option hs_grpc_mqtt_batched_stream = true;
+    option haskell.grpc.mqtt.batch_stream = true;
   }
 
   /* BiDi streaming with batching: ping-pong echo */
   rpc BatchBiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
-    option hs_grpc_mqtt_batched_stream = true;
+    option haskell.grpc.mqtt.batch_stream = true;
+    option haskell.grpc.mqtt.client_clevel = CLEVEL_10;
+    option haskell.grpc.mqtt.server_clevel = CLEVEL_10;
   }
 }

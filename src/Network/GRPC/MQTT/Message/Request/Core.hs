@@ -37,10 +37,10 @@ data Request msg = Request
     message :: msg
   , -- | TODO
     options :: ProtoOptions
-    -- | The request's 'timeout' is the timeout period in unit seconds the
+  , -- | The request's 'timeout' is the timeout period in unit seconds the
     -- requested gRPC call has to finished before a deadline-exceeded error
     -- response is sent back to the client.
-  , timeout :: {-# UNPACK #-} !Int
+    timeout :: {-# UNPACK #-} !Int
   , -- | The request's 'metadata' is the metadata bound to a request,
     -- represented as a map associating 'ByteString' keys to a list of
     -- 'ByteString' values.

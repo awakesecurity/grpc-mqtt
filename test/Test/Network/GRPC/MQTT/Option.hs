@@ -31,7 +31,7 @@ import Network.GRPC.MQTT.Option (ProtoOptions)
 tests :: TestTree
 tests =
   testGroup
-    "Network.GRPC.MQTT.Option.CLevel"
+    "Network.GRPC.MQTT.Option"
     [ Test.Network.GRPC.MQTT.Option.CLevel.tests
     , testProperty "Wire.ProtoOptions" tripWireFormatProtoOptions
     ]

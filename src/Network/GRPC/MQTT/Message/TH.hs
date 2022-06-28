@@ -1,6 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
-
 -- See [NOTE: Enforcing Message Splice Order]
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 

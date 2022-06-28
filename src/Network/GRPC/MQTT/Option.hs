@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedLists #-}
@@ -16,69 +17,67 @@ module Network.GRPC.MQTT.Option
         rpcClientCLevel
       ),
 
-    -- ** Wire Encoding
+    -- * Construction
+    defaultProtoOptions,
+
+    -- * Predicates
+    isClientCompressed,
+    isServerCompressed,
+
+    -- * Proto
+    toProtoType,
+
+    -- * Wire Encoding
     wireEncodeProtoOptions,
     wireEncodeProtoOptions',
     wireBuildProtoOptions,
 
-    -- ** Wire Decoding
+    -- * Wire Decoding
     wireDecodeProtoOptions,
     wireParseProtoOptions,
-
-    -- * Batched
-    -- $option-batched
-    Batched (Batch, Batched, Unbatched, getBatched),
-
-    -- * CLevel
-    -- $option-clevel
-    CLevel (CLevel, getCLevel),
-    fromCLevel,
-    toCLevel,
   )
 where
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Data.Data (Data)
-
-import GHC.Prim (Proxy#, proxy#)
 
 import Data.List qualified as List
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
 
-import Proto3.Suite
-  ( Message (decodeMessage, dotProto, encodeMessage),
+import GHC.Prim (Proxy#, proxy#)
+
+import Language.Haskell.TH.Syntax (Lift)
+
+import Proto3.Suite.Class
+  ( HasDefault (def),
+    Message (decodeMessage, dotProto, encodeMessage),
     Named,
-    Primitive (primType),
+    Primitive (decodePrimitive, primType),
   )
-import Proto3.Suite.DotProto (DotProtoField, DotProtoIdentifier, DotProtoType)
+import Proto3.Suite.DotProto (DotProtoField, DotProtoType)
 import Proto3.Suite.DotProto qualified as DotProto
 
 import Proto3.Wire (FieldNumber)
-import Proto3.Wire.Decode (ParseError, Parser, RawField, RawMessage)
+import Proto3.Wire.Decode (ParseError, Parser, RawField)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
----------------------------------------------------------------------------------
+import Text.Show qualified as Show ()
 
-import Network.GRPC.MQTT.Option.Batched
-  ( Batched (Batch, Batched, Unbatched, getBatched),
-  )
-import Network.GRPC.MQTT.Option.CLevel
-  ( CLevel (CLevel, getCLevel),
-    fromCLevel,
-    toCLevel,
-  )
-import Network.GRPC.MQTT.Option.CLevel qualified as CLevel
+--------------------------------------------------------------------------------
+
+import Network.GRPC.MQTT.Option.Batched (Batched (Unbatched))
+import Network.GRPC.MQTT.Option.CLevel (CLevel, fromCLevel)
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 
--- ProtoOptions -----------------------------------------------------------------
+-- ProtoOptions ----------------------------------------------------------------
 
 -- | TODO
 --
@@ -90,57 +89,87 @@ import Proto3.Wire.Decode.Extra qualified as Decode
 --   bool rpc_batch_stream = 1;
 --   haskell.grpc.mqtt.CLevel rpc_server_clevel = 2;
 --   haskell.grpc.mqtt.CLevel rpc_client_clevel = 3;
---   uint64 rpc_timeout = 4;
 -- }
 -- @
 --
 -- @since 0.1.0.0
 data ProtoOptions = ProtoOptions
-  { rpcBatchStream :: Batched
-  , rpcServerCLevel :: Maybe CLevel
-  , rpcClientCLevel :: Maybe CLevel
+  { -- | TODO
+    rpcBatchStream :: Batched
+  , -- | TODO
+    rpcServerCLevel :: Maybe CLevel
+  , -- | TODO
+    rpcClientCLevel :: Maybe CLevel
   }
-  deriving stock (Eq, Data, Generic, Ord, Show, Typeable)
+  deriving stock (Eq, Data, Generic, Lift, Ord, Show, Typeable)
   deriving anyclass (Named)
 
 -- | @since 0.1.0.0
 instance Message ProtoOptions where
-  encodeMessage n opts = wireBuildProtoOptions n opts
+  encodeMessage = wireBuildProtoOptions
+  decodeMessage = Decode.at wireParseProtoOptions
+  dotProto = toProtoType
 
-  decodeMessage n = Decode.at wireParseProtoOptions n
+-- Construction ----------------------------------------------------------------
 
-  dotProto _ =
-    [ newField 1 "rpc_batch_stream" (proxy# @Batched)
-    , newField 2 "rpc_server_clevel" (proxy# @CLevel)
-    , newField 3 "rpc_client_clevel" (proxy# @CLevel)
-    , newField 4 "rpc_timeout" (proxy# @Word64)
-    ]
-    where
-      newField :: Primitive a => FieldNumber -> String -> Proxy# a -> DotProtoField
-      newField n nm px =
-        let protoid :: DotProtoIdentifier
-            protoid = DotProto.Dots (DotProto.Path ["haskell", "grpc", "mqtt", nm])
+-- | The default options used at the file, service, and method level if no
+-- options are set explicitly.
+--
+-- @since 0.1.0.0
+defaultProtoOptions :: ProtoOptions
+defaultProtoOptions =
+  ProtoOptions
+    { rpcBatchStream = Unbatched
+    , rpcServerCLevel = Nothing
+    , rpcClientCLevel = Nothing
+    }
 
-            prototy :: DotProtoType
-            prototy = DotProto.Prim (primType px)
-         in DotProto.DotProtoField n prototy protoid [] ""
+-- Predicates ------------------------------------------------------------------
 
--- ProtoOptions - Wire Encoding -------------------------------------------------
+-- | TODO 
+--
+-- @since 0.1.0.0
+isClientCompressed :: ProtoOptions -> Bool
+isClientCompressed opts = isJust (rpcClientCLevel opts)
+
+-- | TODO 
+--
+-- @since 0.1.0.0
+isServerCompressed :: ProtoOptions -> Bool
+isServerCompressed opts = isJust (rpcServerCLevel opts)
+
+-- Wire Encoding ---------------------------------------------------------------
+
+-- | The protobuf type repesenting the protocol buffer data representation of a
+-- 'CLevel' value.
+--
+-- @since 0.1.0.0
+toProtoType :: Proxy# ProtoOptions -> [DotProtoField]
+toProtoType _ =
+  [ mkfield @Batched 1 "rpc_batch_stream"
+  , mkfield @CLevel 2 "rpc_server_clevel"
+  , mkfield @CLevel 3 "rpc_client_clevel"
+  ]
+  where
+    mkfield :: forall a. Primitive a => FieldNumber -> String -> DotProtoField
+    mkfield n nm =
+      let prototy :: DotProtoType
+          prototy = DotProto.Prim (primType @a proxy#)
+       in DotProto.DotProtoField n prototy (DotProto.Single nm) [] ""
+
+-- Wire Encoding ---------------------------------------------------------------
 
 -- | Serializes a 'ProtoOptions' to a 'LByteString' in the wire binary format.
 --
 -- @since 0.1.0.0
 wireEncodeProtoOptions :: ProtoOptions -> LByteString
-wireEncodeProtoOptions opts =
-  let builder :: MessageBuilder
-      builder = wireBuildProtoOptions 0 opts
-   in Encode.toLazyByteString builder
+wireEncodeProtoOptions = Encode.toLazyByteString . wireBuildProtoOptions 0
 
 -- | Like 'wireEncodeProtoOptions', but returns a strict 'ByteString'.
 --
 -- @since 0.1.0.0
 wireEncodeProtoOptions' :: ProtoOptions -> ByteString
-wireEncodeProtoOptions' opts = toStrict (wireEncodeProtoOptions opts)
+wireEncodeProtoOptions' = toStrict . wireEncodeProtoOptions
 
 -- | 'MessageBuilder' capable of serializing a 'ProtoOptions' field at the
 -- 'FieldNumber' that the 'ProtoOptions' appears in the message.
@@ -151,33 +180,22 @@ wireEncodeProtoOptions' opts = toStrict (wireEncodeProtoOptions opts)
 -- @since 0.1.0.0
 wireBuildProtoOptions :: FieldNumber -> ProtoOptions -> MessageBuilder
 wireBuildProtoOptions n ProtoOptions{..} =
-  let varints :: Vector Word64
+  let varints :: Vector Int
       varints = Vector.create do
         mvec <- MVector.new 3
-        MVector.write mvec 0 (w64FromBatched rpcBatchStream)
-        MVector.write mvec 1 (w64FromCLevel rpcServerCLevel)
-        MVector.write mvec 2 (w64FromCLevel rpcClientCLevel)
+        MVector.write mvec 0 (fromEnum rpcBatchStream)
+        MVector.write mvec 1 (maybe 0 fromCLevel rpcServerCLevel)
+        MVector.write mvec 2 (maybe 0 fromCLevel rpcClientCLevel)
         pure mvec
-   in Encode.packedVarintsV id n varints
-  where
-    w64FromBatched :: Batched -> Word64
-    w64FromBatched Unbatched = 0
-    w64FromBatched Batched = 1
+   in Encode.packedVarintsV fromIntegral n varints
 
-    w64FromCLevel :: Maybe CLevel -> Word64
-    w64FromCLevel Nothing = 0
-    w64FromCLevel (Just x) = CLevel.fromCLevel x
-
--- ProtoOptions - Wire Decoding -------------------------------------------------
+-- ProtoOptions - Wire Decoding ------------------------------------------------
 
 -- | Decodes 'ProtoOptions' record from a 'ByteString'.
 --
 -- @since 0.1.0.0
 wireDecodeProtoOptions :: ByteString -> Either ParseError ProtoOptions
-wireDecodeProtoOptions bytes =
-  let parseMessage :: Parser RawMessage ProtoOptions
-      parseMessage = Decode.at wireParseProtoOptions 0
-   in Decode.parse parseMessage bytes
+wireDecodeProtoOptions = Decode.parse (Decode.at wireParseProtoOptions 0)
 
 -- | Message field parser capable of deserializing a 'ProtoOptions' record.
 --
@@ -185,52 +203,33 @@ wireDecodeProtoOptions bytes =
 wireParseProtoOptions :: Parser RawField ProtoOptions
 wireParseProtoOptions =
   Decode.catchE parseProtoOptions \err ->
-    let labelled :: ParseError
-        labelled = Decode.wireErrorLabel ''ProtoOptions err
-     in Decode.throwE labelled
+    Decode.throwE (Decode.wireErrorLabel ''ProtoOptions err)
   where
     -- TODO: docs packed varints optimization
     parseProtoOptions :: Parser RawField ProtoOptions
     parseProtoOptions = do
       varints <- Decode.one (Decode.packedVarints @Word64) []
+      let len = length varints
 
-      when (length varints < 4) do
-        throwMissingFields (length varints)
+      when (len < 3) do
+        let issue :: ParseError
+            issue = Decode.WireTypeError ("expected 3 varints, got " <> show len)
+         in Decode.throwE issue
 
       ProtoOptions
-        <$> parseFieldBatched (varints List.!! 0)
-        <*> parseFieldCLevel (varints List.!! 1)
-        <*> parseFieldCLevel (varints List.!! 2)
+        <$> parsePrimWith def (varints List.!! 0)
+        <*> parseCLevelWith (varints List.!! 1)
+        <*> parseCLevelWith (varints List.!! 2)
 
-    parseFieldBatched :: Word64 -> Parser RawField Batched
-    parseFieldBatched 1 = pure Batched
-    parseFieldBatched _ = pure Unbatched
+    parsePrimWith :: forall a. Primitive a => a -> Word64 -> Parser RawField a
+    parsePrimWith defval varint = Decode.Parser \_ ->
+      let parser :: Parser RawField a
+          parser = Decode.one decodePrimitive defval
+       in Decode.runParser parser [Decode.VarintField varint]
 
-    -- 'CLevel' is bounded from @1@ to @22@. Here the additional case for
-    -- @0 :: Word64@ is interpreted as 'Nothing' for the case that a compression
-    -- option is set to the @CLEVEL_NONE@ enum to disable compression.
-    parseFieldCLevel :: Word64 -> Parser RawField (Maybe CLevel)
-    parseFieldCLevel 0 = pure Nothing
-    parseFieldCLevel x =
-      case CLevel.toCLevel x of
-        Nothing -> CLevel.throwCLevelBoundsError x
-        Just x' -> pure (Just x')
-
-    throwMissingFields :: Int -> Parser RawField a
-    throwMissingFields n =
-      let issue :: ParseError
-          issue = Decode.WireTypeError ("expected 3 varints, got " <> show n)
-       in Decode.throwE issue
-
--- Batched ----------------------------------------------------------------------
-
--- $option-batched
---
--- Documentation on the 'Batched' protobuf option and details on batched
--- streams, can be foud in the "Network.GRPC.MQTT.Option.Batched" module.
-
--- CLevel -----------------------------------------------------------------------
-
--- $option-clevel
---
--- TODO
+    parseCLevelWith :: Word64 -> Parser RawField (Maybe CLevel)
+    parseCLevelWith 0 = pure Nothing
+    parseCLevelWith x = Decode.Parser \_ ->
+      let parser :: Parser RawField (Maybe CLevel)
+          parser = Decode.one (Just <$> decodePrimitive) Nothing
+       in Decode.runParser parser [Decode.VarintField x]

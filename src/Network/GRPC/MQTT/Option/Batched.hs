@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | This module exports the 'Batched' datatype.
@@ -56,15 +57,18 @@ module Network.GRPC.MQTT.Option.Batched
     -- $option-batched
     Batched (Batch, Batched, Unbatched, getBatched),
 
-    -- * Conversion
+    -- * Proto
+    -- $batched-proto
     toProtoValue,
   )
 where
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Data.Data (Data)
 
+import Language.Haskell.TH.Ppr (Ppr, ppr)
+import Language.Haskell.TH.PprLib qualified as Ppr
 import Language.Haskell.TH.Syntax (Lift)
 
 import Proto3.Suite.DotProto (DotProtoValue)
@@ -74,13 +78,15 @@ import Relude
 
 import Proto3.Suite.Class (HasDefault, Primitive, def)
 
+import Proto3.Wire.Class (ProtoEnum)
+
 import Text.Show qualified as Show
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.Proto (ProtoDatum)
 
--- Batched ----------------------------------------------------------------------
+-- Batched ---------------------------------------------------------------------
 
 -- | 'Batched' is a boolean indicating whether gRPC streams should batch packets
 -- before publishing over MQTT.
@@ -89,6 +95,7 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 newtype Batched = Batch {getBatched :: Bool}
   deriving newtype (Eq, Ord, Primitive, ProtoDatum)
   deriving stock (Data, Generic, Lift, Typeable)
+  deriving anyclass (ProtoEnum)
 
 -- | Pattern synonym for enabled batching.
 --
@@ -120,23 +127,43 @@ instance Bounded Batched where
 
 -- | @since 0.1.0.0
 instance Enum Batched where
-  toEnum x = Batch (x == 1)
+  toEnum 1 = Batched
+  toEnum _ = Unbatched
 
   fromEnum Unbatched = 0
   fromEnum Batched = 1
 
--- | @'def' == 'Unbatched'@
+-- |
+-- @
+-- 'show' 'Batched'  == "Batched"
+-- 'show' 'Unbatched' == "Unbatched"
+-- @
+--
+-- @since 0.1.0.0
+instance Show Batched where
+  show Unbatched = "Unbatched"
+  show Batched = "Batched"
+
+-- | @since 0.1.0.0
+instance Ppr Batched where
+  ppr x = Ppr.text (show x)
+
+-- |
+-- @
+-- 'def' == 'Unbatched'
+-- 'def' == 'Batch' 'False'
+-- @
 --
 -- @since 0.1.0.0
 instance HasDefault Batched where
   def = Unbatched
 
--- | @since 0.1.0.0
-instance Show Batched where
-  show Unbatched = "Unbatched"
-  show Batched = "Batched"
+-- Batched - Proto -------------------------------------------------------------
 
--- Batched - Conversion ---------------------------------------------------------
+-- $batched-proto
+--
+-- The equivalent protocol buffer data representation for 'Batched' is the
+-- primitive @bool@.
 
 -- | Convert a 'Batched' value to it's 'DotProtoValue' representation.
 --

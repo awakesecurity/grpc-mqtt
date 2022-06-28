@@ -95,6 +95,7 @@ import Network.GRPC.MQTT.Option
       ),
     defaultProtoOptions,
   )
+import Network.GRPC.MQTT.Option.Batched (Batched (Batched, Unbatched))
 import Network.GRPC.MQTT.Proto
   ( ProtoDatum,
     ProtoOptionError (OptionValueTypeMismatch),
@@ -112,7 +113,6 @@ import Network.GRPC.MQTT.Proto
     servicesOf,
     throwCompileErrorIO,
   )
-import Network.GRPC.MQTT.Types (Batched (Batched, Unbatched))
 import Network.GRPC.MQTT.Wrapping
   ( wrapBiDiStreamingClientHandler,
     wrapClientStreamingClientHandler,

@@ -29,11 +29,19 @@ module Network.GRPC.MQTT.Wrapping
   )
 where
 
+--------------------------------------------------------------------------------
+
+import Control.Monad.Except (MonadError, throwError)
+
 import Relude
 
 import Network.GRPC.MQTT.Types
-  ( Batched,
-    ClientHandler (ClientBiDiStreamHandler, ClientClientStreamHandler, ClientServerStreamHandler, ClientUnaryHandler),
+  ( ClientHandler
+      ( ClientBiDiStreamHandler,
+        ClientClientStreamHandler,
+        ClientServerStreamHandler,
+        ClientUnaryHandler
+      ),
     MQTTResult (..),
   )
 
@@ -59,9 +67,9 @@ import Proto.Mqtt as Proto
   )
 
 import Control.Exception (ErrorCall, try)
-import qualified Data.Map as M
+import Data.Map qualified as M
 import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector qualified as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL
   ( GRPCIOError (..),
@@ -92,6 +100,8 @@ import Proto3.Wire.Decode (ParseError (..))
 
 ---------------------------------------------------------------------------------
 
+import Network.GRPC.MQTT.Option (ProtoOptions)
+import Network.GRPC.MQTT.Option.Batched (Batched)
 
 ---------------------------------------------------------------------------------
 
@@ -135,14 +145,14 @@ wrapBiDiStreamingClientHandler useBatchedStream handler =
     handler (ClientBiDiRequest timeout metadata bidi)
 
 -- Responses
-wrapResponse :: (Message response) => ClientResult streamType response -> WrappedResponse
+wrapResponse :: ClientResult s ByteString -> WrappedResponse
 wrapResponse res =
   WrappedResponse . Just $
     case res of
       ClientNormalResponse rspBody initMD trailMD rspCode details ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
-            (Just $ ResponseBody (toBS rspBody))
+            (Just $ ResponseBody rspBody)
             (Just $ fromMetadataMap initMD)
             (Just $ fromMetadataMap trailMD)
             (fromStatusCode rspCode)
@@ -150,7 +160,7 @@ wrapResponse res =
       ClientWriterResponse rspBody initMD trailMD rspCode details ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
-            (ResponseBody . toBS <$> rspBody)
+            (ResponseBody <$> rspBody)
             (Just $ fromMetadataMap initMD)
             (Just $ fromMetadataMap trailMD)
             (fromStatusCode rspCode)
@@ -182,28 +192,31 @@ data ParsedMQTTResponse response = ParsedMQTTResponse
   , statusDetails :: StatusDetails
   }
 
-unwrapResponse :: forall response. (Message response) => LByteString -> Either RemoteError (ParsedMQTTResponse response)
+unwrapResponse :: 
+  (MonadError RemoteError m, Message rsp) =>
+  LByteString ->
+  m (ParsedMQTTResponse rsp)
 unwrapResponse wrappedMessage = do
   MQTTResponse{..} <-
     case fromLazyByteString wrappedMessage of
-      Left err -> Left err
-      Right (WrappedResponse Nothing) -> Left $ remoteError "Empty response"
-      Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> Left err
-      Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> Right rsp
+      Left err -> throwError err
+      Right (WrappedResponse Nothing) -> throwError (remoteError "Empty response")
+      Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> throwError err
+      Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> pure rsp
 
   responseBody <-
     case fromByteString . responseBodyValue <$> mqttresponseBody of
-      Just (Left err) -> Left $ parseErrorToRCE err
-      Nothing -> Right Nothing
-      Just (Right r) -> Right (Just r)
+      Just (Left err) -> throwError (parseErrorToRCE err)
+      Nothing -> pure Nothing
+      Just (Right r) -> pure (Just r)
 
   let initMetadata = maybe mempty toMetadataMap mqttresponseInitMetamap
   let trailMetadata = maybe mempty toMetadataMap mqttresponseTrailMetamap
 
   statusCode <-
     case toStatusCode mqttresponseResponseCode of
-      Nothing -> Left $ remoteError ("Invalid reponse code: " <> Relude.show mqttresponseResponseCode)
-      Just sc -> Right sc
+      Nothing -> throwError (remoteError ("Invalid reponse code: " <> Relude.show mqttresponseResponseCode))
+      Just sc -> pure sc
 
   let statusDetails = toStatusDetails mqttresponseDetails
 

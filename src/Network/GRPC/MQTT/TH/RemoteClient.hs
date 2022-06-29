@@ -32,7 +32,7 @@ import Language.Haskell.TH
     varP,
   )
 import Network.GRPC.HighLevel.Client (Client)
-import Network.GRPC.MQTT.Option.Batched (Batched (Batched))
+import Network.GRPC.MQTT.Option.Batched (Batched)
 import Network.GRPC.MQTT.Types (MethodMap)
 import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
 import Proto3.Suite.DotProto.Internal (prefixedFieldName)

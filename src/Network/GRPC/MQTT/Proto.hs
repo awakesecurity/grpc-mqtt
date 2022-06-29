@@ -505,7 +505,7 @@ instance Exception ProtoOptionError where
 --
 -- @since 0.1.0.0
 servicesOf :: Applicative f => DotProto -> (ProtoService -> f a) -> f [a]
-servicesOf dotproto = for k (getFileServices dotproto)
+servicesOf dotproto = for (getFileServices dotproto)
 
 -- | Accesses the list of services defined in the 'DotProto'.
 --

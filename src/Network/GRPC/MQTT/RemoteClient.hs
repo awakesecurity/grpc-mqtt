@@ -202,7 +202,7 @@ pattern AuxMessageTerminate = AuxControlMessage (Enumerated (Right AuxControlTer
 
 -- | Handles AuxControl signals from the "/control" topic
 handleControlMessage :: Logger -> SessionHandle -> LByteString -> IO ()
-handleControlMessage logger handle msg = do
+handleControlMessage logger handle msg = 
   let result :: Either Decode.ParseError AuxControlMessage
       result = Proto3.fromByteString (toStrict msg)
    in case result of

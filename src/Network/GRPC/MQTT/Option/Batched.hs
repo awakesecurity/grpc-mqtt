@@ -18,7 +18,7 @@
 --
 -- == Protobuf Options
 --
--- In @*.proto@ files, 'Batched' options are represented as a booleans. Batching
+-- In @*.proto@ files, 'Batched' options are represented as booleans. Batching
 -- is toggled for a streaming RPC by setting @hs_grpc_mqtt_batched_stream@
 -- option in a RPC. By default, streams are unbatched.
 --
@@ -107,7 +107,7 @@ pattern Batched = Batch True
 
 -- | Pattern synonym for disabled batching.
 --
--- @'Batched' == 'Batch' 'False'@
+-- @'Unbatched' == 'Batch' 'False'@
 --
 -- @since 0.1.0.0
 pattern Unbatched :: Batched
@@ -118,7 +118,7 @@ pattern Unbatched = Batch False
 -- |
 -- @'maxBound' == 'Unbatched'@
 --
--- @'maxBound' == 'Batched'@
+-- @'minBound' == 'Batched'@
 --
 -- @since 0.1.0.0
 instance Bounded Batched where

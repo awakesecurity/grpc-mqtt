@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | This module defines functions used by @grpc-mqtt@ internals for
+-- | This module defines functions used by @grpc-mqtt@ internals for:
 --
 -- * Handling IO for protocol buffers.
 --
@@ -87,6 +87,7 @@ import Control.Exception (ErrorCall (ErrorCallWithLocation), throwIO)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Data (Data, cast, eqT, gmapQ)
+import Data.Traversable (for)
 import Data.Foldable (foldrM)
 import Data.Type.Equality ((:~:) (Refl))
 
@@ -137,12 +138,12 @@ import Proto3.Suite.Orphans ()
 openProtoFileIO :: Turtle.FilePath -> IO DotProto
 openProtoFileIO filepath = do
   -- Test that the path @filepath@ exists.
-  exists <- Turtle.testpath filepath
-  unless exists (throwProtoDoesNotExistIO filepath)
+  unlessM (Turtle.testpath filepath) do 
+    throwProtoDoesNotExistIO filepath
 
   -- Test that @filepath@ points to a file, not a directory.
-  isfile <- Turtle.testfile filepath
-  unless isfile (throwProtoPathIsDirectoryIO filepath)
+  unlessM (Turtle.testfile filepath) do 
+    throwProtoPathIsDirectoryIO filepath
 
   -- Test that path @filepath@ has a *.proto extension.
   let isproto = Turtle.hasExtension filepath "proto"
@@ -152,8 +153,7 @@ openProtoFileIO filepath = do
   -- be raised by @importProtoFile@.
   let file = Turtle.filename filepath
   let dire = Turtle.directory filepath
-  result <- runExceptT (DotProto.importProto [dire] file file)
-  case result of
+  runExceptT (DotProto.importProto [dire] file file) >>= \case
     Left err -> throwCompileErrorIO filepath err
     Right dp -> pure dp
 
@@ -167,7 +167,7 @@ data ProtoIOError = ProtoIOError
   { ioeFilePath :: Turtle.FilePath
   , ioeErrorTag :: ProtoIOErrorTag
   }
-  deriving (Eq, Ord)
+  deriving stock (Eq, Ord)
 
 -- | @since 0.1.0.0
 instance Show ProtoIOError where
@@ -225,7 +225,7 @@ data ProtoIOErrorTag
   = ProtoInvalidExtension
   | ProtoFileDoesNotExist
   | ProtoPathIsDirectory
-  deriving (Enum, Eq, Ord)
+  deriving stock (Enum, Eq, Ord)
 
 -- | @since 0.1.0.0
 instance Show ProtoIOErrorTag where
@@ -449,13 +449,13 @@ memberOption key (ProtoOptionSet kvs) = Map.member key kvs
 
 -- Proto Options - Option Errors -----------------------------------------------
 
--- | 'ProtoOptionError' represents the errors that can improper protobuf option
+-- | 'ProtoOptionError' represents the errors that improper protobuf option
 -- usage can produce.
 --
 -- @since 0.1.0.0
 data ProtoOptionError
-  = -- | 'ProtoOptionAlreadySet' errors represets protobuf declarations with
-    -- multiple value set for the same option.
+  = -- | 'ProtoOptionAlreadySet' errors are emitted when protobuf declarations 
+    -- when multiple values are set for the same option.
     --
     -- @
     -- message BadMessage {
@@ -505,7 +505,7 @@ instance Exception ProtoOptionError where
 --
 -- @since 0.1.0.0
 servicesOf :: Applicative f => DotProto -> (ProtoService -> f a) -> f [a]
-servicesOf dotproto k = traverse k (getFileServices dotproto)
+servicesOf dotproto = for k (getFileServices dotproto)
 
 -- | Accesses the list of services defined in the 'DotProto'.
 --
@@ -536,13 +536,13 @@ data ProtoService = ProtoService
   { serviceName :: DotProtoIdentifier
   , serviceDefs :: [DotProtoServicePart]
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show)
 
 -- | 'for'-style traversal over the 'RPCMethod' defined in a 'ProtoService'.
 --
 -- @since 0.1.0.0
 methodsOf :: Applicative f => ProtoService -> (RPCMethod -> f a) -> f [a]
-methodsOf dotproto k = traverse k (getServiceMethods dotproto)
+methodsOf dotproto = for (getServiceMethods dotproto)
 
 -- | Accesses the 'RPCMethods' defined by a 'ProtoService'.
 --
@@ -573,7 +573,7 @@ getServiceOptions (ProtoService _ ps) = foldrM toOptions mempty ps
 
 -- Proto Methods ---------------------------------------------------------------
 
--- | Querys a 'RPCMethod' for it's gRPC method type.
+-- | Querys a 'RPCMethod' for its gRPC method type.
 --
 -- @since 0.1.0.0
 getMethodType :: RPCMethod -> GRPCMethodType

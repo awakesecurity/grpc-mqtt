@@ -4,11 +4,11 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | This module defines the 'CLevel' datatype. 'CLevel' is represents a
--- zstandard compression level. Zstandard offers compression levels for
--- controlling how the algorithm favors speed vs. compression ratio. The
--- supported range for a compression levels is from 1 to 22. See [the
--- "introduction" section of the zstandard documentation]
+-- | This module defines the 'CLevel' datatype. 'CLevel' represents a zstandard
+-- compression level. Zstandard offers compression levels for controlling how 
+-- the algorithm favors speed vs. compression ratio. The supported range for a
+-- compression levels is from 1 to 22. See [the "introduction" section of the 
+-- zstandard documentation] 
 -- (https://raw.githack.com/facebook/zstd/release/doc/zstd_manual.html) for more
 -- information regarding zstandard compression levels.
 --
@@ -165,8 +165,8 @@ toCLevel n
 
 -- CLevel - Predicates ---------------------------------------------------------
 
--- | Predicate that tests if a given integral value is corresponds to a
--- compression level supported by zstandard.
+-- | Predicate that tests if a given integral value corresponds to a compression
+--  level supported by zstandard.
 --
 -- @since 0.1.0.0
 isCLevel :: Integral a => a -> Bool

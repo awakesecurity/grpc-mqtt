@@ -17,6 +17,7 @@ module Network.GRPC.MQTT.Types
         MQTTBiDiRequest
       ),
     requestTimeout,
+    requestMetadata,
     MQTTResult (..),
     MethodMap,
     ClientHandler (..),
@@ -75,7 +76,16 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
     (MetadataMap -> StreamRecv rsp -> StreamSend rqt -> WritesDone -> IO ()) ->
     MQTTRequest 'BiDiStreaming rqt rsp
 
--- | TODO
+-- | Retrieve a MQTT request's metadata.
+--
+-- @since 0.1.0.0
+requestMetadata :: MQTTRequest s rqt rsp -> MetadataMap
+requestMetadata (MQTTNormalRequest _ _ ms) = ms
+requestMetadata (MQTTWriterRequest _ ms _) = ms
+requestMetadata (MQTTReaderRequest _ _ ms _) = ms
+requestMetadata (MQTTBiDiRequest _ ms _) = ms
+
+-- | Retrieve a MQTT request's timeout period.
 --
 -- @since 0.1.0.0
 requestTimeout :: MQTTRequest s rqt rsp -> TimeoutSeconds
@@ -129,4 +139,3 @@ data ClientHandler where
     Batched ->
     (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
     ClientHandler
-

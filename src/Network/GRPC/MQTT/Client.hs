@@ -91,7 +91,6 @@ import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Compress qualified as Compress
 import Network.GRPC.MQTT.Message.Packet (packetReader)
 import Network.GRPC.MQTT.Message.Request (Request (Request), wireWrapRequest)
 import Network.GRPC.MQTT.Option (ProtoOptions)
@@ -225,12 +224,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
               rawInitMetadata <- withExceptT parseErrorToRCE (packetReader responseChan)
               metadata <- liftEither $ parseMessageOrError rawInitMetadata
 
-              readResponseStream <- mkStreamRead do 
-                bytes <- withExceptT parseErrorToRCE (packetReader responseChan)
-                if Option.isServerCompressed opts
-                  then pure bytes
-                  else withExceptT Compress.toRemoteError do 
-                    fromStrict <$> Compress.decompress (toStrict bytes)
+              readResponseStream <- mkStreamRead $ withExceptT parseErrorToRCE (packetReader responseChan)
 
               let mqttSRecv :: StreamRecv response
                   mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
@@ -250,12 +244,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
               rawInitMetadata <- withExceptT parseErrorToRCE (packetReader responseChan)
               metadata <- liftEither $ parseMessageOrError rawInitMetadata
 
-              readResponseStream <- mkStreamRead do 
-                bytes <- withExceptT parseErrorToRCE (packetReader responseChan)
-                if Option.isServerCompressed opts
-                  then pure bytes
-                  else withExceptT Compress.toRemoteError do 
-                    fromStrict <$> Compress.decompress (toStrict bytes)
+              readResponseStream <- mkStreamRead $ withExceptT parseErrorToRCE (packetReader responseChan)
 
               let mqttSRecv :: StreamRecv response
                   mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
@@ -284,21 +273,13 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
 
     publishRequest :: Topic -> request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
     publishRequest rqtTopic rqt timeout metadata = do
-      let payload = encodeMessage rqt
+      let payload = toStrict (Proto3.toLazyByteString rqt)
       let encoded = wireWrapRequest (Request payload opts timeout metadata)
 
       logDebug mqttLogger $ "Publishing to topic: " <> unTopic rqtTopic
       logDebug mqttLogger $ "Publishing message: " <> show encoded
 
       mkPacketizedPublish mqttClient msgSizeLimit rqtTopic encoded
-
-    encodeMessage :: request -> ByteString
-    encodeMessage rqt =
-      let payload :: ByteString
-          payload = toStrict (Proto3.toLazyByteString rqt)
-       in case Option.rpcClientCLevel opts of
-            Nothing -> payload
-            Just cx -> Compress.compress cx payload
 
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do

@@ -86,9 +86,6 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
 
-import Language.Haskell.TH.Syntax (Name)
-import Language.Haskell.TH.Syntax qualified as TH.Syntax
-
 import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic

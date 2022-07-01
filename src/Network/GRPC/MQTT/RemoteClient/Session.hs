@@ -17,6 +17,7 @@ module Network.GRPC.MQTT.RemoteClient.Session
 
     -- ** Logging
     logError,
+    logDebug,
 
     -- ** Service Methods
     askMethod,
@@ -181,17 +182,21 @@ deleteSessionM sid = do
 
 -- Session - Logging ------------------------------------------------------------
 
--- | TODO
+-- | Write a debug log to the ambient session's logger.
 --
 -- @since 0.1.0.0
-logError :: (MonadReader SessionConfig m, MonadIO m) => Name -> Text -> m ()
-logError name msg = do
+logDebug :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
+logDebug ctx msg = do
   logger <- asks cfgLogger
-  let qname :: Text
-      qname = case TH.Syntax.nameModule name of
-        Nothing -> toText (TH.Syntax.nameBase name)
-        Just xs -> toText (xs ++ "." ++ TH.Syntax.nameBase name)
-   in Logging.logErr logger (qname <> ": " <> msg)
+  Logging.logDebug logger ("remote session debug: " <> ctx <> ": " <> msg)
+
+-- | Write an error log to the ambient session's logger.
+--
+-- @since 0.1.0.0
+logError :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
+logError ctx msg = do
+  logger <- asks cfgLogger
+  Logging.logErr logger ("remote session error: " <> ctx <> ": " <> msg)
 
 -- 'Session' ---------------------------------------------------------------------
 

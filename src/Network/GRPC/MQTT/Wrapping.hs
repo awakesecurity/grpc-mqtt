@@ -226,33 +226,49 @@ unwrapResponse wrappedMessage = do
       statusCode
       statusDetails
 
-unwrapUnaryResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'Normal response)
+unwrapUnaryResponse :: 
+  forall m rsp. 
+  (MonadError RemoteError m, Message rsp) =>
+  LByteString -> 
+  m (MQTTResult 'Normal rsp)
 unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMessage
   where
-    toNormalResult :: ParsedMQTTResponse response -> MQTTResult 'Normal response
+    toNormalResult :: ParsedMQTTResponse rsp -> MQTTResult 'Normal rsp
     toNormalResult ParsedMQTTResponse{..} =
       case responseBody of
         Nothing -> MQTTError "Empty response body"
         (Just body) -> GRPCResult $ ClientNormalResponse body initMetadata trailMetadata statusCode statusDetails
 
-unwrapClientStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ClientStreaming response)
+unwrapClientStreamResponse ::
+  forall m rsp. 
+  (MonadError RemoteError m, Message rsp) =>
+  LByteString -> 
+  m (MQTTResult 'ClientStreaming rsp)
 unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapResponse wrappedMessage
   where
-    toClientStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ClientStreaming response
+    toClientStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ClientStreaming rsp
     toClientStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientWriterResponse responseBody initMetadata trailMetadata statusCode statusDetails
 
-unwrapServerStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'ServerStreaming response)
+unwrapServerStreamResponse :: 
+  forall m rsp. 
+  (MonadError RemoteError m, Message rsp) =>
+  LByteString -> 
+  m (MQTTResult 'ServerStreaming rsp)
 unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapResponse wrappedMessage
   where
-    toServerStreamResult :: ParsedMQTTResponse response -> MQTTResult 'ServerStreaming response
+    toServerStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ServerStreaming rsp
     toServerStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientReaderResponse trailMetadata statusCode statusDetails
 
-unwrapBiDiStreamResponse :: forall response. (Message response) => LByteString -> Either RemoteError (MQTTResult 'BiDiStreaming response)
+unwrapBiDiStreamResponse :: 
+  forall m rsp. 
+  (MonadError RemoteError m, Message rsp) =>
+  LByteString -> 
+  m (MQTTResult 'BiDiStreaming rsp)
 unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse wrappedMessage
   where
-    toBiDiStreamResult :: ParsedMQTTResponse response -> MQTTResult 'BiDiStreaming response
+    toBiDiStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'BiDiStreaming rsp
     toBiDiStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
 

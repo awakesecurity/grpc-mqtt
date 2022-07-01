@@ -35,6 +35,10 @@ module Network.GRPC.MQTT.Option
     -- * Wire Decoding
     wireDecodeProtoOptions,
     wireParseProtoOptions,
+    
+    -- * Re-exports
+    Batched,
+    CLevel,
   )
 where
 

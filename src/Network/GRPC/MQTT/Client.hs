@@ -91,7 +91,7 @@ import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Message.Packet (packetReader)
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Network.GRPC.MQTT.Message.Request (Request (Request), wireWrapRequest)
 import Network.GRPC.MQTT.Option (ProtoOptions)
 import Network.GRPC.MQTT.Option qualified as Option
@@ -193,77 +193,81 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
     subscribeOrThrow mqttClient [toFilter responseTopic]
 
     -- Process request
-    let timeout :: TimeoutSeconds
-        timeout = requestTimeout request
-     in timeoutGRPC timeout case request of
-          -- Unary Requests
-          MQTTNormalRequest req _ reqMetadata -> do
-            publishRequest requestTopic req timeout reqMetadata
-            withControlSignals (publishControl controlTopic) . exceptToResult $ do
-              rsp <- withExceptT parseErrorToRCE (packetReader responseChan)
-              liftEither $ unwrapUnaryResponse rsp
+    let timeout = requestTimeout request
+    timeoutGRPC timeout case request of
+      -- Unary Requests
+      MQTTNormalRequest req _ reqMetadata -> do
+        publishRequest requestTopic req timeout reqMetadata
+        withControlSignals (publishControl controlTopic) . exceptToResult $ do
+          rsp <- makePacketReader responseChan
+          liftEither $ unwrapUnaryResponse rsp
 
-          -- Client Streaming Requests
-          MQTTWriterRequest _ initMetadata streamHandler -> do
-            publishRequest requestTopic Proto3.def timeout initMetadata
-            withControlSignals (publishControl controlTopic) . exceptToResult $ do
-              liftIO $ do
-                -- do client streaming
-                streamHandler publishToRequestStream
-                -- Send end of stream indicator
+      -- Client Streaming Requests
+      MQTTWriterRequest _ initMetadata streamHandler -> do
+        publishRequest requestTopic Proto3.def timeout initMetadata
+        withControlSignals (publishControl controlTopic) . exceptToResult $ do
+          liftIO $ do
+            -- do client streaming
+            streamHandler publishToRequestStream
+            -- Send end of stream indicator
+            publishToStreamCompleted
+
+          rsp <- makePacketReader responseChan
+          liftEither $ unwrapClientStreamResponse rsp
+
+      -- Server Streaming Requests
+      MQTTReaderRequest req _ reqMetadata streamHandler -> do
+        publishRequest requestTopic req timeout reqMetadata
+        withControlSignals (publishControl controlTopic) . exceptToResult $ do
+          -- Wait for initial metadata
+          rawInitMetadata <- makePacketReader responseChan
+          metadata <- liftEither $ parseMessageOrError rawInitMetadata
+
+          readResponseStream <- mkStreamRead (makePacketReader responseChan)
+
+          let mqttSRecv :: StreamRecv response
+              mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
+
+          -- Run user-provided stream handler
+          liftIO (streamHandler (toMetadataMap metadata) mqttSRecv)
+
+          -- Return final result
+          rsp <- makePacketReader responseChan
+          liftEither $ unwrapServerStreamResponse rsp
+
+      -- BiDirectional Server Streaming Requests
+      MQTTBiDiRequest _ reqMetadata streamHandler -> do
+        publishRequest requestTopic Proto3.def timeout reqMetadata
+        withControlSignals (publishControl controlTopic) . exceptToResult $ do
+          -- Wait for initial metadata
+          rawInitMetadata <- makePacketReader responseChan
+          metadata <- liftEither $ parseMessageOrError rawInitMetadata
+
+          readResponseStream <- mkStreamRead (makePacketReader responseChan)
+
+          let mqttSRecv :: StreamRecv response
+              mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
+
+          let mqttSSend :: StreamSend request
+              mqttSSend = publishToRequestStream
+
+          let mqttWritesDone :: WritesDone
+              mqttWritesDone = do
                 publishToStreamCompleted
+                return $ Right ()
 
-              rsp <- withExceptT parseErrorToRCE (packetReader responseChan)
-              liftEither $ unwrapClientStreamResponse rsp
+          -- Run user-provided stream handler
+          liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
 
-          -- Server Streaming Requests
-          MQTTReaderRequest req _ reqMetadata streamHandler -> do
-            publishRequest requestTopic req timeout reqMetadata
-            withControlSignals (publishControl controlTopic) . exceptToResult $ do
-              -- Wait for initial metadata
-              rawInitMetadata <- withExceptT parseErrorToRCE (packetReader responseChan)
-              metadata <- liftEither $ parseMessageOrError rawInitMetadata
-
-              readResponseStream <- mkStreamRead $ withExceptT parseErrorToRCE (packetReader responseChan)
-
-              let mqttSRecv :: StreamRecv response
-                  mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
-
-              -- Run user-provided stream handler
-              liftIO (streamHandler (toMetadataMap metadata) mqttSRecv)
-
-              -- Return final result
-              rsp <- withExceptT parseErrorToRCE (packetReader responseChan)
-              liftEither $ unwrapServerStreamResponse rsp
-
-          -- BiDirectional Server Streaming Requests
-          MQTTBiDiRequest _ reqMetadata streamHandler -> do
-            publishRequest requestTopic Proto3.def timeout reqMetadata
-            withControlSignals (publishControl controlTopic) . exceptToResult $ do
-              -- Wait for initial metadata
-              rawInitMetadata <- withExceptT parseErrorToRCE (packetReader responseChan)
-              metadata <- liftEither $ parseMessageOrError rawInitMetadata
-
-              readResponseStream <- mkStreamRead $ withExceptT parseErrorToRCE (packetReader responseChan)
-
-              let mqttSRecv :: StreamRecv response
-                  mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
-
-              let mqttSSend :: StreamSend request
-                  mqttSSend = publishToRequestStream
-
-              let mqttWritesDone :: WritesDone
-                  mqttWritesDone = do
-                    publishToStreamCompleted
-                    return $ Right ()
-
-              -- Run user-provided stream handler
-              liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
-
-              -- Return final result
-              rsp <- withExceptT parseErrorToRCE (packetReader responseChan)
-              liftEither $ unwrapBiDiStreamResponse rsp
+          -- Return final result
+          rsp <- makePacketReader responseChan
+          liftEither $ unwrapBiDiStreamResponse rsp
   where
+    makePacketReader :: TChan LByteString -> ExceptT RemoteError IO LByteString
+    makePacketReader channel =
+      withExceptT parseErrorToRCE do
+        ExceptT (Packet.makePacketReader channel)
+
     publishControl :: Topic -> AuxControl -> IO ()
     publishControl ctrlTopic ctrl = do
       logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic ctrlTopic

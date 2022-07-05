@@ -244,7 +244,7 @@ handleRequest handle = do
           ClientUnaryHandler k -> do
             result <- liftIO (k message timeout metadata)
             pure (makeClientResponse result)
-          ClientClientStreamHandler k -> 
+          ClientClientStreamHandler k ->
             withRunInIO \runIO -> do
               let sender = makeClientStreamSender channel
               result <- k timeout metadata (runIO . sender)
@@ -337,7 +337,7 @@ publishRemoteError err = do
 
 makePacketReader :: TChan LByteString -> Session (Either RemoteError ByteString)
 makePacketReader channel = do
-  result <- liftIO (Packet.packetReader channel)
+  result <- liftIO (Packet.makePacketReader channel)
   case result of
     Left err -> do
       Session.logError "wire parse error encountered parsing Packet" (show err)
@@ -373,12 +373,12 @@ makeServerStreamSender ::
   Session ()
 makeServerStreamSender channel sender done = do
   reader <- makeClientStreamReader channel
-  fix \loop -> 
+  fix \loop ->
     liftIO reader >>= \case
       Left err -> do
         handleWritesDone done
         publishRemoteError err
-      Right Nothing -> 
+      Right Nothing ->
         handleWritesDone done
       Right (Just x) -> do
         handleStreamSend sender x
@@ -418,14 +418,14 @@ makeClientStreamReader channel =
 makeClientStreamSender :: Message a => TChan LByteString -> StreamSend a -> Session ()
 makeClientStreamSender channel sender = do
   reader <- makeClientStreamReader channel
-  fix \loop -> 
+  fix \loop ->
     liftIO reader >>= \case
       Left err -> do
         Session.logError "parse error encountered reading stream chunk" (show err)
         publishRemoteError err
-      Right Nothing -> 
+      Right Nothing ->
         Session.logDebug "server stream sender" "done"
       Right (Just x) -> do
         Session.logDebug "server stream sender" "read chunk"
         handleStreamSend sender x
-        loop 
+        loop

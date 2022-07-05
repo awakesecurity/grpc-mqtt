@@ -75,7 +75,7 @@ propPacketOrdering = property do
     channel <- newTChanIO
     for_ pys \packet -> atomically do
       writeTChan channel (Packet.wireWrapPacket packet)
-    Packet.packetReader channel
+    Packet.makePacketReader channel
 
   -- If 'Packet.packetReader' is able to correctly order packets it recieves,
   -- then @result@ should be equal to the unshuffled vector of packets.

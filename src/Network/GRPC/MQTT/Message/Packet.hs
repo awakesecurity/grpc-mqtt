@@ -25,7 +25,7 @@ module Network.GRPC.MQTT.Message.Packet
     wireParsePacket,
 
     -- ** TODO
-    packetReader,
+    makePacketReader,
 
     -- * PacketInfo
     PacketInfo (PacketInfo, position, npackets),
@@ -179,8 +179,8 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
 -- | TODO
 --
 -- @since 0.1.0.0
-packetReader :: TChan LByteString -> ExceptT ParseError IO LByteString
-packetReader = runPacketReader loop
+makePacketReader :: TChan LByteString -> IO (Either ParseError LByteString)
+makePacketReader channel = runPacketReader loop channel
   where
     loop :: PacketReader LByteString
     loop = do
@@ -260,11 +260,13 @@ data PacketReaderEnv = PacketReaderEnv
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
-runPacketReader :: PacketReader a -> TChan LByteString -> ExceptT ParseError IO a
-runPacketReader (PacketReader m) channel = do
+runPacketReader :: PacketReader a -> TChan LByteString -> IO (Either ParseError a)
+runPacketReader m channel = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
-  runReaderT m (PacketReaderEnv channel pxs var)
+  unPacketReader m
+    & flip runReaderT (PacketReaderEnv channel pxs var)
+    & runExceptT
 
 readNextPacket :: PacketReader ()
 readNextPacket = do

@@ -11,11 +11,12 @@ module Network.GRPC.MQTT.Wrapping
     fromRemoteError,
     parseMessageOrError,
     remoteError,
+    toRemoteError,
     toGRPCIOError,
     toMetadataMap,
     fromMetadataMap,
-    wrapStreamChunk,
-    unwrapStreamChunk,
+    -- wrapStreamChunk,
+    -- unwrapStreamChunk,
     wrapResponse,
     unwrapUnaryResponse,
     unwrapClientStreamResponse,
@@ -190,7 +191,7 @@ data ParsedMQTTResponse response = ParsedMQTTResponse
   , statusDetails :: StatusDetails
   }
 
-unwrapResponse :: 
+unwrapResponse ::
   (MonadError RemoteError m, Message rsp) =>
   LByteString ->
   m (ParsedMQTTResponse rsp)
@@ -226,10 +227,10 @@ unwrapResponse wrappedMessage = do
       statusCode
       statusDetails
 
-unwrapUnaryResponse :: 
-  forall m rsp. 
+unwrapUnaryResponse ::
+  forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString -> 
+  LByteString ->
   m (MQTTResult 'Normal rsp)
 unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMessage
   where
@@ -240,9 +241,9 @@ unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMe
         (Just body) -> GRPCResult $ ClientNormalResponse body initMetadata trailMetadata statusCode statusDetails
 
 unwrapClientStreamResponse ::
-  forall m rsp. 
+  forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString -> 
+  LByteString ->
   m (MQTTResult 'ClientStreaming rsp)
 unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapResponse wrappedMessage
   where
@@ -250,10 +251,10 @@ unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapRespo
     toClientStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientWriterResponse responseBody initMetadata trailMetadata statusCode statusDetails
 
-unwrapServerStreamResponse :: 
-  forall m rsp. 
+unwrapServerStreamResponse ::
+  forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString -> 
+  LByteString ->
   m (MQTTResult 'ServerStreaming rsp)
 unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapResponse wrappedMessage
   where
@@ -261,35 +262,16 @@ unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapRespo
     toServerStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientReaderResponse trailMetadata statusCode statusDetails
 
-unwrapBiDiStreamResponse :: 
-  forall m rsp. 
+unwrapBiDiStreamResponse ::
+  forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString -> 
+  LByteString ->
   m (MQTTResult 'BiDiStreaming rsp)
 unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse wrappedMessage
   where
     toBiDiStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'BiDiStreaming rsp
     toBiDiStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
-
--- Stream Chunks
-wrapStreamChunk :: Maybe (Vector ByteString) -> WrappedStreamChunk
-wrapStreamChunk chunks =
-  WrappedStreamChunk
-    (WrappedStreamChunkOrErrorElems . WrappedStreamChunk_Elems <$> chunks)
-
-unwrapStreamChunk :: forall a. (Message a) => LByteString -> Either RemoteError (Maybe (Vector a))
-unwrapStreamChunk msg =
-  fromLazyByteString msg >>= \case
-    WrappedStreamChunk Nothing -> Right Nothing
-    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorError err)) -> Left err
-    WrappedStreamChunk (Just (WrappedStreamChunkOrErrorElems (WrappedStreamChunk_Elems chunks))) -> do
-      let parse :: ByteString -> Either RemoteError a
-          parse chunk =
-            case fromByteString chunk of
-              Left err -> Left $ parseErrorToRCE err
-              Right rsp -> Right rsp
-      Just <$> traverse parse chunks
 
 -- Utilities
 remoteError :: LText -> RemoteError

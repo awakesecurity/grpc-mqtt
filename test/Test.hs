@@ -14,11 +14,11 @@ import Test.Tasty
     includingOptions,
     testGroup,
   )
-import Test.Tasty.Runners (NumThreads)
 import Test.Tasty.Ingredients (Ingredient)
 import Test.Tasty.Ingredients.Basic (listingTests)
 import Test.Tasty.Ingredients.ConsoleReporter (consoleTestReporter)
 import Test.Tasty.Options (OptionDescription (Option))
+import Test.Tasty.Runners (NumThreads)
 
 import Network.GRPC.HighLevel.Client (Host, Port)
 import Network.MQTT.Topic (Topic)
@@ -29,12 +29,11 @@ import Relude hiding (Option)
 
 import Test.Suite.Config (TestOption)
 
-import qualified Test.Network.GRPC.HighLevel.Extra
-import qualified Test.Network.GRPC.MQTT.Compress
-import qualified Test.Network.GRPC.MQTT.Message.Packet
-import qualified Test.Network.GRPC.MQTT.Message.Request
-import qualified Test.Network.GRPC.MQTT.Option
-import qualified Test.Service
+import Test.Network.GRPC.HighLevel.Extra qualified
+import Test.Network.GRPC.MQTT.Compress qualified
+import Test.Network.GRPC.MQTT.Message qualified
+import Test.Network.GRPC.MQTT.Option qualified
+import Test.Service qualified
 
 ---------------------------------------------------------------------------------
 
@@ -50,8 +49,7 @@ testTree =
     "Tests: grpc-mqtt"
     [ Test.Network.GRPC.HighLevel.Extra.tests
     , Test.Network.GRPC.MQTT.Compress.tests
-    , Test.Network.GRPC.MQTT.Message.Packet.tests
-    , Test.Network.GRPC.MQTT.Message.Request.tests
+    , Test.Network.GRPC.MQTT.Message.tests
     , Test.Network.GRPC.MQTT.Option.tests
     , Test.Service.tests
     ]

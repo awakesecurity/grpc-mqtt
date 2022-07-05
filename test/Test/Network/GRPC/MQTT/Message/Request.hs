@@ -13,7 +13,7 @@ import Hedgehog (Property, forAll, property, tripping)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog (testProperty)
 
-import Test.Network.GRPC.MQTT.Message.Request.Gen qualified as Gen
+import Test.Network.GRPC.MQTT.Message.Gen qualified as Gen
 
 ---------------------------------------------------------------------------------
 

@@ -1,8 +1,11 @@
-{-# LANGUAGE ImportQualifiedPost #-}
+-- | Generators for 'Request' messages.
+module Test.Network.GRPC.MQTT.Message.Gen
+  ( -- * Request Generators
+    request,
+    requestMessage,
+    requestTimeout,
 
--- | Generators for 'Packet' messages.
-module Test.Network.GRPC.MQTT.Message.Packet.Gen
-  ( -- * Generators
+    -- * Packet Generators
     packet,
     packetInfo,
     packetVector,
@@ -12,26 +15,66 @@ module Test.Network.GRPC.MQTT.Message.Packet.Gen
   )
 where
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Hedgehog (MonadGen, Range)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Data.ByteString qualified as ByteString
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
+--------------------------------------------------------------------------------
+
+import Test.Network.GRPC.HighLevel.Extra.Gen qualified as Gen
+import Test.Network.GRPC.MQTT.Option.Gen qualified as Gen
+
 import Relude
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.Message.Packet (Packet, PacketInfo)
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
+import Network.GRPC.MQTT.Message.Request (Request)
+import Network.GRPC.MQTT.Message.Request qualified as Request
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- Request Generators ----------------------------------------------------------
+
+-- | Generates an MQTT 'Request' wrapper with a random 'ByteString' as the
+-- request body.
+request :: MonadGen m => m (Request ByteString)
+request = do
+  Request.Request
+    <$> requestMessage
+    <*> Gen.protoOptions
+    <*> requestTimeout
+    <*> Gen.metadataMap
+
+-- | Generates possibly empty 'ByteString' with a length bounded by the size
+-- parameter.
+--
+-- Used to emulate a serialized protobuf message embedded in a 'Request'.
+requestMessage :: MonadGen m => m ByteString
+requestMessage = do
+  Gen.sized \size -> do
+    upper <- Gen.int (Range.constant 0 (fromIntegral size))
+    let range :: Range Int
+        range = Range.constant 0 upper
+     in Gen.bytes range
+
+-- | Generates a request timeout in seconds, bounded [0, maxBound @Int].
+requestTimeout :: MonadGen m => m Int
+requestTimeout =
+  let range :: Range Int
+      range = Range.constant 0 maxBound
+   in Gen.int range
+
+-- Packet Generators -----------------------------------------------------------
 
 -- | Generates a 'Packet' message.
 packet :: MonadGen m => m (Packet ByteString)

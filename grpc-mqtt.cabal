@@ -74,6 +74,7 @@ library
     Network.GRPC.HighLevel.Extra
     Network.GRPC.MQTT
     Network.GRPC.MQTT.Client
+    Network.GRPC.MQTT.Compress
     Network.GRPC.MQTT.Core
     Network.GRPC.MQTT.Logging
     Network.GRPC.MQTT.Message.Packet
@@ -83,6 +84,7 @@ library
     Network.GRPC.MQTT.Option.Batched
     Network.GRPC.MQTT.Option.CLevel
     Network.GRPC.MQTT.Proto
+    Network.GRPC.MQTT.Proto.TH
     Network.GRPC.MQTT.RemoteClient
     Network.GRPC.MQTT.RemoteClient.Session
     Network.GRPC.MQTT.Sequenced
@@ -141,10 +143,11 @@ test-suite test
     Proto.Message
     Test.Network.GRPC.HighLevel.Extra
     Test.Network.GRPC.HighLevel.Extra.Gen
+    Test.Network.GRPC.MQTT.Compress
+    Test.Network.GRPC.MQTT.Compress.Gen
+    Test.Network.GRPC.MQTT.Message.Gen
     Test.Network.GRPC.MQTT.Message.Packet
-    Test.Network.GRPC.MQTT.Message.Packet.Gen
     Test.Network.GRPC.MQTT.Message.Request
-    Test.Network.GRPC.MQTT.Message.Request.Gen
     Test.Network.GRPC.MQTT.Option
     Test.Network.GRPC.MQTT.Option.CLevel
     Test.Network.GRPC.MQTT.Option.Gen

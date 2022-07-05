@@ -79,6 +79,7 @@ library
     Network.GRPC.MQTT.Logging
     Network.GRPC.MQTT.Message.Packet
     Network.GRPC.MQTT.Message.Request
+    Network.GRPC.MQTT.Message.StreamChunk
     Network.GRPC.MQTT.Message.TH
     Network.GRPC.MQTT.Option
     Network.GRPC.MQTT.Option.Batched

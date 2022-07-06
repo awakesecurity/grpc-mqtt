@@ -15,13 +15,14 @@ module Network.GRPC.MQTT.Wrapping
     toGRPCIOError,
     toMetadataMap,
     fromMetadataMap,
-    wrapResponse,
     wrapUnaryClientHandler,
     wrapClientStreamingClientHandler,
     wrapServerStreamingClientHandler,
     wrapBiDiStreamingClientHandler,
     toStatusCode,
+    fromStatusCode,
     toStatusDetails,
+    fromStatusDetails,
     parseErrorToRCE,
   )
 where
@@ -43,18 +44,11 @@ import Network.GRPC.MQTT.Types
   )
 
 import Proto.Mqtt as Proto
-  ( MQTTResponse (..),
-    MetadataMap (MetadataMap),
+  ( MetadataMap (MetadataMap),
     MetadataMap_Entry (MetadataMap_Entry),
     RError (..),
     RemoteError (..),
     RemoteErrorExtra (..),
-    ResponseBody (ResponseBody),
-    WrappedResponse (WrappedResponse),
-    WrappedResponseOrError
-      ( WrappedResponseOrErrorError,
-        WrappedResponseOrErrorResponse
-      ),
   )
 
 import Control.Exception (ErrorCall, try)
@@ -71,11 +65,7 @@ import Network.GRPC.HighLevel.Client
   ( ClientError (..),
     ClientRequest (ClientBiDiRequest, ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
     ClientResult
-      ( ClientBiDiResponse,
-        ClientErrorResponse,
-        ClientNormalResponse,
-        ClientReaderResponse,
-        ClientWriterResponse
+      ( ClientErrorResponse
       ),
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
@@ -131,46 +121,6 @@ wrapBiDiStreamingClientHandler ::
 wrapBiDiStreamingClientHandler useBatchedStream handler =
   ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
     handler (ClientBiDiRequest timeout metadata bidi)
-
--- Responses
-wrapResponse :: ClientResult s ByteString -> WrappedResponse
-wrapResponse res =
-  WrappedResponse . Just $
-    case res of
-      ClientNormalResponse rspBody initMD trailMD rspCode details ->
-        WrappedResponseOrErrorResponse $
-          MQTTResponse
-            (Just $ ResponseBody rspBody)
-            (Just $ fromMetadataMap initMD)
-            (Just $ fromMetadataMap trailMD)
-            (fromStatusCode rspCode)
-            (fromStatusDetails details)
-      ClientWriterResponse rspBody initMD trailMD rspCode details ->
-        WrappedResponseOrErrorResponse $
-          MQTTResponse
-            (ResponseBody <$> rspBody)
-            (Just $ fromMetadataMap initMD)
-            (Just $ fromMetadataMap trailMD)
-            (fromStatusCode rspCode)
-            (fromStatusDetails details)
-      ClientReaderResponse rspMetadata statusCode details ->
-        WrappedResponseOrErrorResponse $
-          MQTTResponse
-            Nothing
-            Nothing
-            (Just $ fromMetadataMap rspMetadata)
-            (fromStatusCode statusCode)
-            (fromStatusDetails details)
-      ClientBiDiResponse rspMetadata statusCode details ->
-        WrappedResponseOrErrorResponse $
-          MQTTResponse
-            Nothing
-            Nothing
-            (Just $ fromMetadataMap rspMetadata)
-            (fromStatusCode statusCode)
-            (fromStatusDetails details)
-      ClientErrorResponse err ->
-        WrappedResponseOrErrorError $ toRemoteError err
 
 -- Utilities
 remoteError :: LText -> RemoteError

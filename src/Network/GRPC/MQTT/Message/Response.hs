@@ -9,6 +9,13 @@ module Network.GRPC.MQTT.Message.Response
     unwrapClientStreamResponse,
     unwrapServerStreamResponse,
     unwrapBiDiStreamResponse,
+
+    -- * Response Handlers
+    makeResponseSender,
+    makeNormalResponseReader,
+    makeClientResponseReader,
+    makeServerResponseReader,
+    makeBiDiResponseReader,
   )
 where
 
@@ -27,12 +34,16 @@ import Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client
   ( ClientResult
       ( ClientBiDiResponse,
+        ClientErrorResponse,
         ClientNormalResponse,
         ClientReaderResponse,
         ClientWriterResponse
       ),
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
+
+import Network.MQTT.Client (MQTTClient)
+import Network.MQTT.Topic (Topic)
 
 import Proto3.Suite (fromByteString)
 import Proto3.Suite.Class (Message)
@@ -41,9 +52,10 @@ import Relude
 
 --------------------------------------------------------------------------------
 
+import Network.GRPC.MQTT.Message qualified as Message
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
 
-import Network.GRPC.MQTT.Serial (WireDecodeOptions)
+import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 
 import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError))
 
@@ -52,7 +64,7 @@ import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 import Proto.Mqtt
   ( MQTTResponse (..),
     RemoteError,
-    ResponseBody (responseBodyValue),
+    ResponseBody (ResponseBody, responseBodyValue),
     WrappedResponse (WrappedResponse),
     WrappedResponseOrError
       ( WrappedResponseOrErrorError,
@@ -61,6 +73,55 @@ import Proto.Mqtt
   )
 
 -- Response - Wire Encoding ----------------------------------------------------
+
+wireEncodeResponse ::
+  Message a =>
+  WireEncodeOptions ->
+  ClientResult s a ->
+  ByteString
+wireEncodeResponse options result =
+  let response :: WrappedResponse
+      response = wrapResponse (Message.toWireEncoded options <$> result)
+   in Message.toWireEncoded options response
+
+wrapResponse :: ClientResult s ByteString -> WrappedResponse
+wrapResponse res =
+  WrappedResponse . Just $
+    case res of
+      ClientNormalResponse rspBody initMD trailMD rspCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (Just $ ResponseBody rspBody)
+            (Just $ Wrapping.fromMetadataMap initMD)
+            (Just $ Wrapping.fromMetadataMap trailMD)
+            (Wrapping.fromStatusCode rspCode)
+            (Wrapping.fromStatusDetails details)
+      ClientWriterResponse rspBody initMD trailMD rspCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            (ResponseBody <$> rspBody)
+            (Just $ Wrapping.fromMetadataMap initMD)
+            (Just $ Wrapping.fromMetadataMap trailMD)
+            (Wrapping.fromStatusCode rspCode)
+            (Wrapping.fromStatusDetails details)
+      ClientReaderResponse rspMetadata statusCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
+            (Just $ Wrapping.fromMetadataMap rspMetadata)
+            (Wrapping.fromStatusCode statusCode)
+            (Wrapping.fromStatusDetails details)
+      ClientBiDiResponse rspMetadata statusCode details ->
+        WrappedResponseOrErrorResponse $
+          MQTTResponse
+            Nothing
+            Nothing
+            (Just $ Wrapping.fromMetadataMap rspMetadata)
+            (Wrapping.fromStatusCode statusCode)
+            (Wrapping.fromStatusDetails details)
+      ClientErrorResponse err ->
+        WrappedResponseOrErrorError $ Wrapping.toRemoteError err
 
 -- Response - Wire Decoding ----------------------------------------------------
 
@@ -100,21 +161,24 @@ unwrapResponse bytes = do
 
 decodeResponse ::
   (MonadError RemoteError m, Message a) =>
+  WireDecodeOptions ->
   ByteString ->
   m (ParsedMQTTResponse a)
-decodeResponse bytes = do
+decodeResponse options bytes = do
   response <- unwrapResponse bytes
   for response \body -> do
-    case fromByteString body of
-      Left err -> throwError (Wrapping.parseErrorToRCE err)
+    case Message.fromWireEncoded options body of
+      Left err -> throwError (Message.toRemoteError err)
       Right rx -> pure rx
 
 unwrapUnaryResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
+  WireDecodeOptions ->
   ByteString ->
   m (MQTTResult 'Normal rsp)
-unwrapUnaryResponse = fmap toNormalResult . decodeResponse
+unwrapUnaryResponse options =
+  fmap toNormalResult . decodeResponse options
   where
     toNormalResult :: ParsedMQTTResponse rsp -> MQTTResult 'Normal rsp
     toNormalResult ParsedMQTTResponse{..} =
@@ -125,9 +189,11 @@ unwrapUnaryResponse = fmap toNormalResult . decodeResponse
 unwrapClientStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
+  WireDecodeOptions ->
   ByteString ->
   m (MQTTResult 'ClientStreaming rsp)
-unwrapClientStreamResponse = fmap toClientStreamResult . decodeResponse
+unwrapClientStreamResponse options =
+  fmap toClientStreamResult . decodeResponse options
   where
     toClientStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ClientStreaming rsp
     toClientStreamResult ParsedMQTTResponse{..} =
@@ -136,9 +202,11 @@ unwrapClientStreamResponse = fmap toClientStreamResult . decodeResponse
 unwrapServerStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
+  WireDecodeOptions ->
   ByteString ->
   m (MQTTResult 'ServerStreaming rsp)
-unwrapServerStreamResponse = fmap toServerStreamResult . decodeResponse
+unwrapServerStreamResponse options =
+  fmap toServerStreamResult . decodeResponse options
   where
     toServerStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ServerStreaming rsp
     toServerStreamResult ParsedMQTTResponse{..} =
@@ -147,10 +215,67 @@ unwrapServerStreamResponse = fmap toServerStreamResult . decodeResponse
 unwrapBiDiStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
+  WireDecodeOptions ->
   ByteString ->
   m (MQTTResult 'BiDiStreaming rsp)
-unwrapBiDiStreamResponse = fmap toBiDiStreamResult . decodeResponse
+unwrapBiDiStreamResponse options =
+  fmap toBiDiStreamResult . decodeResponse options
   where
     toBiDiStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'BiDiStreaming rsp
     toBiDiStreamResult ParsedMQTTResponse{..} =
       GRPCResult $ ClientBiDiResponse trailMetadata statusCode statusDetails
+
+-- Response Handlers -----------------------------------------------------------
+
+makeResponseSender ::
+  (MonadIO m, Message a) =>
+  MQTTClient ->
+  Topic ->
+  Int ->
+  WireEncodeOptions ->
+  ClientResult s a ->
+  m ()
+makeResponseSender client topic limit options response = do
+  let message :: ByteString
+      message = wireEncodeResponse options response
+   in Packet.makePacketSender client topic limit options message
+
+makeNormalResponseReader ::
+  (MonadIO m, MonadError RemoteError m, Message a) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  m (MQTTResult 'Normal a)
+makeNormalResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (Wrapping.parseErrorToRCE err)
+    Right bs -> unwrapUnaryResponse options bs
+
+makeClientResponseReader ::
+  (MonadIO m, MonadError RemoteError m, Message a) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  m (MQTTResult 'ClientStreaming a)
+makeClientResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (Wrapping.parseErrorToRCE err)
+    Right bs -> unwrapClientStreamResponse options bs
+
+makeServerResponseReader ::
+  (MonadIO m, MonadError RemoteError m, Message a) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  m (MQTTResult 'ServerStreaming a)
+makeServerResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (Wrapping.parseErrorToRCE err)
+    Right bs -> unwrapServerStreamResponse options bs
+
+makeBiDiResponseReader ::
+  (MonadIO m, MonadError RemoteError m, Message a) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  m (MQTTResult 'BiDiStreaming a)
+makeBiDiResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (Wrapping.parseErrorToRCE err)
+    Right bs -> unwrapBiDiStreamResponse options bs

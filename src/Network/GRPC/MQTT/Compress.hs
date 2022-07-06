@@ -7,7 +7,7 @@ module Network.GRPC.MQTT.Compress
     compress,
 
     -- * Zstandard Errors
-    ZstdError (GenericError, StreamError),
+    ZstdError (ZstdError, getZstdError),
     toRemoteError,
 
     -- * Decompression
@@ -30,7 +30,6 @@ import Proto3.Suite qualified as Proto3
 
 import Relude
 
-import Text.Show (ShowS)
 import Text.Show qualified as Show
 
 --------------------------------------------------------------------------------
@@ -54,25 +53,16 @@ compress level bytes
 -- Decompression ---------------------------------------------------------------
 
 -- | 'ZstdError' represent the errors that can be produced during decompression.
+-- It is a generic zstandard error string emitted from the zstandard FFI.
 --
 -- @since 0.1.0.0
-data ZstdError
-  = -- | 'GenericError' is a generic zstandard error message emitted from the
-    -- zstandard FFI.
-    GenericError String
-  | -- | 'StreamError' is emitted when attempting to decompress a 'ByteString'
-    -- compressed in streaming mode as a single zstandard frame.
-    StreamError
+newtype ZstdError = ZstdError {getZstdError :: String}
   deriving stock (Data, Eq, Ord, Show, Typeable)
 
 -- | @since 0.1.0.0
 instance Exception ZstdError where
-  displayException err = case err of
-    GenericError msg -> showErrorS msg
-    StreamError -> showErrorS "input was decompressed in streaming mode."
-    where
-      showErrorS :: ShowS
-      showErrorS = Show.showString "zstd decompression error: "
+  displayException (ZstdError err) =
+    Show.showString "zstd decompression error: " err
 
 -- | Convert a 'ZstdError' to a 'RemoteError'.
 --
@@ -102,6 +92,6 @@ decompress bytes
   | ByteString.null bytes = pure bytes
   | otherwise =
     case Zstd.decompress bytes of
-      Zstd.Skip -> throwError StreamError
-      Zstd.Error err -> throwError (GenericError err)
+      Zstd.Skip -> pure bytes
+      Zstd.Error err -> throwError (ZstdError err)
       Zstd.Decompress bytes' -> pure bytes'

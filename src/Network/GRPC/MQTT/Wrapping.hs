@@ -32,6 +32,8 @@ where
 
 import Control.Monad.Except (MonadError, throwError)
 
+import Data.Traversable (for)
+
 import Relude
 
 import Network.GRPC.MQTT.Types
@@ -181,24 +183,19 @@ data ParsedMQTTResponse response = ParsedMQTTResponse
   , statusCode :: StatusCode
   , statusDetails :: StatusDetails
   }
+  deriving stock (Functor, Foldable, Traversable)
 
 unwrapResponse ::
-  (MonadError RemoteError m, Message rsp) =>
-  LByteString ->
-  m (ParsedMQTTResponse rsp)
-unwrapResponse wrappedMessage = do
+  MonadError RemoteError m =>
+  ByteString ->
+  m (ParsedMQTTResponse ByteString)
+unwrapResponse bytes = do
   MQTTResponse{..} <-
-    case fromLazyByteString @WrappedResponse wrappedMessage of
-      Left err -> throwError err
+    case fromByteString @WrappedResponse bytes of
+      Left err -> throwError (parseErrorToRCE err)
       Right (WrappedResponse Nothing) -> throwError (remoteError "Empty response")
       Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> throwError err
       Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> pure rsp
-
-  responseBody <-
-    case fromByteString . responseBodyValue <$> mqttresponseBody of
-      Just (Left err) -> throwError (parseErrorToRCE err)
-      Nothing -> pure Nothing
-      Just (Right r) -> pure (Just r)
 
   let initMetadata = maybe mempty toMetadataMap mqttresponseInitMetamap
   let trailMetadata = maybe mempty toMetadataMap mqttresponseTrailMetamap
@@ -212,18 +209,29 @@ unwrapResponse wrappedMessage = do
 
   return $
     ParsedMQTTResponse
-      responseBody
+      (responseBodyValue <$> mqttresponseBody)
       initMetadata
       trailMetadata
       statusCode
       statusDetails
 
+decodeResponse ::
+  (MonadError RemoteError m, Message a) =>
+  ByteString ->
+  m (ParsedMQTTResponse a)
+decodeResponse bytes = do
+  response <- unwrapResponse bytes
+  for response \body -> do
+    case fromByteString body of
+      Left err -> throwError (parseErrorToRCE err)
+      Right rx -> pure rx
+
 unwrapUnaryResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString ->
+  ByteString ->
   m (MQTTResult 'Normal rsp)
-unwrapUnaryResponse bytes = toNormalResult <$> unwrapResponse bytes
+unwrapUnaryResponse = fmap toNormalResult . decodeResponse
   where
     toNormalResult :: ParsedMQTTResponse rsp -> MQTTResult 'Normal rsp
     toNormalResult ParsedMQTTResponse{..} =
@@ -234,9 +242,9 @@ unwrapUnaryResponse bytes = toNormalResult <$> unwrapResponse bytes
 unwrapClientStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString ->
+  ByteString ->
   m (MQTTResult 'ClientStreaming rsp)
-unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapResponse wrappedMessage
+unwrapClientStreamResponse = fmap toClientStreamResult . decodeResponse
   where
     toClientStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ClientStreaming rsp
     toClientStreamResult ParsedMQTTResponse{..} =
@@ -245,9 +253,9 @@ unwrapClientStreamResponse wrappedMessage = toClientStreamResult <$> unwrapRespo
 unwrapServerStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString ->
+  ByteString ->
   m (MQTTResult 'ServerStreaming rsp)
-unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapResponse wrappedMessage
+unwrapServerStreamResponse = fmap toServerStreamResult . decodeResponse
   where
     toServerStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'ServerStreaming rsp
     toServerStreamResult ParsedMQTTResponse{..} =
@@ -256,9 +264,9 @@ unwrapServerStreamResponse wrappedMessage = toServerStreamResult <$> unwrapRespo
 unwrapBiDiStreamResponse ::
   forall m rsp.
   (MonadError RemoteError m, Message rsp) =>
-  LByteString ->
+  ByteString ->
   m (MQTTResult 'BiDiStreaming rsp)
-unwrapBiDiStreamResponse wrappedMessage = toBiDiStreamResult <$> unwrapResponse wrappedMessage
+unwrapBiDiStreamResponse = fmap toBiDiStreamResult . decodeResponse
   where
     toBiDiStreamResult :: ParsedMQTTResponse rsp -> MQTTResult 'BiDiStreaming rsp
     toBiDiStreamResult ParsedMQTTResponse{..} =

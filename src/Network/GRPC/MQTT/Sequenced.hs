@@ -17,11 +17,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Monad.Except (throwError)
-
 import Data.ByteString.Lazy qualified as LByteString
-import Data.Sequence ((|>))
-import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
@@ -32,7 +28,7 @@ import Network.MQTT.Topic (Topic)
 
 import Proto3.Suite (Message, toLazyByteString)
 
-import Relude
+import Relude hiding (reader)
 
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async qualified as Async
@@ -41,51 +37,52 @@ import UnliftIO.Async qualified as Async
 
 import Network.GRPC.MQTT.Message.Packet (Packet)
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
+import Network.GRPC.MQTT.Message.StreamChunk qualified as StreamChunk
 import Network.GRPC.MQTT.Option.Batched (Batched (Batched))
-import Network.GRPC.MQTT.Wrapping
-  ( unwrapStreamChunk,
-    wrapStreamChunk,
-  )
+
+-- import Network.GRPC.MQTT.Wrapping
+--   ( unwrapStreamChunk,
+--     wrapStreamChunk,
+--   )
 
 import Proto.Mqtt (RemoteError)
 
 --------------------------------------------------------------------------------
 
 mkStreamRead ::
-  forall io a.
-  (MonadIO io, Message a) =>
-  ExceptT RemoteError IO LByteString ->
-  io (ExceptT RemoteError IO (Maybe a))
-mkStreamRead readRequest = do
-  -- NOTE: The type signature should be left here to bind the message type
-  -- @a@, otherwise it is easy for the @Message@ instance used by the
-  -- @fromByteString@ in @unwrapStreamChunk@ to resolve to some other type,
-  -- resulting in a parse error.
-
-  reqsRef :: IORef (Maybe (Vector a)) <- newIORef (Just Vector.empty)
-
-  let readNextChunk :: ExceptT RemoteError IO ()
+  MonadIO io =>
+  ExceptT RemoteError IO ByteString ->
+  io (ExceptT RemoteError IO (Maybe ByteString))
+mkStreamRead reader = do
+  buffer <- newIORef (Vector.empty @ByteString)
+  let readNextChunk :: ExceptT RemoteError IO (Maybe ByteString)
       readNextChunk = do
-        bytes <- readRequest
-        case unwrapStreamChunk bytes of
-          Left err -> do
-            atomicWriteIORef reqsRef Nothing
-            throwError err
-          Right xs -> do
-            atomicWriteIORef reqsRef xs
+        result <- StreamChunk.wireUnwrapStreamChunk =<< reader
+        case result of
+          Nothing ->
+            -- Read the terminal stream chunk 'Nothing': yield 'Nothing'
+            -- terminating the streaming loop.
+            pure Nothing
+          Just chunks -> do
+            -- Read a collection of stream chunks: buffer each chunk in the
+            -- order they were recieved.
+            atomicWriteIORef buffer chunks
+            makeChunkBuffer
 
-  let readStreamChunk :: ExceptT RemoteError IO (Maybe a)
-      readStreamChunk =
-        readIORef reqsRef >>= \case
-          Nothing -> pure Nothing
-          Just reqs ->
-            if Vector.null reqs
-              then readNextChunk >> readStreamChunk
-              else liftIO do
-                atomicWriteIORef reqsRef (Just $ Vector.tail reqs)
-                return (Just $ Vector.head reqs)
-
-  return readStreamChunk
+      makeChunkBuffer :: ExceptT RemoteError IO (Maybe ByteString)
+      makeChunkBuffer = do
+        chunks <- readIORef buffer
+        case Vector.uncons chunks of
+          Nothing ->
+            -- The stream chunk buffer is empty, attempt to read the next set
+            -- of stream chunk(s).
+            readNextChunk
+          Just (cx, cxs) -> do
+            -- Pop the first stream chunk off the @buffer@ and return it.
+            -- Replace the remaining chunks back into the @buffer@.
+            atomicWriteIORef buffer cxs
+            pure (Just cx)
+   in pure readNextChunk
 
 mkPacketizedPublish ::
   MonadUnliftIO io =>
@@ -118,10 +115,11 @@ mkStreamPublish ::
   (forall t. Message t => t -> IO ()) ->
   io (PublishToStream r)
 mkStreamPublish msgLimit useBatch publish = do
-  chunksRef <- newIORef ((Seq.empty, 0) :: (Seq ByteString, Int64))
+  -- NOTE: Ensure the quantified @t@ or message @r@ are not 'ByteString'.
+  -- Otherwise, it is possible for stream chunks to be encoded twice which would
+  -- produce a WireTypeError when parsing.
 
-  let seqToVector :: Seq t -> Vector t
-      seqToVector = Vector.fromList . toList
+  chunksRef <- newIORef ((Vector.empty, 0) :: (Vector ByteString, Int64))
 
   let accumulatedSend :: r -> IO ()
       accumulatedSend a = do
@@ -130,23 +128,26 @@ mkStreamPublish msgLimit useBatch publish = do
             sz = LByteString.length chunk
         if accSize + sz > msgLimit
           then do
-            unless (Seq.null accChunks) $
-              publish $ wrapStreamChunk $ Just $ seqToVector accChunks
-            atomicWriteIORef chunksRef (Seq.singleton (toStrict chunk), sz)
+            unless (Vector.null accChunks) $
+              publish $ StreamChunk.wireWrapStreamChunk $ Just $ accChunks
+            atomicWriteIORef chunksRef (Vector.singleton (toStrict chunk), sz)
           else do
-            atomicWriteIORef chunksRef (accChunks |> toStrict chunk, accSize + sz)
+            atomicWriteIORef chunksRef (Vector.snoc accChunks (toStrict chunk), accSize + sz)
 
   let unaccumulatedSend :: r -> IO ()
-      unaccumulatedSend = publish . wrapStreamChunk . Just . Vector.singleton . toBS
+      unaccumulatedSend message = do
+        let chunk :: Maybe (Vector ByteString)
+            chunk = Just (Vector.singleton (toBS message))
+         in publish (StreamChunk.wireWrapStreamChunk chunk)
 
   let streamingDone :: IO ()
       streamingDone = do
         (accChunks, _) <- readIORef chunksRef
-        unless (Seq.null accChunks) $
-          publish $ wrapStreamChunk $ Just $ seqToVector accChunks
+        unless (Vector.null accChunks) $
+          publish $ StreamChunk.wireWrapStreamChunk $ Just $ accChunks
         -- Send end of stream indicator
-        publish $ wrapStreamChunk Nothing
-        atomicWriteIORef chunksRef (Seq.empty, 0)
+        publish $ StreamChunk.wireWrapStreamChunk Nothing
+        atomicWriteIORef chunksRef (Vector.empty, 0)
 
   return $
     PublishToStream

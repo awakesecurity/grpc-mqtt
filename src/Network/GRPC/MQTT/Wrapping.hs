@@ -15,8 +15,6 @@ module Network.GRPC.MQTT.Wrapping
     toGRPCIOError,
     toMetadataMap,
     fromMetadataMap,
-    -- wrapStreamChunk,
-    -- unwrapStreamChunk,
     wrapResponse,
     unwrapUnaryResponse,
     unwrapClientStreamResponse,
@@ -59,17 +57,10 @@ import Proto.Mqtt as Proto
       ( WrappedResponseOrErrorError,
         WrappedResponseOrErrorResponse
       ),
-    WrappedStreamChunk (WrappedStreamChunk),
-    WrappedStreamChunkOrError
-      ( WrappedStreamChunkOrErrorElems,
-        WrappedStreamChunkOrErrorError
-      ),
-    WrappedStreamChunk_Elems (WrappedStreamChunk_Elems),
   )
 
 import Control.Exception (ErrorCall, try)
 import Data.Map qualified as M
-import Data.Vector (Vector)
 import Data.Vector qualified as V
 import GHC.IO.Unsafe (unsafePerformIO)
 import Network.GRPC.HighLevel as HL
@@ -197,7 +188,7 @@ unwrapResponse ::
   m (ParsedMQTTResponse rsp)
 unwrapResponse wrappedMessage = do
   MQTTResponse{..} <-
-    case fromLazyByteString wrappedMessage of
+    case fromLazyByteString @WrappedResponse wrappedMessage of
       Left err -> throwError err
       Right (WrappedResponse Nothing) -> throwError (remoteError "Empty response")
       Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> throwError err
@@ -232,7 +223,7 @@ unwrapUnaryResponse ::
   (MonadError RemoteError m, Message rsp) =>
   LByteString ->
   m (MQTTResult 'Normal rsp)
-unwrapUnaryResponse wrappedMessage = toNormalResult <$> unwrapResponse wrappedMessage
+unwrapUnaryResponse bytes = toNormalResult <$> unwrapResponse bytes
   where
     toNormalResult :: ParsedMQTTResponse rsp -> MQTTResult 'Normal rsp
     toNormalResult ParsedMQTTResponse{..} =
@@ -282,14 +273,18 @@ remoteError errMsg =
     , remoteErrorExtra = Nothing
     }
 
-parseMessageOrError :: (Message a) => LByteString -> Either RemoteError a
+parseMessageOrError ::
+  forall m a.
+  (MonadError RemoteError m, Message a) =>
+  LByteString ->
+  m a
 parseMessageOrError msg =
-  case fromLazyByteString msg of
-    Right a -> Right a
+  case fromLazyByteString @a msg of
+    Right a -> pure a
     Left err ->
-      case fromLazyByteString msg of
-        Left _ -> Left err
-        Right recvErr -> Left recvErr
+      case fromLazyByteString @RemoteError msg of
+        Left _ -> throwError err
+        Right recvErr -> throwError recvErr
 
 fromLazyByteString :: Message a => LByteString -> Either RemoteError a
 fromLazyByteString msg =

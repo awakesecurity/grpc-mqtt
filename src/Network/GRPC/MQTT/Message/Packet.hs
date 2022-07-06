@@ -24,8 +24,9 @@ module Network.GRPC.MQTT.Message.Packet
     wireUnwrapPacket,
     wireParsePacket,
 
-    -- ** TODO
+    -- * Packet Handlers
     makePacketReader,
+    makePacketSender,
 
     -- * PacketInfo
     PacketInfo (PacketInfo, position, npackets),
@@ -46,7 +47,7 @@ where
 
 import Control.Concurrent.STM.TChan (TChan, readTChan)
 
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError, liftEither, throwError)
 
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
@@ -61,6 +62,9 @@ import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
 
+import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
+import Network.MQTT.Topic (Topic)
+
 import Relude
 
 ---------------------------------------------------------------------------------
@@ -74,6 +78,7 @@ import Network.GRPC.MQTT.Message.Packet.Core
   )
 import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
 
+import Control.Concurrent.Async (forConcurrently_)
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Types.Extra (RecordField)
 
@@ -174,20 +179,36 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
           recField = $(reifyRecordField ''Packet 'metadata)
        in Decode.msgOneField recField decodeMessageField
 
--- Packet - Network -------------------------------------------------------------
+-- Packet - Packet Handlers ----------------------------------------------------
 
 -- | TODO
 --
 -- @since 0.1.0.0
-makePacketReader :: TChan LByteString -> IO (Either ParseError LByteString)
-makePacketReader channel = runPacketReader loop channel
+makePacketReader ::
+  (MonadIO m, MonadError ParseError m) =>
+  TChan LByteString ->
+  m ByteString
+makePacketReader channel = do
+  liftEither =<< liftIO (runPacketReader accumulate channel)
   where
-    loop :: PacketReader LByteString
-    loop = do
-      missing <- isMissingPackets
-      if missing
-        then readNextPacket >> loop
-        else asks packets >>= liftIO . atomically . mergePacketSet
+    accumulate :: PacketReader ByteString
+    accumulate = do
+      fix \loop -> do
+        missing <- isMissingPackets
+        when missing (readNextPacket >> loop)
+
+      packets <- asks packets
+      bytes <- atomically (mergePacketSet packets)
+      pure (toStrict bytes)
+
+makePacketSender :: MonadIO m => MQTTClient -> Int -> Topic -> ByteString -> m ()
+makePacketSender client limit topic bytes =
+  let packets :: Vector (Packet ByteString)
+      packets = splitPackets limit bytes
+   in liftIO $ forConcurrently_ packets \packet -> do
+        let encoded :: LByteString
+            encoded = wireWrapPacket packet
+         in liftIO (publishq client topic encoded False QoS1 [])
 
 -- PacketInfo - Query -----------------------------------------------------------
 

@@ -15,7 +15,9 @@ import Proto3.Suite.DotProto.Internal (prefixedMethodName)
 
 #else
 
-import Proto3.Suite.DotProto.Internal (prefixedFieldName)
+import Control.Monad.Except (MonadError)
+import Proto3.Suite.DotProto.Internal (CompileError, prefixedFieldName)
+import Relude (String)
 
 prefixedMethodName :: MonadError CompileError m => String -> String -> m String
 prefixedMethodName = prefixedFieldName

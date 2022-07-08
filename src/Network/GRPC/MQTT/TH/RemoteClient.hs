@@ -43,8 +43,8 @@ import Turtle (FilePath)
 mqttRemoteClientMethodMap :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttRemoteClientMethodMap fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
-    clientFuncName <- mkName <$> prefixedMethodName serviceName "remoteClientMethodMap"
-    grpcClientName <- mkName <$> prefixedMethodName serviceName "client"
+    clientFuncName <- mkName <$> prefixedMethodName serviceName "RemoteClientMethodMap"
+    grpcClientName <- mkName <$> prefixedMethodName serviceName "Client"
     lift $ rcMethodMap clientFuncName grpcClientName serviceMethods
 
 rcMethodMap :: Name -> Name -> [(String, Batched, ExpQ, Name)] -> DecsQ

@@ -48,7 +48,7 @@ import Turtle (FilePath)
 mqttClientFuncs :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttClientFuncs fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
-    clientFuncName <- mkName <$> prefixedMethodName serviceName "mqttClient"
+    clientFuncName <- mkName <$> prefixedMethodName serviceName "MqttClient"
     lift $ clientService clientFuncName (mkName serviceName) [(a, batched) | (a, batched, _, _) <- serviceMethods]
 
 clientService :: Name -> Name -> [(String, Batched)] -> DecsQ

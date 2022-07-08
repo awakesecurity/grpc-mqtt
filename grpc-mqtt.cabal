@@ -95,6 +95,7 @@ library
     Network.GRPC.MQTT.Message.Packet.Core
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
+    Proto3.Suite.DotProto.Internal.Compat
     Proto3.Wire.Decode.Extra
     Proto3.Wire.Encode.Extra
     Proto3.Wire.Types.Extra

@@ -12,6 +12,9 @@ module Test.Network.GRPC.MQTT.Message.Gen
     shufflePackets,
     packetSplitLength,
     packetBytes,
+
+    -- * Stream Chunk Generators
+    streamChunk,
   )
 where
 
@@ -122,7 +125,16 @@ packetBytes =
     -- @num@ the maximum number of packets.
     lim <- Gen.int (Range.constant 0 (fromIntegral size))
     num <- Gen.int (Range.constant 0 (fromIntegral size))
-
     let range :: Range Int
         range = Range.constant 0 (lim * num)
      in Gen.bytes range
+
+-- Stream Chunk Generators -----------------------------------------------------
+
+streamChunk :: MonadGen m => m (Maybe (Vector ByteString))
+streamChunk = Gen.maybe do
+  chunks <- Gen.sized \size ->
+    let range :: Range Int
+        range = Range.constant 0 (fromIntegral size)
+     in Gen.list range packetBytes
+  pure (Vector.fromList chunks)

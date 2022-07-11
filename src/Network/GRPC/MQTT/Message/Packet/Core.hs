@@ -23,9 +23,13 @@ import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
 
 import Proto3.Suite.Class
-  ( MessageField,
+  ( Message,
+    MessageField,
     Named,
+    decodeMessage,
     decodeMessageField,
+    dotProto,
+    encodeMessage,
     encodeMessageField,
     nameOf,
     protoType,
@@ -100,6 +104,17 @@ instance MessageField PacketInfo where
 
   protoType _ = Proto3.DotProtoEmptyField
   {-# INLINE protoType #-}
+
+-- | @since 0.1.0.0
+instance Message PacketInfo where
+  encodeMessage = encodeMessageField
+
+  decodeMessage = Decode.at decodeMessageField
+
+  dotProto _ =
+    [ Proto3.DotProtoField 1 (Proto3.Prim Proto3.Int32) (Proto3.Single "position") [] ""
+    , Proto3.DotProtoField 2 (Proto3.Prim Proto3.Int32) (Proto3.Single "npackets") [] ""
+    ]
 
 ---------------------------------------------------------------------------------
 

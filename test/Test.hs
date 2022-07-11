@@ -30,9 +30,7 @@ import Relude hiding (Option)
 import Test.Suite.Config (TestOption)
 
 import Test.Network.GRPC.HighLevel.Extra qualified
-import Test.Network.GRPC.MQTT.Compress qualified
-import Test.Network.GRPC.MQTT.Message qualified
-import Test.Network.GRPC.MQTT.Option qualified
+import Test.Network.GRPC.MQTT qualified
 import Test.Service qualified
 
 ---------------------------------------------------------------------------------
@@ -48,9 +46,7 @@ testTree =
   testGroup
     "Tests: grpc-mqtt"
     [ Test.Network.GRPC.HighLevel.Extra.tests
-    , Test.Network.GRPC.MQTT.Compress.tests
-    , Test.Network.GRPC.MQTT.Message.tests
-    , Test.Network.GRPC.MQTT.Option.tests
+    , Test.Network.GRPC.MQTT.tests
     , Test.Service.tests
     ]
 

@@ -87,8 +87,8 @@ import Control.Exception (ErrorCall (ErrorCallWithLocation), throwIO)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Data (Data, cast, eqT, gmapQ)
-import Data.Traversable (for)
 import Data.Foldable (foldrM)
+import Data.Traversable (for)
 import Data.Type.Equality ((:~:) (Refl))
 
 import Data.List.NonEmpty qualified as NonEmpty
@@ -138,11 +138,11 @@ import Proto3.Suite.Orphans ()
 openProtoFileIO :: Turtle.FilePath -> IO DotProto
 openProtoFileIO filepath = do
   -- Test that the path @filepath@ exists.
-  unlessM (Turtle.testpath filepath) do 
+  unlessM (Turtle.testpath filepath) do
     throwProtoDoesNotExistIO filepath
 
   -- Test that @filepath@ points to a file, not a directory.
-  unlessM (Turtle.testfile filepath) do 
+  unlessM (Turtle.testfile filepath) do
     throwProtoPathIsDirectoryIO filepath
 
   -- Test that path @filepath@ has a *.proto extension.
@@ -225,14 +225,14 @@ data ProtoIOErrorTag
   = ProtoInvalidExtension
   | ProtoFileDoesNotExist
   | ProtoPathIsDirectory
-  deriving stock (Enum, Eq, Ord)
+  deriving stock (Enum, Eq, Ord, Show)
 
 -- | @since 0.1.0.0
-instance Show ProtoIOErrorTag where
-  show ProtoInvalidExtension = "filepath must have a *.proto extension"
-  show ProtoFileDoesNotExist = "proto filepath not found (does not exist)"
-  show ProtoPathIsDirectory = "filepath refers to a directory (expected a file)"
-  {-# INLINE show #-}
+instance Exception ProtoIOErrorTag where
+  displayException ProtoInvalidExtension = "filepath must have a *.proto extension"
+  displayException ProtoFileDoesNotExist = "proto filepath not found (does not exist)"
+  displayException ProtoPathIsDirectory = "filepath refers to a directory (expected a file)"
+  {-# INLINE displayException #-}
 
 -- Proto Data Casts ------------------------------------------------------------
 
@@ -303,7 +303,7 @@ data DatumRep
   | -- | An identifier representation corresponds to the name of an .proto
     -- enum value or a .proto message value.
     DRepIdent
-  deriving (Data, Enum, Eq, Ord, Show)
+  deriving stock (Data, Enum, Eq, Ord, Show)
 
 -- Data - ProtoDatum ------------------------------------------------------------
 
@@ -354,7 +354,7 @@ instance ProtoDatum String where
 instance ProtoDatum ByteString where
   datumRep = DRepString
 
-  castDatum x = fmap fromString (castDatum x)
+  castDatum x = encodeUtf8 <$> castDatum @String x
 
 -- | @since 0.1.0.0
 instance ProtoDatum DotProtoIdentifier where
@@ -454,7 +454,7 @@ memberOption key (ProtoOptionSet kvs) = Map.member key kvs
 --
 -- @since 0.1.0.0
 data ProtoOptionError
-  = -- | 'ProtoOptionAlreadySet' errors are emitted when protobuf declarations 
+  = -- | 'ProtoOptionAlreadySet' errors are emitted when protobuf declarations
     -- when multiple values are set for the same option.
     --
     -- @

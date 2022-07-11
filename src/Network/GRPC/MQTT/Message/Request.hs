@@ -102,6 +102,9 @@ module Network.GRPC.MQTT.Message.Request
   ( -- * Requests
     Request (Request, message, options, timeout, metadata),
 
+    -- * Construction
+    fromMQTTRequest,
+
     -- * Wire Encoding
     -- $request-wire-encoding
     wireEncodeRequest,
@@ -114,16 +117,24 @@ module Network.GRPC.MQTT.Message.Request
     -- $request-wire-Decoding
     wireUnwrapRequest,
     wireParseRequest,
+
+    -- * Request Handlers
+    makeRequestReader,
+    makeRequestSender,
   )
 where
 
 ---------------------------------------------------------------------------------
 
+import Control.Concurrent.STM (TChan)
+
+import Control.Monad.Except (MonadError, liftEither)
+
 import Data.ByteString qualified as ByteString
 
 import Network.GRPC.HighLevel (MetadataMap)
 
-import Proto3.Suite (Message, toLazyByteString)
+import Proto3.Suite.Class (HasDefault (def), Message)
 
 import Proto3.Wire (FieldNumber)
 import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
@@ -133,25 +144,53 @@ import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
+import UnliftIO (MonadUnliftIO)
+
 ---------------------------------------------------------------------------------
 
 import Network.GRPC.HighLevel.Extra (decodeMetadataMap, encodeMetadataMap)
 
+import Network.GRPC.MQTT.Message (WireDecodeError)
+import Network.GRPC.MQTT.Message qualified as Message
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Network.GRPC.MQTT.Message.Request.Core
   ( Request (Request, message, metadata, options, timeout),
   )
 import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
+
 import Network.GRPC.MQTT.Option
   ( ProtoOptions,
     wireBuildProtoOptions,
     wireParseProtoOptions,
   )
 
+import Network.GRPC.MQTT.Serial (WireEncodeOptions)
+
+import Network.GRPC.MQTT.Types (MQTTRequest (..))
+
+import Network.GRPC.MQTT.Serial qualified as Serial
+
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Encode.Extra qualified as Encode
 import Proto3.Wire.Types.Extra (RecordField)
 
--- Wire Format - Encoding -------------------------------------------------------
+-- Construction ----------------------------------------------------------------
+
+-- | TODO
+--
+-- @since 0.1.0.0
+fromMQTTRequest ::
+  HasDefault rqt =>
+  ProtoOptions ->
+  MQTTRequest s rqt rsp ->
+  Request rqt
+fromMQTTRequest options = \case
+  MQTTNormalRequest x time meta -> Request x options time meta
+  MQTTWriterRequest time meta _ -> Request def options time meta
+  MQTTReaderRequest x time meta _ -> Request x options time meta
+  MQTTBiDiRequest time meta _ -> Request def options time meta
+
+-- Wire Format - Encoding ------------------------------------------------------
 
 -- $request-wire-encoding
 --
@@ -163,14 +202,20 @@ import Proto3.Wire.Types.Extra (RecordField)
 -- >>> wireEncodeRequest ~ wireWrapRequest . fmap toStrict toLazyByteString
 --
 -- @since 0.1.0.0
-wireEncodeRequest :: Message a => Request a -> LByteString
-wireEncodeRequest = wireWrapRequest . fmap (toStrict . toLazyByteString)
+wireEncodeRequest :: Message a => WireEncodeOptions -> Request a -> LByteString
+wireEncodeRequest options x =
+  let message :: Request ByteString
+      message = Message.toWireEncoded options <$> x
+   in wireWrapRequest message
 
 -- | Like 'wireEncodeRequest', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
-wireEncodeRequest' :: Message a => Request a -> ByteString
-wireEncodeRequest' = toStrict . wireEncodeRequest
+wireEncodeRequest' :: Message a => WireEncodeOptions -> Request a -> ByteString
+wireEncodeRequest' options x =
+  let message :: Request ByteString
+      message = Message.toWireEncoded options <$> x
+   in wireWrapRequest' message
 
 -- | Partially serializes a 'Request' carrying a wire encoded 'ByteString'.
 -- If possible, 'wireEncodeRequest' should be used instead.
@@ -180,13 +225,13 @@ wireEncodeRequest' = toStrict . wireEncodeRequest
 --
 -- @since 0.1.0.0
 wireWrapRequest :: Request ByteString -> LByteString
-wireWrapRequest = Encode.toLazyByteString . wireBuildRequest
+wireWrapRequest request = Encode.toLazyByteString (wireBuildRequest request)
 
 -- | Like 'wireWrapRequest', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
 wireWrapRequest' :: Request ByteString -> ByteString
-wireWrapRequest' = toStrict . wireWrapRequest
+wireWrapRequest' request = toStrict (wireWrapRequest request)
 
 -- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
 -- 'message' 'ByteString' __must__ be a valid wire binary.
@@ -234,8 +279,12 @@ wireBuildRequest rqt =
 -- format.
 --
 -- @since 0.1.0.0
-wireUnwrapRequest :: ByteString -> Either ParseError (Request ByteString)
-wireUnwrapRequest = Decode.parse wireParseRequest
+wireUnwrapRequest ::
+  MonadError ParseError m =>
+  ByteString ->
+  m (Request ByteString)
+wireUnwrapRequest bytes = do
+  liftEither (Decode.parse wireParseRequest bytes)
 
 -- | Parses a serialized 'Request' message.
 --
@@ -271,3 +320,27 @@ wireParseRequest = do
       let recField :: RecordField
           recField = $(reifyRecordField ''Request 'metadata)
        in Decode.msgOneField recField decodeMetadataMap
+
+-- Request - Request Handlers --------------------------------------------------
+
+makeRequestReader ::
+  (MonadIO m, MonadError WireDecodeError m) =>
+  TChan LByteString ->
+  m (Request ByteString)
+makeRequestReader channel = do
+  -- TODO: explain 'Serial.defaultDecodeOptions'
+  bytes <- Packet.makePacketReader channel Serial.defaultDecodeOptions
+  case wireUnwrapRequest bytes of
+    Left err -> Message.throwWireError err
+    Right rx -> pure rx
+
+makeRequestSender ::
+  MonadUnliftIO m =>
+  Int ->
+  (ByteString -> m ()) ->
+  (Request ByteString -> m ())
+makeRequestSender limit publish x =
+  -- TODO: explain 'Serial.defaultEncodeOptions'
+  let message :: ByteString
+      message = wireWrapRequest' x
+   in Packet.makePacketSender limit Serial.defaultEncodeOptions publish message

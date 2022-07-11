@@ -48,8 +48,6 @@ message AuxControlMessage {
   AuxControl value = 1;
 }
 
-
-
 enum RError {
   UnknownError = 0;
   NoParseWireType = 1;

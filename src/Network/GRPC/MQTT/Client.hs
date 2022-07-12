@@ -39,7 +39,7 @@ import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
 
-import Control.Monad.Except (liftEither, withExceptT)
+import Control.Monad.Except (throwError, withExceptT)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Crypto.Nonce qualified as Nonce
@@ -48,6 +48,7 @@ import Data.ByteString qualified as ByteString
 
 import Network.GRPC.HighLevel
   ( GRPCIOError (GRPCIOTimeout),
+    MetadataMap,
     MethodName (MethodName),
     StreamRecv,
     StreamSend,
@@ -58,7 +59,6 @@ import Network.GRPC.HighLevel.Client
     TimeoutSeconds,
     WritesDone,
   )
-import Network.GRPC.HighLevel.Generated qualified as HL
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (_msgCB),
     connectMQTT,
@@ -80,7 +80,7 @@ import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
 import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message)
 import Proto3.Suite qualified as Proto3
 
-import Relude
+import Relude hiding (reader)
 
 import System.Timeout qualified as System (timeout)
 
@@ -91,39 +91,37 @@ import Turtle (sleep)
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Message.Packet qualified as Packet
-import Network.GRPC.MQTT.Message.Request (Request (Request), wireWrapRequest)
-import Network.GRPC.MQTT.Option (ProtoOptions)
-import Network.GRPC.MQTT.Option qualified as Option
-import Network.GRPC.MQTT.Sequenced
-  ( PublishToStream (..),
-    mkPacketizedPublish,
-    mkStreamPublish,
-    mkStreamRead,
+import Network.GRPC.HighLevel.Extra (wireDecodeMetadataMap)
+
+import Network.GRPC.MQTT.Message qualified as Message
+import Network.GRPC.MQTT.Message.AuxControl
+  ( AuxControl (AuxControlAlive, AuxControlTerminate),
+    AuxControlMessage (AuxControlMessage),
   )
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
+import Network.GRPC.MQTT.Message.Request qualified as Request
+import Network.GRPC.MQTT.Message.Response qualified as Response
+import Network.GRPC.MQTT.Message.Stream qualified as Stream
+
+import Network.GRPC.MQTT.Option (ProtoOptions)
+
+import Network.GRPC.MQTT.Serial (WireDecodeOptions)
+import Network.GRPC.MQTT.Serial qualified as Serial
+
 import Network.GRPC.MQTT.Topic qualified as Topic
 import Network.GRPC.MQTT.Types
   ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
     MQTTResult (GRPCResult, MQTTError),
     requestTimeout,
   )
+
 import Network.GRPC.MQTT.Wrapping
   ( fromRemoteError,
     parseErrorToRCE,
-    parseMessageOrError,
     toGRPCIOError,
-    toMetadataMap,
-    unwrapBiDiStreamResponse,
-    unwrapClientStreamResponse,
-    unwrapServerStreamResponse,
-    unwrapUnaryResponse,
   )
 
-import Proto.Mqtt
-  ( AuxControl (AuxControlAlive, AuxControlTerminate),
-    AuxControlMessage (AuxControlMessage),
-    RemoteError,
-  )
+import Proto.Mqtt (RemoteError)
 
 ---------------------------------------------------------------------------------
 
@@ -167,106 +165,125 @@ mqttRequest ::
   ProtoOptions ->
   MQTTRequest streamtype request response ->
   IO (MQTTResult streamtype response)
-mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
+mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
   logDebug mqttLogger $ "Making gRPC request for method: " <> show nmMethod
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
+
+    -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
+    -- Message options
+    let encodeOptions = Serial.makeClientEncodeOptions options
+    let decodeOptions = Serial.makeClientDecodeOptions options
+    let timeout = requestTimeout request
+    let limit = fromIntegral msgSizeLimit
+
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
-    let publishToRequestTopic :: Message r => r -> IO ()
-        publishToRequestTopic = mkPacketizedPublish mqttClient msgSizeLimit requestTopic . Proto3.toLazyByteString
+    -- let publishToRequestTopic :: Message r => r -> IO ()
+    --     publishToRequestTopic message = do
+    --       let bytes = fromStrict (Message.toWireEncoded encodeOptions message)
+    --       mkPacketizedPublish mqttClient msgSizeLimit requestTopic bytes
 
-    PublishToStream{publishToStream, publishToStreamCompleted} <-
-      mkStreamPublish msgSizeLimit (Option.rpcBatchStream opts) publishToRequestTopic
+    (publishToStream, publishToStreamCompleted) <-
+      Stream.makeStreamBatchSender limit encodeOptions \message -> do
+        logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
+        publishq mqttClient requestTopic (fromStrict message) False QoS1 []
+
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
-        publishToRequestStream req = do
-          logDebug mqttLogger $ "Publishing stream chunk to topic: " <> unTopic requestTopic
-          publishToStream req
+        publishToRequestStream x =
           -- TODO: Fix this. Send errors won't be propagated to client's send handler
-          return $ Right ()
+          let message :: ByteString
+              message = Message.toWireEncoded encodeOptions x
+           in publishToStream message $> Right ()
 
     -- Subscribe to response topic
     subscribeOrThrow mqttClient [toFilter responseTopic]
 
     -- Process request
-    let timeout = requestTimeout request
-    timeoutGRPC timeout case request of
-      -- Unary Requests
-      MQTTNormalRequest req _ reqMetadata -> do
-        publishRequest requestTopic req timeout reqMetadata
-        withControlSignals (publishControl controlTopic) . exceptToResult $ do
-          rsp <- makePacketReader responseChan
-          liftEither $ unwrapUnaryResponse rsp
+    timeoutGRPC timeout do
+      Request.makeRequestSender
+        limit
+        (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
+        (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
-      -- Client Streaming Requests
-      MQTTWriterRequest _ initMetadata streamHandler -> do
-        publishRequest requestTopic Proto3.def timeout initMetadata
-        withControlSignals (publishControl controlTopic) . exceptToResult $ do
-          liftIO $ do
-            -- do client streaming
-            streamHandler publishToRequestStream
-            -- Send end of stream indicator
-            publishToStreamCompleted
+      withControlSignals (publishControl controlTopic) . exceptToResult $ do
+        case request of
+          -- Unary Requests
+          MQTTNormalRequest _ _ _ ->
+            Response.makeNormalResponseReader responseChan decodeOptions
+          -- Client Streaming Requests
+          MQTTWriterRequest _ _ streamHandler -> do
+            liftIO $ do
+              -- do client streaming
+              streamHandler publishToRequestStream
+              -- Send end of stream indicator
+              publishToStreamCompleted
 
-          rsp <- makePacketReader responseChan
-          liftEither $ unwrapClientStreamResponse rsp
+            Response.makeClientResponseReader responseChan decodeOptions
 
-      -- Server Streaming Requests
-      MQTTReaderRequest req _ reqMetadata streamHandler -> do
-        publishRequest requestTopic req timeout reqMetadata
-        withControlSignals (publishControl controlTopic) . exceptToResult $ do
-          -- Wait for initial metadata
-          rawInitMetadata <- makePacketReader responseChan
-          metadata <- liftEither $ parseMessageOrError rawInitMetadata
+          -- Server Streaming Requests
+          MQTTReaderRequest _ _ _ streamHandler -> do
+            -- Wait for initial metadata
+            metadata <- makeMetadataMapReader responseChan decodeOptions
 
-          readResponseStream <- mkStreamRead (makePacketReader responseChan)
+            reader <- Stream.makeStreamReader responseChan decodeOptions
 
-          let mqttSRecv :: StreamRecv response
-              mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
+            let mqttSRecv :: StreamRecv response
+                mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                  reader >>= \case
+                    Nothing -> pure Nothing
+                    Just bs -> withExceptT Message.toRemoteError do
+                      Just <$> Message.fromWireEncoded decodeOptions bs
 
-          -- Run user-provided stream handler
-          liftIO (streamHandler (toMetadataMap metadata) mqttSRecv)
+            -- Run user-provided stream handler
+            liftIO (streamHandler metadata mqttSRecv)
 
-          -- Return final result
-          rsp <- makePacketReader responseChan
-          liftEither $ unwrapServerStreamResponse rsp
+            -- Return final result
+            Response.makeServerResponseReader responseChan decodeOptions
 
-      -- BiDirectional Server Streaming Requests
-      MQTTBiDiRequest _ reqMetadata streamHandler -> do
-        publishRequest requestTopic Proto3.def timeout reqMetadata
-        withControlSignals (publishControl controlTopic) . exceptToResult $ do
-          -- Wait for initial metadata
-          rawInitMetadata <- makePacketReader responseChan
-          metadata <- liftEither $ parseMessageOrError rawInitMetadata
+          -- BiDirectional Server Streaming Requests
+          MQTTBiDiRequest _ _ streamHandler -> do
+            -- Wait for initial metadata
+            metadata <- makeMetadataMapReader responseChan decodeOptions
 
-          readResponseStream <- mkStreamRead (makePacketReader responseChan)
+            reader <- Stream.makeStreamReader responseChan decodeOptions
 
-          let mqttSRecv :: StreamRecv response
-              mqttSRecv = runExceptT . withExceptT toGRPCIOError $ readResponseStream
+            let mqttSRecv :: StreamRecv response
+                mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                  chunk <- reader
+                  case chunk of
+                    Nothing -> pure Nothing
+                    Just bs -> withExceptT Message.toRemoteError do
+                      Just <$> Message.fromWireEncoded decodeOptions bs
 
-          let mqttSSend :: StreamSend request
-              mqttSSend = publishToRequestStream
+            let mqttSSend :: StreamSend request
+                mqttSSend = publishToRequestStream
 
-          let mqttWritesDone :: WritesDone
-              mqttWritesDone = do
-                publishToStreamCompleted
-                return $ Right ()
+            let mqttWritesDone :: WritesDone
+                mqttWritesDone = do
+                  publishToStreamCompleted
+                  return $ Right ()
 
-          -- Run user-provided stream handler
-          liftIO $ streamHandler (toMetadataMap metadata) mqttSRecv mqttSSend mqttWritesDone
+            -- Run user-provided stream handler
+            liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
-          -- Return final result
-          rsp <- makePacketReader responseChan
-          liftEither $ unwrapBiDiStreamResponse rsp
+            -- Return final result
+            Response.makeBiDiResponseReader responseChan decodeOptions
   where
-    makePacketReader :: TChan LByteString -> ExceptT RemoteError IO LByteString
-    makePacketReader channel =
-      withExceptT parseErrorToRCE do
-        ExceptT (Packet.makePacketReader channel)
+    makeMetadataMapReader ::
+      TChan LByteString ->
+      WireDecodeOptions ->
+      ExceptT RemoteError IO MetadataMap
+    makeMetadataMapReader channel decodeOptions = do
+      bytes <- withExceptT Message.toRemoteError do
+        Packet.makePacketReader channel decodeOptions
+      case wireDecodeMetadataMap bytes of
+        Left err -> throwError (parseErrorToRCE err)
+        Right rx -> pure rx
 
     publishControl :: Topic -> AuxControl -> IO ()
     publishControl ctrlTopic ctrl = do
@@ -274,16 +291,6 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod opts request = do
       let encoded :: LByteString
           encoded = Proto3.toLazyByteString (AuxControlMessage (Enumerated (Right ctrl)))
        in publishq mqttClient ctrlTopic encoded False QoS1 []
-
-    publishRequest :: Topic -> request -> TimeoutSeconds -> HL.MetadataMap -> IO ()
-    publishRequest rqtTopic rqt timeout metadata = do
-      let payload = toStrict (Proto3.toLazyByteString rqt)
-      let encoded = wireWrapRequest (Request payload opts timeout metadata)
-
-      logDebug mqttLogger $ "Publishing to topic: " <> unTopic rqtTopic
-      logDebug mqttLogger $ "Publishing message: " <> show encoded
-
-      mkPacketizedPublish mqttClient msgSizeLimit rqtTopic encoded
 
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do

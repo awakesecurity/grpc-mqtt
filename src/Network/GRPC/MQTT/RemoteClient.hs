@@ -29,7 +29,7 @@ import Control.Concurrent.STM.TChan (TChan, writeTChan)
 import Control.Exception (bracket)
 import Control.Exception.Safe (handleAny)
 
-import Control.Monad.Except (throwError)
+import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.IO.Unlift (withRunInIO)
 
 import Data.List (stripPrefix)
@@ -45,13 +45,15 @@ import Network.GRPC.HighLevel.Client
 import Network.MQTT.Client
   ( MQTTClient,
     MessageCallback (SimpleCallback),
+    QoS (QoS1),
     normalDisconnect,
+    publishq,
     waitForClient,
   )
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
-import Proto3.Suite (Enumerated (Enumerated), Message)
+import Proto3.Suite (Message)
 import Proto3.Suite qualified as Proto3
 
 import Proto3.Wire.Decode qualified as Decode
@@ -76,36 +78,28 @@ import Network.GRPC.MQTT.Core
 import Network.GRPC.MQTT.Logging (Logger)
 import Network.GRPC.MQTT.Logging qualified as Logger
 
+import Network.GRPC.MQTT.Message qualified as Message
+import Network.GRPC.MQTT.Message.AuxControl
+  ( AuxControlMessage (AuxMessageAlive, AuxMessageTerminate),
+  )
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
-import Network.GRPC.MQTT.Message.Request (Request (Request), wireUnwrapRequest)
 import Network.GRPC.MQTT.Message.Request qualified as Request
-
-import Network.GRPC.MQTT.Option.Batched (Batched)
+import Network.GRPC.MQTT.Message.Response qualified as Response
+import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
 import Network.GRPC.MQTT.RemoteClient.Session
 import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
-import Network.GRPC.MQTT.Sequenced
-  ( PublishToStream (..),
-    mkPacketizedPublish,
-    mkStreamPublish,
-    mkStreamRead,
-  )
+import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
+import Network.GRPC.MQTT.Serial qualified as Serial
 import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
 import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap)
 
-import Network.GRPC.MQTT.Wrapping (parseErrorToRCE, wrapResponse)
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
-import Proto.Mqtt
-  ( AuxControl (AuxControlAlive, AuxControlTerminate),
-    AuxControlMessage (AuxControlMessage),
-    RemoteError,
-    WrappedResponse (WrappedResponse),
-    WrappedResponseOrError
-      ( WrappedResponseOrErrorError
-      ),
-  )
+import Data.Traversable
+import Network.GRPC.MQTT.Option (ProtoOptions)
+import Proto.Mqtt (RemoteError)
 import Proto.Mqtt qualified as Proto
 
 ---------------------------------------------------------------------------------
@@ -199,12 +193,6 @@ handleNewSession config handle = handleWithHeartbeat
       newWatchdogIO period'sec (hdlHeartbeat handle)
       Logger.logWarn (cfgLogger config) "Watchdog timed out"
 
-pattern AuxMessageAlive :: AuxControlMessage
-pattern AuxMessageAlive = AuxControlMessage (Enumerated (Right AuxControlAlive))
-
-pattern AuxMessageTerminate :: AuxControlMessage
-pattern AuxMessageTerminate = AuxControlMessage (Enumerated (Right AuxControlTerminate))
-
 -- | Handles AuxControl signals from the "/control" topic
 handleControlMessage :: Logger -> SessionHandle -> LByteString -> IO ()
 handleControlMessage logger handle msg =
@@ -219,12 +207,11 @@ handleControlMessage logger handle msg =
           atomically do
             _ <- tryPutTMVar (hdlHeartbeat handle) ()
             pure ()
-        Right ctrl -> do
+        Right unknown -> do
           -- TODO: cancel hdlThread and abort
-          Logger.logWarn logger $ "Received unknown control message: " <> show ctrl
-        Left err -> do
-          -- TODO: cancel hdlThread and abort
-          Logger.logErr logger $ "Failed to parse control message: " <> show err
+          Logger.logWarn logger $ "Received unknown control message" <> show unknown
+        Left other -> do
+          Logger.logErr logger $ "Failed to parse control message: " <> show other
 
 -- | TODO
 --
@@ -232,62 +219,52 @@ handleControlMessage logger handle msg =
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   let channel = hdlRqtChan handle
-  bytes <- makePacketReader channel
-  case remoteParseRequest =<< bytes of
+  runExceptT (Request.makeRequestReader channel) >>= \case
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
-      publishRemoteError err
-    Right rqt@Request{..} -> do
+      publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
+    Right rqt@Request.Request{..} -> do
+      let encodeOptions = Serial.makeRemoteEncodeOptions options
+      let decodeOptions = Serial.makeRemoteDecodeOptions options
+
       Session.logDebug "handling client request" (show rqt)
-      dispatchClientHandler \clientHandler ->
-        publishResponse =<< case clientHandler of
-          ClientUnaryHandler k -> do
-            result <- liftIO (k message timeout metadata)
-            pure (makeClientResponse result)
-          ClientClientStreamHandler k ->
-            withRunInIO \runIO -> do
-              let sender = makeClientStreamSender channel
-              result <- k timeout metadata (runIO . sender)
-              pure (makeClientResponse result)
-          ClientServerStreamHandler batch k -> do
-            withRunInIO \runIO -> do
-              result <- k message timeout metadata \_ ms recv -> runIO do
-                publishPackets (wireEncodeMetadataMap ms)
-                makeServerStreamReader batch recv
-              pure (makeClientResponse result)
-          ClientBiDiStreamHandler batch k ->
-            withRunInIO \runIO -> do
-              result <- k timeout metadata \_ ms recv send done -> runIO do
-                publishPackets (wireEncodeMetadataMap ms)
-                let reader = makeServerStreamReader batch recv
-                    sender = makeServerStreamSender channel send done
-                 in concurrently_ sender reader
-              pure (makeClientResponse result)
-  where
-    makeClientResponse :: Message a => ClientResult s a -> WrappedResponse
-    makeClientResponse x = wrapResponse (toStrict . Proto3.toLazyByteString <$> x)
 
-    remoteParseRequest :: ByteString -> Either RemoteError (Request ByteString)
-    remoteParseRequest bytes =
-      case wireUnwrapRequest bytes of
-        Left err -> throwError (parseErrorToRCE err)
-        Right rqt -> pure rqt
-
-    publishResponse :: WrappedResponse -> Session ()
-    publishResponse response = do
-      Session.logDebug "publishing wrapped client response" (show response)
-      publishPackets (Proto3.toLazyByteString response)
+      dispatchClientHandler \clientHandler -> case clientHandler of
+        ClientUnaryHandler k -> do
+          result <- liftIO (k message timeout metadata)
+          publishClientResponse encodeOptions result
+        ClientClientStreamHandler k -> do
+          result <- withRunInIO \runIO -> do
+            let sender = makeClientStreamSender channel options
+            k timeout metadata (runIO . sender)
+          publishClientResponse encodeOptions result
+        ClientServerStreamHandler _ k -> do
+          result <- withRunInIO \runIO -> do
+            k message timeout metadata \_ ms recv -> runIO do
+              publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+              makeServerStreamReader encodeOptions recv
+          publishClientResponse encodeOptions result
+        ClientBiDiStreamHandler _ k -> do
+          result <- withRunInIO \runIO -> do
+            k timeout metadata \_ ms recv send done -> runIO do
+              publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+              let reader = makeServerStreamReader encodeOptions recv
+                  sender = makeServerStreamSender channel encodeOptions decodeOptions send done
+               in concurrently_ sender reader
+          publishClientResponse encodeOptions result
 
 -- | TODO
 --
 -- @since 0.1.0.0
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
-dispatchClientHandler k = maybe onError k =<< askMethod
+dispatchClientHandler k = do
+  maybe onError k =<< askMethod
   where
     -- FIXME: The error message's details are lost in transit to the client.
     onError :: Session ()
     onError = do
       mthTopic <- askMethodTopic
+      Session.logError "made request to unknown RPC" (Topic.unTopic mthTopic)
       -- When a non-existent 'ClientHandler' is requested, this remote error
       -- is sent bad reporting:
       --   1. That gRPC a call error occured.
@@ -297,135 +274,179 @@ dispatchClientHandler k = maybe onError k =<< askMethod
       let etype = Proto3.Enumerated (Right Proto.RErrorIOGRPCCallError)
           ecall = fromStrict ("/" <> Topic.unTopic mthTopic)
           extra = Just (Proto.RemoteErrorExtraStatusCode 12)
-       in publishRemoteError (Proto.RemoteError etype ecall extra)
+       in publishRemoteError
+            Serial.defaultEncodeOptions
+            (Proto.RemoteError etype ecall extra)
 
 ---------------------------------------------------------------------------------
 
-publishPackets :: LByteString -> Session ()
-publishPackets message = do
+publishClientResponse ::
+  Message a =>
+  WireEncodeOptions ->
+  ClientResult s a ->
+  Session ()
+publishClientResponse options result = do
   client <- asks cfgClient
-  limit <- asks (fromIntegral . cfgMsgSize)
   topic <- askResponseTopic
+  limit <- asks cfgMsgSize
+  Response.makeResponseSender client topic limit options result
+
+publishPackets :: WireEncodeOptions -> ByteString -> Session ()
+publishPackets options message = do
+  client <- asks cfgClient
+  topic <- askResponseTopic
+  limit <- asks cfgMsgSize
 
   Session.logDebug "publishing message as packets" (show message)
   Session.logDebug "...to the response topic" (Topic.unTopic topic)
 
-  mkPacketizedPublish client limit topic message
+  let publish :: ByteString -> IO ()
+      publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+   in Packet.makePacketSender limit options (liftIO . publish) message
 
-publishGRPCIOError :: GRPCIOError -> Session ()
-publishGRPCIOError err = do
-  let message = Wrapping.toRemoteError (ClientIOError err)
-  let response = WrappedResponse (Just (WrappedResponseOrErrorError message))
-  publishPackets (Proto3.toLazyByteString response)
+publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
+publishGRPCIOError options err =
+  let message :: RemoteError
+      message = Wrapping.toRemoteError (ClientIOError err)
+   in publishRemoteError options message
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --
 -- @since 0.1.0.0
-publishRemoteError :: RemoteError -> Session ()
-publishRemoteError err = do
-  let message = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError $ err
+publishRemoteError :: WireEncodeOptions -> RemoteError -> Session ()
+publishRemoteError options err = do
+  -- TODO: note why remote error cannot take encoding options
+  let response = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError err
   client <- asks cfgClient
-  limit <- asks (fromIntegral . cfgMsgSize)
   topic <- askResponseTopic
+  limit <- asks cfgMsgSize
 
-  Session.logError "publishing remote error as packets" (show message)
+  Session.logError "publishing remote error as packets" (show response)
   Session.logError "...to the response topic" (Topic.unTopic topic)
 
-  mkPacketizedPublish client limit topic (Proto3.toLazyByteString message)
+  Response.makeErrorResponseSender client topic limit options err
 
 ---------------------------------------------------------------------------------
 
-makePacketReader :: TChan LByteString -> Session (Either RemoteError ByteString)
-makePacketReader channel = do
-  result <- liftIO (Packet.makePacketReader channel)
+makePacketReader ::
+  TChan LByteString ->
+  WireDecodeOptions ->
+  Session (Either RemoteError ByteString)
+makePacketReader channel options = do
+  result <- runExceptT (Packet.makePacketReader channel options)
   case result of
     Left err -> do
       Session.logError "wire parse error encountered parsing Packet" (show err)
-      pure (Left $ parseErrorToRCE err)
+      pure (Left $ Message.toRemoteError err)
     Right bs -> do
       Session.logDebug "read packets to ByteString" (show bs)
-      pure (Right $ toStrict bs)
+      pure (Right bs)
 
-handleStreamSend :: StreamSend a -> a -> Session ()
-handleStreamSend send x = do
+handleStreamSend :: WireEncodeOptions -> StreamSend a -> a -> Session ()
+handleStreamSend options send x = do
   result <- liftIO (send x)
   case result of
     Right () -> pure ()
     Left err -> do
       Session.logError "gRPC IO error encountered handling StreamSend" (show err)
-      publishGRPCIOError err
+      publishGRPCIOError options err
 
-handleWritesDone :: WritesDone -> Session ()
-handleWritesDone done =
+handleWritesDone :: WireEncodeOptions -> WritesDone -> Session ()
+handleWritesDone options done =
   liftIO done >>= \case
     Right () -> pure ()
     Left err -> do
       Session.logError "gRPC IO error encountered handling WritesDone" (show err)
-      publishGRPCIOError err
+      publishGRPCIOError options err
 
 ---------------------------------------------------------------------------------
 
 makeServerStreamSender ::
+  forall a.
   Message a =>
   TChan LByteString ->
+  WireEncodeOptions ->
+  WireDecodeOptions ->
   StreamSend a ->
   WritesDone ->
   Session ()
-makeServerStreamSender channel sender done = do
-  reader <- makeClientStreamReader channel
-  fix \loop ->
-    liftIO reader >>= \case
+makeServerStreamSender channel encodeOptions decodeOptions sender done = do
+  reader <- makeClientStreamReader @_ @a channel decodeOptions
+  fix \loop -> do
+    runExceptT reader >>= \case
       Left err -> do
-        handleWritesDone done
-        publishRemoteError err
+        handleWritesDone encodeOptions done
+        publishRemoteError encodeOptions err
       Right Nothing ->
-        handleWritesDone done
+        handleWritesDone encodeOptions done
       Right (Just x) -> do
-        handleStreamSend sender x
+        handleStreamSend encodeOptions sender x
         loop
 
-makeServerStreamReader :: Message a => Batched -> StreamRecv a -> Session ()
-makeServerStreamReader batch recv = do
-  limit <- asks (fromIntegral . cfgMsgSize)
-  stream <- withRunInIO \runIO ->
-    mkStreamPublish limit batch \chunk -> do
-      runIO (publishPackets (Proto3.toLazyByteString chunk))
-
+makeServerStreamReader ::
+  Message a =>
+  WireEncodeOptions ->
+  StreamRecv a ->
+  Session ()
+makeServerStreamReader options recv = do
+  (send, done) <- makeStreamSender
   fix \loop ->
     liftIO recv >>= \case
-      Left err -> do
-        liftIO (publishToStreamCompleted stream)
-        publishGRPCIOError err
-      Right Nothing ->
-        liftIO (publishToStreamCompleted stream)
-      Right (Just rsp) -> do
-        liftIO (publishToStream stream rsp)
-        loop
+      Left err -> done >> publishGRPCIOError options err
+      Right Nothing -> done
+      Right (Just x) -> do
+        let message :: ByteString
+            message = Message.toWireEncoded options x
+         in send message >> loop
+  where
+    makeStreamSender :: Session (ByteString -> Session (), Session ())
+    makeStreamSender = do
+      client <- asks cfgClient
+      topic <- askResponseTopic
+      limit <- asks cfgMsgSize
+      Stream.makeStreamBatchSender limit options \chunk -> do
+        Session.logDebug "publish stream chunk as bytes" (show chunk)
+        liftIO (publishq client topic (fromStrict chunk) False QoS1 [])
 
 ---------------------------------------------------------------------------------
 
 makeClientStreamReader ::
+  (MonadError RemoteError m, MonadIO m, Message a) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  Session (m (Maybe a))
+makeClientStreamReader channel options = do
+  reader <- Stream.makeStreamReader channel options
+  withRunInIO \runIO -> pure do
+    result <- runExceptT reader
+    case result of
+      Left err -> do
+        liftIO $ runIO do
+          Session.logError "client stream reader: encountered error reading chunk" (show err)
+        throwError err
+      Right chunk -> do
+        liftIO $ runIO do
+          Session.logDebug "client stream reader: read chunk" (show chunk)
+        for chunk \bytes -> do
+          runExceptT (Message.fromWireEncoded options bytes) >>= \case
+            Left err -> throwError (Message.toRemoteError err)
+            Right rx -> pure rx
+
+makeClientStreamSender ::
   Message a =>
   TChan LByteString ->
-  Session (IO (Either RemoteError (Maybe a)))
-makeClientStreamReader channel =
-  withRunInIO \runIO -> do
-    reader <- mkStreamRead $ ExceptT do
-      result <- runIO (makePacketReader channel)
-      pure (fmap fromStrict result)
-    pure (runExceptT reader)
-
-makeClientStreamSender :: Message a => TChan LByteString -> StreamSend a -> Session ()
-makeClientStreamSender channel sender = do
-  reader <- makeClientStreamReader channel
+  ProtoOptions ->
+  StreamSend a ->
+  Session ()
+makeClientStreamSender channel options sender = do
+  let encodeOptions = Serial.makeRemoteEncodeOptions options
+  let decodeOptions = Serial.makeRemoteDecodeOptions options
+  reader <- makeClientStreamReader channel decodeOptions
   fix \loop ->
-    liftIO reader >>= \case
-      Left err -> do
-        Session.logError "parse error encountered reading stream chunk" (show err)
-        publishRemoteError err
-      Right Nothing ->
-        Session.logDebug "server stream sender" "done"
+    runExceptT reader >>= \case
+      Left err -> publishRemoteError encodeOptions err
+      Right Nothing -> Session.logDebug "client stream sender" "done"
       Right (Just x) -> do
-        Session.logDebug "server stream sender" "read chunk"
-        handleStreamSend sender x
+        Session.logDebug "client stream sender" "sending chunk"
+        handleStreamSend encodeOptions sender x
         loop

@@ -7,7 +7,7 @@ synopsis:    Run gRPC services over an MQTT connection
 license:     Apache-2.0
 author:      Arista Networks
 maintainer:  opensource@awakesecurity.com
-copyright:   2021 Arista Networks
+copyright:   2021-2022 Arista Networks
 category:    Network
 build-type:  Simple
 
@@ -106,6 +106,7 @@ library
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
     Proto3.Suite.Orphans
+    Proto3.Suite.DotProto.Internal.Compat
     Proto3.Wire.Decode.Extra
     Proto3.Wire.Encode.Extra
     Proto3.Wire.Types.Extra

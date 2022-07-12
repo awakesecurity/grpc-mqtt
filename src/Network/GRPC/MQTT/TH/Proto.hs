@@ -1,4 +1,4 @@
--- Copyright (c) 2021 Arista Networks, Inc.
+-- Copyright (c) 2021-2022 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -73,11 +73,7 @@ import Proto3.Suite.DotProto.AST
     Streaming (NonStreaming, Streaming),
     dotProtoOptionValue,
   )
-import Proto3.Suite.DotProto.Internal
-  ( CompileError,
-    invalidMethodNameError,
-    prefixedFieldName,
-  )
+import Proto3.Suite.DotProto.Internal (CompileError, invalidMethodNameError)
 import Proto3.Suite.DotProto.Internal qualified as DotProto
 
 import Relude
@@ -119,6 +115,8 @@ import Network.GRPC.MQTT.Wrapping
     wrapServerStreamingClientHandler,
     wrapUnaryClientHandler,
   )
+
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 
 --------------------------------------------------------------------------------
 
@@ -391,7 +389,7 @@ forEachService filepath defBatchedStream action = do
                       (NonStreaming, NonStreaming) -> [e|wrapUnaryClientHandler|]
                       (Streaming, NonStreaming) -> [e|wrapClientStreamingClientHandler|]
                       (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler useBatchedStream|]
-              clientFun <- mapCompileErrorQ (prefixedFieldName serviceName rpcNm)
+              clientFun <- mapCompileErrorQ (prefixedMethodName serviceName rpcNm)
               return [(endpointPrefix <> rpcNm, useBatchedStream, streamingWrapper, TH.mkName clientFun)]
             _ -> mapCompileErrorQ (invalidMethodNameError rpcMethodName)
         serviceMethodName _ = pure []

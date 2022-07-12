@@ -2,15 +2,12 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | TODO
+-- | This module exports definitions for the 'Packet' message type.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Packet
   ( -- * Packet
     Packet (Packet, payload, metadata),
-
-    -- ** Construction
-    fromByteString,
 
     -- ** Splitting
     splitPackets,
@@ -89,17 +86,13 @@ import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Types.Extra (RecordField)
 
--- Packet - Construction --------------------------------------------------------
-
--- | TODO
---
--- @since 0.1.0.0
-fromByteString :: ByteString -> Packet ByteString
-fromByteString bytes = Packet bytes (PacketInfo 0 1)
-
 -- Packet - Splitting -----------------------------------------------------------
 
--- | TODO
+-- | @'splitPackets' n bytes@ splits the 'ByteString' @bytes@ into a vector of
+-- packets with a 'ByteString' payload of length @n@-bytes.
+--
+-- A singleton packet vector with payload @bytes@ is produced in the case that
+-- @n@ is negative or @bytes@ is an empty 'ByteString'.
 --
 -- @since 0.1.0.0
 splitPackets :: Int -> ByteString -> Vector (Packet ByteString)
@@ -108,7 +101,7 @@ splitPackets size bytes
     -- In the case that the maximum packet payload length @size@ is not at least
     -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
     -- terminal packet.
-    Vector.singleton (fromByteString bytes)
+    Vector.singleton (Packet bytes (PacketInfo 0 1))
   | otherwise = Vector.create do
     -- Allocates a vector of containing @ByteString.length bytes / size@
     -- elements rounded upwards. For example, fix the length of @bytes@ to
@@ -200,7 +193,9 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
 
 -- Packet - Packet Readers ----------------------------------------------------
 
--- | TODO
+-- | Construct an action that reads serialized packets out of a 'TChan' to
+-- produce the original unpacketized 'ByteString' reconstructed from each packet
+-- payload.
 --
 -- @since 0.1.0.0
 makePacketReader ::
@@ -223,7 +218,9 @@ makePacketReader channel options = do
 
 -- Packet - Packet Senders -----------------------------------------------------
 
--- | TODO
+-- | Construct a packetized message sender given the maximum size for each
+-- packet payload (in bytes), the wire serialization options, and a MQTT publish
+-- function.
 --
 -- @since 0.1.0.0
 makePacketSender ::
@@ -250,7 +247,7 @@ isLastPacketInfo info = position info == npackets info - 1
 
 -- PacketSet -------------------------------------------------------------------
 
--- | TODO
+-- | 'PacketSet' is a set of packets carrying a message payload type @a@.
 --
 -- @since 0.1.0.0
 newtype PacketSet a = PacketSet
@@ -262,7 +259,8 @@ newtype PacketSet a = PacketSet
 emptyPacketSetIO :: IO (PacketSet a)
 emptyPacketSetIO = fmap PacketSet TMap.emptyIO
 
--- | TODO
+-- | Merge the payloads of each packet in a 'PacketSet' back into the original
+-- unpacketized 'ByteString'.
 --
 -- @since 0.1.0.0
 mergePacketSet :: PacketSet ByteString -> STM LByteString

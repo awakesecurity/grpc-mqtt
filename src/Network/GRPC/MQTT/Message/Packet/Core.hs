@@ -1,7 +1,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | TODO
+-- | Core module for the 'Packet' message type.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Packet.Core

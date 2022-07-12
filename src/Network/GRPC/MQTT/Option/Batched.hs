@@ -25,29 +25,29 @@
 -- @
 -- // Enable client-side batched streaming for the HelloRequest message
 -- rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse) {
---   option hs_grpc_mqtt_batched_stream = true;
+--   option haskell.grpc.mqtt.batched_stream = true;
 -- };
 -- @
 --
--- If @hs_grpc_mqtt_batched_stream@ is enabled for a bidirectionally streaming
--- RPC, both the client and server message streams will be batched. Enabling
--- batching has no effect on unary RPC methods.
+-- If @haskell.grpc.mqtt.batched_stream@ is enabled for a bidirectionally
+-- streaming RPC, both the client and server message streams will be batched.
+-- Enabling batching has no effect on unary RPC methods.
 --
--- Additionally, the options @hs_grpc_mqtt_default_batched_stream_file@ and
--- @hs_grpc_mqtt_default_batched_stream_service@ are avaliable. These options set
--- the default value of @hs_grpc_batched_stream@ at the file and service level,
--- respectively. If conflicting values are set for any of options used to
--- configure stream batching, then precedence is given to the value of the option
--- with the more granular scope.
+-- Additionally, the options @haskell.grpc.mqtt.batched_stream_file@ and
+-- @haskell.grpc.mqtt.batched_stream_service@ are avaliable. These options set
+-- the default value of @haskell.grpc.mqtt.batched_stream@ at the file and
+-- service level, respectively. If conflicting values are set for any of options
+-- used to configure stream batching, then precedence is given to the value of
+-- the option with the more granular scope.
 --
 -- @
 -- // Enables batching by default for all services' RPCs in the file.
--- option hs_grpc_mqtt_default_batched_stream_file = true;
+-- option haskell.grpc.mqtt.batched_stream_file = true;
 --
 -- service HelloService {
 --   // Overrides file-level value, disabling batching by default for all RPCs
 --   // in HelloService.
---   option hs_grpc_mqtt_default_batched_stream_service = false;
+--   option haskell.grpc.mqtt.batched_stream_service = false;
 -- };
 -- @
 --

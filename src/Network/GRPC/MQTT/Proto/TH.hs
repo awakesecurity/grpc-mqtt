@@ -1,4 +1,4 @@
--- | TODO
+-- | Template haskell functions for creating splices from protocol buffers.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Proto.TH
@@ -65,7 +65,7 @@ queryProtoTypeNameQ typeId = do
 formatTypeNameQ :: String -> Q String
 formatTypeNameQ nm = hoistCompileErrorQ (DotProto.typeLikeName nm)
 
--- | TODO
+-- | Obtain the name of a proto3 package from a 'DotProtoPacketSpec'.
 --
 -- @since 0.1.0.0
 protoPackageIdQ :: DotProtoPackageSpec -> Q DotProtoIdentifier
@@ -83,7 +83,8 @@ toProtoNameQ idt = hoistCompileErrorQ (DotProto.dpIdentUnqualName idt)
 toQualProtoNameQ :: DotProtoIdentifier -> Q String
 toQualProtoNameQ idt = hoistCompileErrorQ (DotProto.dpIdentQualName idt)
 
--- | TODO
+-- | Constructs a qualified RPC name from the 'DotProtoIdentifier' of the RPC
+-- and the service the RPC belongs to.
 --
 -- @since 0.1.0.0
 makeServiceFieldNameQ :: DotProtoIdentifier -> DotProtoIdentifier -> Q Name

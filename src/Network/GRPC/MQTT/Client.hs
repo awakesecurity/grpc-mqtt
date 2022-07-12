@@ -112,7 +112,12 @@ import Network.GRPC.MQTT.Serial qualified as Serial
 
 import Network.GRPC.MQTT.Topic qualified as Topic
 import Network.GRPC.MQTT.Types
-  ( MQTTRequest (MQTTBiDiRequest, MQTTNormalRequest, MQTTReaderRequest, MQTTWriterRequest),
+  ( MQTTRequest
+      ( MQTTBiDiRequest,
+        MQTTNormalRequest,
+        MQTTReaderRequest,
+        MQTTWriterRequest
+      ),
     MQTTResult (GRPCResult, MQTTError),
     requestTimeout,
   )
@@ -463,5 +468,3 @@ makeMethodRequestTopic baseTopic sid (MethodName nm) =
    in case methodTopic of
         Nothing -> throwIO (BadRPCMethodTopicError (decodeUtf8 nm))
         Just ts -> pure (baseTopic <> "grpc" <> "request" <> sid <> ts)
-
--- Topics ----------------------------------------------------------------------

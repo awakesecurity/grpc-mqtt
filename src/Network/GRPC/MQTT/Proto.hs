@@ -337,12 +337,6 @@ instance ProtoDatum Double where
   datumRep = DRepDecimal
 
 -- | @since 0.1.0.0
-instance ProtoDatum Float where
-  datumRep = DRepDecimal
-
-  castDatum x = fmap realToFrac (castDatum @Double x)
-
--- | @since 0.1.0.0
 instance ProtoDatum Int where
   datumRep = DRepInteger
 

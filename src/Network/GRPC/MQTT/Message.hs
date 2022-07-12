@@ -51,7 +51,8 @@ import Proto.Mqtt (RemoteError)
 
 -- Wire Encoding ---------------------------------------------------------------
 
--- | TODO
+-- | Apply wire encoding transformations (such as compression) to a serialized
+-- 'ByteString'.
 --
 -- @since 0.1.0.0
 mapEncodeOptions :: WireEncodeOptions -> ByteString -> ByteString
@@ -72,7 +73,8 @@ toWireEncoded options x =
 
 -- Wire Decoding ---------------------------------------------------------------
 
--- | TODO
+-- | Apply wire decoding transformations (such as decompression) to a serialized
+-- 'ByteString'.
 --
 -- @since 0.1.0.0
 mapDecodeOptions ::

@@ -5,7 +5,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | TODO
+-- | This module defines the 'ProtoOptions' record and functions related to
+-- protobuf options specific to gRPC-MQTT.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Option
@@ -22,7 +23,7 @@ module Network.GRPC.MQTT.Option
 
     -- * Predicates
     isClientCompressed,
-    isServerCompressed,
+    isRemoteCompressed,
 
     -- * Proto
     toProtoType,
@@ -35,7 +36,7 @@ module Network.GRPC.MQTT.Option
     -- * Wire Decoding
     wireDecodeProtoOptions,
     wireParseProtoOptions,
-    
+
     -- * Re-exports
     Batched,
     CLevel,
@@ -83,7 +84,8 @@ import Proto3.Wire.Decode.Extra qualified as Decode
 
 -- ProtoOptions ----------------------------------------------------------------
 
--- | TODO
+-- | 'ProtoOptions' is a record that represents values for each of the custom
+-- proto3 options that are used by gRPC-MQTT.
 --
 -- @
 -- // import the compression level enumeration "CLevel"
@@ -130,17 +132,17 @@ defaultProtoOptions =
 
 -- Predicates ------------------------------------------------------------------
 
--- | TODO 
+-- | Is client-side message compression enabled?
 --
 -- @since 0.1.0.0
 isClientCompressed :: ProtoOptions -> Bool
 isClientCompressed opts = isJust (rpcClientCLevel opts)
 
--- | TODO 
+-- | Is message compression enabled on the remote client?
 --
 -- @since 0.1.0.0
-isServerCompressed :: ProtoOptions -> Bool
-isServerCompressed opts = isJust (rpcServerCLevel opts)
+isRemoteCompressed :: ProtoOptions -> Bool
+isRemoteCompressed opts = isJust (rpcServerCLevel opts)
 
 -- Wire Encoding ---------------------------------------------------------------
 

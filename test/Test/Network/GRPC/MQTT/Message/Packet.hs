@@ -105,7 +105,7 @@ propPacketSplitEmpty = property do
   maxsize <- forAll (Gen.int Range.constantBounded)
   let packets :: Vector (Packet ByteString)
       packets = Packet.splitPackets maxsize ByteString.empty
-   in packets === Vector.singleton (Packet.fromByteString ByteString.empty)
+   in packets === Vector.singleton (Packet.Packet ByteString.empty (Packet.PacketInfo 0 1))
 
 -- | Splitting a 'ByteString' into a vector of 'Packet' can be reversed by
 -- concatenating the payload's of each packet.

@@ -35,7 +35,7 @@ data Request msg = Request
   { -- | The request's 'message' is a type representing the protocol buffer
     -- message needed to perform the RPC call the client is requesting.
     message :: msg
-  , -- | TODO
+  , -- | The gRPC-MQTT specific protobuf options relevant to this request.
     options :: ProtoOptions
   , -- | The request's 'timeout' is the timeout period in unit seconds the
     -- requested gRPC call has to finished before a deadline-exceeded error

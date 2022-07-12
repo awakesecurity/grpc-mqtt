@@ -69,10 +69,10 @@ instance Exception ZstdError where
 -- @since 0.1.0.0
 toRemoteError :: ZstdError -> RemoteError
 toRemoteError err =
-  let ecode :: Enumerated RError
-      ecode = Proto3.Enumerated (Right Proto.RErrorIOGRPCCallInvalidMessage)
+  let encoded :: Enumerated RError
+      encoded = Proto3.Enumerated (Right Proto.RErrorIOGRPCCallInvalidMessage)
    in Proto.RemoteError
-        { Proto.remoteErrorErrorType = ecode
+        { Proto.remoteErrorErrorType = encoded
         , Proto.remoteErrorMessage = toLText (displayException err)
         , Proto.remoteErrorExtra = Nothing
         }

@@ -7,13 +7,9 @@ import Test.Tasty (TestTree, testGroup)
 
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
-
 import Test.Network.GRPC.MQTT.Message.Packet qualified
 import Test.Network.GRPC.MQTT.Message.Request qualified
 import Test.Network.GRPC.MQTT.Message.Stream qualified
-
---------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 

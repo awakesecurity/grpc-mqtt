@@ -11,7 +11,7 @@
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 
--- | TODO
+-- | gRPC-MQTT remote clients.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.RemoteClient
@@ -253,9 +253,6 @@ handleRequest handle = do
                in concurrently_ sender reader
           publishClientResponse encodeOptions result
 
--- | TODO
---
--- @since 0.1.0.0
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
 dispatchClientHandler k = do
   maybe onError k =<< askMethod

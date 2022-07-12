@@ -4,7 +4,6 @@ module Test.Network.GRPC.MQTT.Compress (tests) where
 
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
 import Hedgehog (Property, forAll, property, withTests, (===))
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range

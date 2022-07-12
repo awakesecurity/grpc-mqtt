@@ -137,7 +137,7 @@ makeClientDecodeOptions opts =
 makeRemoteDecodeOptions :: ProtoOptions -> WireDecodeOptions
 makeRemoteDecodeOptions opts =
   WireDecodeOptions
-    { decodeDecompress = Option.isServerCompressed opts
+    { decodeDecompress = Option.isRemoteCompressed opts
     }
 
 -- Wire Encoding Options - Predicates ------------------------------------------

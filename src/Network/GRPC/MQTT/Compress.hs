@@ -80,11 +80,8 @@ toRemoteError err =
 -- | Decompress a 'ByteString' (compressed via 'compress') as a single
 -- zstandard frame.
 --
--- * 'StreamError' is emitted if the 'ByteString' was compressed in streaming
---   mode.
---
--- * 'GenericError' is emitted if an error was thrown by the internal zstandard
---   FFI call.
+-- A 'ZstdError' is emitted if an error was thrown by the internal zstandard FFI
+-- call.
 --
 -- @since 0.1.0.0
 decompress :: MonadError ZstdError m => ByteString -> m ByteString

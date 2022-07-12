@@ -1,4 +1,4 @@
--- Copyright (c) 2021 Arista Networks, Inc.
+-- Copyright (c) 2021-2022 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 {-# LANGUAGE TemplateHaskell #-}
@@ -35,7 +35,7 @@ import Language.Haskell.TH
 import Network.GRPC.HighLevel.Client (Client)
 import Network.GRPC.MQTT.Types (Batched (Batched, Unbatched), MethodMap)
 import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
-import Proto3.Suite.DotProto.Internal (prefixedFieldName)
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 import Turtle (FilePath)
 
 --------------------------------------------------------------------------------
@@ -43,8 +43,8 @@ import Turtle (FilePath)
 mqttRemoteClientMethodMap :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttRemoteClientMethodMap fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
-    clientFuncName <- mkName <$> prefixedFieldName serviceName "remoteClientMethodMap"
-    grpcClientName <- mkName <$> prefixedFieldName serviceName "client"
+    clientFuncName <- mkName <$> prefixedMethodName serviceName "RemoteClientMethodMap"
+    grpcClientName <- mkName <$> prefixedMethodName serviceName "Client"
     lift $ rcMethodMap clientFuncName grpcClientName serviceMethods
 
 rcMethodMap :: Name -> Name -> [(String, Batched, ExpQ, Name)] -> DecsQ

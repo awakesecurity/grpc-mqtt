@@ -1,4 +1,4 @@
--- Copyright (c) 2021 Arista Networks, Inc.
+-- Copyright (c) 2021-2022 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 {-# LANGUAGE LambdaCase #-}
@@ -44,10 +44,10 @@ import Proto3.Suite.DotProto.Internal
     dpIdentUnqualName,
     importProto,
     invalidMethodNameError,
-    prefixedFieldName,
     protoPackageName,
     typeLikeName,
   )
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 import Turtle (FilePath, directory, filename)
 
 -------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ forEachService protoFilepath defBatchedStream action = showErrors . runExceptT $
                       (NonStreaming, NonStreaming) -> [e|wrapUnaryClientHandler|]
                       (Streaming, NonStreaming) -> [e|wrapClientStreamingClientHandler|]
                       (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler useBatchedStream|]
-              clientFun <- prefixedFieldName serviceName nm
+              clientFun <- prefixedMethodName serviceName nm
               return [(endpointPrefix <> nm, useBatchedStream, streamingWrapper, mkName clientFun)]
             _ -> invalidMethodNameError rpcMethodName
         serviceMethodName _ = pure []

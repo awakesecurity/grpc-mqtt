@@ -1,4 +1,4 @@
--- Copyright (c) 2021 Arista Networks, Inc.
+-- Copyright (c) 2021-2022 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
 -- that can be found in the COPYING file.
 {-# LANGUAGE TemplateHaskell #-}
@@ -40,7 +40,7 @@ import Network.GRPC.MQTT.Types
     MQTTResult,
   )
 import Network.MQTT.Topic (Topic)
-import Proto3.Suite.DotProto.Internal (prefixedFieldName)
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 import Turtle (FilePath)
 
 --------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ import Turtle (FilePath)
 mqttClientFuncs :: Turtle.FilePath -> Batched -> Q [Dec]
 mqttClientFuncs fp defaultBatchedStream = fmap concat $
   forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
-    clientFuncName <- mkName <$> prefixedFieldName serviceName "mqttClient"
+    clientFuncName <- mkName <$> prefixedMethodName serviceName "MqttClient"
     lift $ clientService clientFuncName (mkName serviceName) [(a, batched) | (a, batched, _, _) <- serviceMethods]
 
 clientService :: Name -> Name -> [(String, Batched)] -> DecsQ

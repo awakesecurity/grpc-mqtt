@@ -12,6 +12,7 @@ module Network.GRPC.MQTT.Message.Response
 
     -- * Response Handlers
     makeResponseSender,
+    makeErrorResponseSender,
     makeNormalResponseReader,
     makeClientResponseReader,
     makeServerResponseReader,
@@ -84,6 +85,15 @@ wireEncodeResponse ::
 wireEncodeResponse options result =
   let response :: WrappedResponse
       response = wrapResponse (Message.toWireEncoded options <$> result)
+   in Message.toWireEncoded options response
+
+wireEncodeErrorResponse ::
+  WireEncodeOptions ->
+  RemoteError ->
+  ByteString
+wireEncodeErrorResponse options err =
+  let response :: WrappedResponse
+      response = WrappedResponse (Just (WrappedResponseOrErrorError err))
    in Message.toWireEncoded options response
 
 wrapResponse :: ClientResult s ByteString -> WrappedResponse
@@ -240,6 +250,22 @@ makeResponseSender ::
 makeResponseSender client topic limit options response = do
   let message :: ByteString
       message = wireEncodeResponse options response
+   in Packet.makePacketSender limit options (liftIO . publish) message
+  where
+    publish :: ByteString -> IO ()
+    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+
+makeErrorResponseSender ::
+  MonadUnliftIO m =>
+  MQTTClient ->
+  Topic ->
+  Int ->
+  WireEncodeOptions ->
+  RemoteError ->
+  m ()
+makeErrorResponseSender client topic limit options err = do
+  let message :: ByteString
+      message = wireEncodeErrorResponse options err
    in Packet.makePacketSender limit options (liftIO . publish) message
   where
     publish :: ByteString -> IO ()

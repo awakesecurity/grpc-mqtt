@@ -179,16 +179,11 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     -- Message options
     let encodeOptions = Serial.makeClientEncodeOptions options
-    let decodeOptions = Serial.makeClientDecodeOptions options
+    let decodeOptions = Serial.makeRemoteDecodeOptions options
     let timeout = requestTimeout request
     let limit = fromIntegral msgSizeLimit
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
-
-    -- let publishToRequestTopic :: Message r => r -> IO ()
-    --     publishToRequestTopic message = do
-    --       let bytes = fromStrict (Message.toWireEncoded encodeOptions message)
-    --       mkPacketizedPublish mqttClient msgSizeLimit requestTopic bytes
 
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender limit encodeOptions \message -> do
@@ -239,7 +234,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
                   reader >>= \case
                     Nothing -> pure Nothing
                     Just bs -> withExceptT Message.toRemoteError do
-                      Just <$> Message.fromWireEncoded decodeOptions bs
+                      Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
 
             -- Run user-provided stream handler
             liftIO (streamHandler metadata mqttSRecv)

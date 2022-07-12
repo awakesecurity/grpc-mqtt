@@ -21,8 +21,6 @@ service TestService {
 
   /* Simple bidi streaming: ping-pong echo */
   rpc BiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
-    option haskell.grpc.mqtt.client_clevel = CLEVEL_10;
-    option haskell.grpc.mqtt.server_clevel = CLEVEL_10;
   }
 
   /* Server Streaming with batching */
@@ -38,7 +36,5 @@ service TestService {
   /* BiDi streaming with batching: ping-pong echo */
   rpc BatchBiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
     option haskell.grpc.mqtt.batch_stream = true;
-    option haskell.grpc.mqtt.client_clevel = CLEVEL_10;
-    option haskell.grpc.mqtt.server_clevel = CLEVEL_10;
   }
 }

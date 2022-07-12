@@ -22,7 +22,6 @@ where
 
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
 import Control.Concurrent.STM.TChan (TChan)
 import Control.Concurrent.STM.TQueue (TQueue)
 
@@ -109,7 +108,7 @@ wireUnwrapStreamChunk ::
   ByteString ->
   m (Maybe (Vector ByteString))
 wireUnwrapStreamChunk options bytes =
-  case Message.fromWireEncoded options bytes of
+  case Message.fromWireEncoded @_ @WrappedStreamChunk options bytes of
     Left err -> throwError (Message.toRemoteError err)
     Right (Error err) -> throwError err
     Right Empty -> pure Nothing

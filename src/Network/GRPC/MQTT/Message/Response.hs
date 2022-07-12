@@ -46,7 +46,6 @@ import Network.GRPC.HighLevel.Client
 import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
 import Network.MQTT.Topic (Topic)
 
-import Proto3.Suite (fromByteString)
 import Proto3.Suite.Class (Message)
 
 import Relude
@@ -148,12 +147,13 @@ data ParsedMQTTResponse response = ParsedMQTTResponse
 
 unwrapResponse ::
   MonadError RemoteError m =>
+  WireDecodeOptions ->
   ByteString ->
   m (ParsedMQTTResponse ByteString)
-unwrapResponse bytes = do
+unwrapResponse options bytes = do
   MQTTResponse{..} <-
-    case fromByteString @WrappedResponse bytes of
-      Left err -> throwError (Wrapping.parseErrorToRCE err)
+    case Message.fromWireEncoded @_ @WrappedResponse options bytes of
+      Left err -> throwError (Message.toRemoteError err)
       Right (WrappedResponse Nothing) -> throwError (Wrapping.remoteError "Empty response")
       Right (WrappedResponse (Just (WrappedResponseOrErrorError err))) -> throwError err
       Right (WrappedResponse (Just (WrappedResponseOrErrorResponse rsp))) -> pure rsp
@@ -177,7 +177,7 @@ decodeResponse ::
   ByteString ->
   m (ParsedMQTTResponse a)
 decodeResponse options bytes = do
-  response <- unwrapResponse bytes
+  response <- unwrapResponse options bytes
   for response \body -> do
     case Message.fromWireEncoded options body of
       Left err -> throwError (Message.toRemoteError err)

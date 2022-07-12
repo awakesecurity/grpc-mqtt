@@ -225,7 +225,7 @@ handleRequest handle = do
       publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
     Right rqt@Request.Request{..} -> do
       let encodeOptions = Serial.makeRemoteEncodeOptions options
-      let decodeOptions = Serial.makeRemoteDecodeOptions options
+      let decodeOptions = Serial.makeClientDecodeOptions options
 
       Session.logDebug "handling client request" (show rqt)
 
@@ -392,9 +392,14 @@ makeServerStreamReader options recv = do
   (send, done) <- makeStreamSender
   fix \loop ->
     liftIO recv >>= \case
-      Left err -> done >> publishGRPCIOError options err
-      Right Nothing -> done
-      Right (Just x) -> do
+      Left err -> do
+        Session.logError "server stream reader: encountered error reading chunk" (show err)
+        done
+        publishGRPCIOError options err
+      Right Nothing -> do
+        Session.logDebug "server stream sender" "done"
+        done
+      Right (Just x) ->
         let message :: ByteString
             message = Message.toWireEncoded options x
          in send message >> loop
@@ -405,7 +410,7 @@ makeServerStreamReader options recv = do
       topic <- askResponseTopic
       limit <- asks cfgMsgSize
       Stream.makeStreamBatchSender limit options \chunk -> do
-        Session.logDebug "publish stream chunk as bytes" (show chunk)
+        Session.logDebug "publish server stream chunk as bytes" (show chunk)
         liftIO (publishq client topic (fromStrict chunk) False QoS1 [])
 
 ---------------------------------------------------------------------------------

@@ -165,7 +165,7 @@ propHandleRemoteToClient = property do
     (Serial.makeRemoteEncodeOptions options)
     (Serial.makeRemoteDecodeOptions options)
 
--- Packet.Wire -----------------------------------------------------------------
+-- Packet.PacketInfo.Wire ------------------------------------------------------
 
 testTreePacketInfo :: TestTree
 testTreePacketInfo =

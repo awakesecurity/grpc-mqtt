@@ -170,10 +170,10 @@ makeStreamBatchSender limit options publish
           if fromIntegral limit <= accSize + size
             then atomicWriteIORef chunksRef (Vector.snoc accChunks chunk, accSize + size)
             else do
-              let chunks = Vector.singleton chunk
-              atomicWriteIORef chunksRef (chunks, size)
+              (chunks, _) <- readIORef chunksRef
               unless (Vector.null accChunks) $
                 makeStreamChunkSender limit options chunks publish
+              atomicWriteIORef chunksRef (Vector.singleton chunk, size)
 
         done :: m ()
         done = do

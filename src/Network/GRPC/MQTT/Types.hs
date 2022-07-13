@@ -6,18 +6,25 @@
 
 -- |
 module Network.GRPC.MQTT.Types
-  ( MQTTResult (..),
+  ( -- * Session Id
+    SessionId,
+
+    -- * MQTT Requests
+    MQTTRequest
+      ( MQTTNormalRequest,
+        MQTTWriterRequest,
+        MQTTReaderRequest,
+        MQTTBiDiRequest
+      ),
+    requestTimeout,
+    requestMetadata,
+    MQTTResult (..),
     MethodMap,
     ClientHandler (..),
-    MQTTRequest (..),
-    SessionId,
-    Batched (..),
   )
 where
 
 --------------------------------------------------------------------------------
-
-import Language.Haskell.TH.Syntax (Lift)
 
 import Network.GRPC.HighLevel.Client
   ( ClientResult,
@@ -35,6 +42,10 @@ import Proto3.Suite (Message)
 import Relude
 
 import Text.Show qualified as Show
+
+--------------------------------------------------------------------------------
+
+import Network.GRPC.MQTT.Option.Batched (Batched)
 
 --------------------------------------------------------------------------------
 
@@ -64,6 +75,24 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
     MetadataMap ->
     (MetadataMap -> StreamRecv rsp -> StreamSend rqt -> WritesDone -> IO ()) ->
     MQTTRequest 'BiDiStreaming rqt rsp
+
+-- | Retrieve a MQTT request's metadata.
+--
+-- @since 0.1.0.0
+requestMetadata :: MQTTRequest s rqt rsp -> MetadataMap
+requestMetadata (MQTTNormalRequest _ _ ms) = ms
+requestMetadata (MQTTWriterRequest _ ms _) = ms
+requestMetadata (MQTTReaderRequest _ _ ms _) = ms
+requestMetadata (MQTTBiDiRequest _ ms _) = ms
+
+-- | Retrieve a MQTT request's timeout period.
+--
+-- @since 0.1.0.0
+requestTimeout :: MQTTRequest s rqt rsp -> TimeoutSeconds
+requestTimeout (MQTTNormalRequest _ t _) = t
+requestTimeout (MQTTWriterRequest t _ _) = t
+requestTimeout (MQTTReaderRequest _ t _ _) = t
+requestTimeout (MQTTBiDiRequest t _ _) = t
 
 -- | @since 0.1.0.0
 instance Show rqt => Show (MQTTRequest s rqt rsp) where
@@ -110,18 +139,3 @@ data ClientHandler where
     Batched ->
     (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
     ClientHandler
-
--- | Indicates whether streaming messages are batched.
---
--- Batched streaming packs as many messages as possible to a single
--- packet published over MQTT. The maximum size of a packet is defined
--- by @MQTTGRPCConfig.mqttMsgSizeLimit@. The sender will accumulate
--- multiple messages in memory till it reaches the packet size limit and
--- then all the messages are sent in one packet.
---
--- Batching helps to improve performance when many small messages are
--- streamed in a short time. On the other hand, it is not a good idea to
--- batch RPCs that send small messages infrequently (long-poll) because
--- messages will not be published immediately.
-data Batched = Unbatched | Batched
-  deriving (Eq, Ord, Lift)

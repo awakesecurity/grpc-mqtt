@@ -116,7 +116,7 @@ handleServerStream (ServerWriterRequest _ (Message.StreamRequest name n) ssend) 
   pure (ServerWriterResponse metadata StatusOk details)
   where
     metadata :: MetadataMap
-    metadata = [] -- [("server_writer_key", "server_writer_metadata")]
+    metadata = [("server_writer_key", "server_writer_metadata")]
 
     details :: StatusDetails
     details = fromString ("stream is done" ++ show name)

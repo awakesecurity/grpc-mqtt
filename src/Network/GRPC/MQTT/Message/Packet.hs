@@ -2,15 +2,12 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | TODO
+-- | This module exports definitions for the 'Packet' message type.
 --
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Packet
   ( -- * Packet
     Packet (Packet, payload, metadata),
-
-    -- ** Construction
-    fromByteString,
 
     -- ** Splitting
     splitPackets,
@@ -24,8 +21,11 @@ module Network.GRPC.MQTT.Message.Packet
     wireUnwrapPacket,
     wireParsePacket,
 
-    -- ** TODO
-    packetReader,
+    -- * Packet Readers
+    makePacketReader,
+
+    -- * Packet Senders
+    makePacketSender,
 
     -- * PacketInfo
     PacketInfo (PacketInfo, position, npackets),
@@ -46,7 +46,7 @@ where
 
 import Control.Concurrent.STM.TChan (TChan, readTChan)
 
-import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Except (MonadError, liftEither)
 
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
@@ -56,12 +56,16 @@ import Data.Vector qualified as Vector
 import Data.Vector.Mutable qualified as MVector
 
 import Proto3.Suite (FieldNumber, decodeMessageField, encodeMessageField)
-import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
+
+import Proto3.Wire.Decode (Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
 
 import Relude
+
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async (forConcurrently_)
 
 ---------------------------------------------------------------------------------
 
@@ -69,22 +73,26 @@ import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
 import Network.GRPC.MQTT.Message.Packet.Core
+  ( Packet (Packet, metadata, payload),
+    PacketInfo (PacketInfo, npackets, position),
+  )
 import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
+
+import Network.GRPC.MQTT.Message (WireDecodeError)
+import Network.GRPC.MQTT.Message qualified as Message
+
+import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Types.Extra (RecordField)
 
--- Packet - Construction --------------------------------------------------------
-
--- | TODO
---
--- @since 0.1.0.0
-fromByteString :: ByteString -> Packet ByteString
-fromByteString bytes = Packet bytes (PacketInfo 0 1)
-
 -- Packet - Splitting -----------------------------------------------------------
 
--- | TODO
+-- | @'splitPackets' n bytes@ splits the 'ByteString' @bytes@ into a vector of
+-- packets with a 'ByteString' payload of length @n@-bytes.
+--
+-- A singleton packet vector with payload @bytes@ is produced in the case that
+-- @n@ is negative or @bytes@ is an empty 'ByteString'.
 --
 -- @since 0.1.0.0
 splitPackets :: Int -> ByteString -> Vector (Packet ByteString)
@@ -93,7 +101,7 @@ splitPackets size bytes
     -- In the case that the maximum packet payload length @size@ is not at least
     -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
     -- terminal packet.
-    Vector.singleton (fromByteString bytes)
+    Vector.singleton (Packet bytes (PacketInfo 0 1))
   | otherwise = Vector.create do
     -- Allocates a vector of containing @ByteString.length bytes / size@
     -- elements rounded upwards. For example, fix the length of @bytes@ to
@@ -118,14 +126,18 @@ splitPackets size bytes
 -- | Encodes 'Packet' message in the wire binary format.
 --
 -- @since 0.1.0.0
-wireWrapPacket :: Packet ByteString -> LByteString
-wireWrapPacket = Encode.toLazyByteString . wireBuildPacket
+wireWrapPacket :: WireEncodeOptions -> Packet ByteString -> LByteString
+wireWrapPacket options packet = fromStrict (wireWrapPacket' options packet)
 
 -- | Like 'wireWrapPacket', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
-wireWrapPacket' :: Packet ByteString -> ByteString
-wireWrapPacket' = toStrict . wireWrapPacket
+wireWrapPacket' :: WireEncodeOptions -> Packet ByteString -> ByteString
+wireWrapPacket' options packet =
+  wireBuildPacket packet
+    & Encode.toLazyByteString
+    & toStrict
+    & Message.mapEncodeOptions options
 
 -- | 'MessageBuilder' combinator capable of serializing a 'Packet' message.
 --
@@ -150,8 +162,16 @@ wireBuildPacket px = wireBuildPayloadField <> wireBuildVarintsField
 -- | Parses a 'ByteString' encoding 'Packet' in the wire binary format.
 --
 -- @since 0.1.0.0
-wireUnwrapPacket :: ByteString -> Either ParseError (Packet ByteString)
-wireUnwrapPacket = Decode.parse wireParsePacket
+wireUnwrapPacket ::
+  MonadError WireDecodeError m =>
+  WireDecodeOptions ->
+  ByteString ->
+  m (Packet ByteString)
+wireUnwrapPacket options bytes = do
+  bytes' <- Message.mapDecodeOptions options bytes
+  case Decode.parse wireParsePacket bytes' of
+    Left err -> Message.throwWireError err
+    Right rx -> pure rx
 
 -- | Parses a serialized 'Packet' message.
 --
@@ -171,22 +191,52 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
           recField = $(reifyRecordField ''Packet 'metadata)
        in Decode.msgOneField recField decodeMessageField
 
--- Packet - Network -------------------------------------------------------------
+-- Packet - Packet Readers ----------------------------------------------------
 
--- | TODO
+-- | Construct an action that reads serialized packets out of a 'TChan' to
+-- produce the original unpacketized 'ByteString' reconstructed from each packet
+-- payload.
 --
 -- @since 0.1.0.0
-packetReader :: TChan LByteString -> ExceptT ParseError IO LByteString
-packetReader = runPacketReader loop
+makePacketReader ::
+  (MonadIO m, MonadError WireDecodeError m) =>
+  TChan LByteString ->
+  WireDecodeOptions ->
+  m ByteString
+makePacketReader channel options = do
+  liftEither =<< liftIO (runPacketReader accumulate channel)
   where
-    loop :: PacketReader LByteString
-    loop = do
-      missing <- isMissingPackets
-      if missing
-        then readNextPacket >> loop
-        else asks packets >>= liftIO . atomically . mergePacketSet
+    accumulate :: PacketReader ByteString
+    accumulate = do
+      fix \loop -> do
+        missing <- isMissingPackets
+        when missing (readNextPacket options >> loop)
 
--- PacketInfo - Query -----------------------------------------------------------
+      packets <- asks packets
+      bytes <- atomically (mergePacketSet packets)
+      pure (toStrict bytes)
+
+-- Packet - Packet Senders -----------------------------------------------------
+
+-- | Construct a packetized message sender given the maximum size for each
+-- packet payload (in bytes), the wire serialization options, and a MQTT publish
+-- function.
+--
+-- @since 0.1.0.0
+makePacketSender ::
+  MonadUnliftIO m =>
+  Int ->
+  WireEncodeOptions ->
+  (ByteString -> m ()) ->
+  ByteString ->
+  m ()
+makePacketSender limit options publish message =
+  let packets :: Vector (Packet ByteString)
+      packets = splitPackets limit message
+   in forConcurrently_ packets \packet -> do
+        publish (wireWrapPacket' options packet)
+
+-- PacketInfo - Query ----------------------------------------------------------
 
 -- | Predicate on 'PacketInfo' testing if the 'position' is the last position for
 -- it's 'npackets'.
@@ -197,7 +247,7 @@ isLastPacketInfo info = position info == npackets info - 1
 
 -- PacketSet -------------------------------------------------------------------
 
--- | TODO
+-- | 'PacketSet' is a set of packets carrying a message payload type @a@.
 --
 -- @since 0.1.0.0
 newtype PacketSet a = PacketSet
@@ -209,7 +259,8 @@ newtype PacketSet a = PacketSet
 emptyPacketSetIO :: IO (PacketSet a)
 emptyPacketSetIO = fmap PacketSet TMap.emptyIO
 
--- | TODO
+-- | Merge the payloads of each packet in a 'PacketSet' back into the original
+-- unpacketized 'ByteString'.
 --
 -- @since 0.1.0.0
 mergePacketSet :: PacketSet ByteString -> STM LByteString
@@ -243,10 +294,10 @@ lengthPacketSet (PacketSet pxs) = TMap.length pxs
 --
 -- @since 0.1.0.0
 newtype PacketReader a = PacketReader
-  {unPacketReader :: ReaderT PacketReaderEnv (ExceptT ParseError IO) a}
+  {unPacketReader :: ReaderT PacketReaderEnv (ExceptT WireDecodeError IO) a}
   deriving newtype (Functor, Applicative, Monad)
   deriving newtype (MonadIO)
-  deriving newtype (MonadError ParseError, MonadReader PacketReaderEnv)
+  deriving newtype (MonadError WireDecodeError, MonadReader PacketReaderEnv)
 
 -- | TODO
 --
@@ -257,30 +308,30 @@ data PacketReaderEnv = PacketReaderEnv
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
-runPacketReader :: PacketReader a -> TChan LByteString -> ExceptT ParseError IO a
-runPacketReader (PacketReader m) channel = do
+runPacketReader ::
+  PacketReader a ->
+  TChan LByteString ->
+  IO (Either WireDecodeError a)
+runPacketReader m channel = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
-  runReaderT m (PacketReaderEnv channel pxs var)
+  unPacketReader m
+    & flip runReaderT (PacketReaderEnv channel pxs var)
+    & runExceptT
 
-readNextPacket :: PacketReader ()
-readNextPacket = do
+readNextPacket :: WireDecodeOptions -> PacketReader ()
+readNextPacket options = do
   query <- asks (readTChan . channel)
   bytes <- liftIO (atomically query)
-  case decodePacket bytes of
-    Left err -> throwError err
-    Right px -> do
-      pxs <- asks packets
-      var <- asks npacket
-      liftIO $ atomically do
-        let info :: PacketInfo
-            info = metadata px
-         in when (isLastPacketInfo info) do
-              putTMVar var (position info)
-        insertPacketSet px pxs
-  where
-    decodePacket :: LByteString -> Either Decode.ParseError (Packet ByteString)
-    decodePacket = wireUnwrapPacket . toStrict
+  packet <- wireUnwrapPacket options (toStrict bytes)
+  pxs <- asks packets
+  var <- asks npacket
+  liftIO $ atomically do
+    let info :: PacketInfo
+        info = metadata packet
+     in when (isLastPacketInfo info) do
+          putTMVar var (position info)
+    insertPacketSet packet pxs
 
 isMissingPackets :: PacketReader Bool
 isMissingPackets = do

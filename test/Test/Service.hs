@@ -9,7 +9,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Test.Tasty (TestTree, testGroup, after)
+import Test.Tasty (TestTree, after, testGroup)
 import Test.Tasty qualified as Test
 import Test.Tasty.HUnit (assertFailure, (@?=))
 
@@ -89,7 +89,7 @@ tests :: TestTree
 tests =
   testGroup
     "Test.Service"
-    [ after Test.AllSucceed "wire-format" testTreeNormal
+    [ after Test.AllSucceed "MQTT" testTreeNormal
     , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
     , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
     , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
@@ -117,7 +117,7 @@ withServiceFixture k = do
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent
+    logger = Logger print GRPC.MQTT.Logging.Debug
 
 --------------------------------------------------------------------------------
 
@@ -290,7 +290,7 @@ testMissingClientMethod = do
       err @?= expectation
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent
+    logger = Logger print GRPC.MQTT.Logging.Debug
 
     expectation :: GRPC.Client.ClientError
     expectation = GRPC.Client.ClientIOError (GRPC.GRPCIOCallError GRPC.Unsafe.CallError)
@@ -322,7 +322,7 @@ testMalformedMessage = do
   checkNormalResponse msg rsp
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent
+    logger = Logger print GRPC.MQTT.Logging.Debug
 
 --------------------------------------------------------------------------------
 
@@ -426,9 +426,9 @@ bidiStreamHandler _ recv send done = do
     sender = do
       results <-
         sequence
-          [ send (Message.BiDiRequestReply "Alice1")
+          [ send (Message.BiDiRequestReply "Alice1Alice1Alice1")
           , send (Message.BiDiRequestReply "Alice2")
-          , send (Message.BiDiRequestReply "Alice3")
+          , send (Message.BiDiRequestReply "Alice3Alice3Alice3")
           , done
           ]
       case sequence results of

@@ -14,7 +14,7 @@ where
 ---------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.TH.RemoteClient (mqttRemoteClientMethodMap)
-import Network.GRPC.MQTT.Types (Batched (Unbatched))
+import Network.GRPC.MQTT.Option.Batched (Batched (Unbatched))
 
 import Proto.Service
   ( TestService (TestService),

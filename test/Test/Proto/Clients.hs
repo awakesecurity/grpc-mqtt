@@ -13,8 +13,7 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.TH.Client (mqttClientFuncs)
-import Network.GRPC.MQTT.Types (Batched (Unbatched))
+import Network.GRPC.MQTT.TH.Client (makeMQTTClientFuncs)
 
 import Proto.Service
   ( TestService (TestService),
@@ -29,4 +28,4 @@ import Proto.Service
 
 ---------------------------------------------------------------------------------
 
-$(mqttClientFuncs "test/proto/service.proto" Unbatched)
+$(makeMQTTClientFuncs "test/proto/service.proto")

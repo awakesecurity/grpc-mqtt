@@ -208,7 +208,6 @@ handleControlMessage logger handle msg =
             _ <- tryPutTMVar (hdlHeartbeat handle) ()
             pure ()
         Right unknown -> do
-          -- TODO: cancel hdlThread and abort
           Logger.logWarn logger $ "Received unknown control message" <> show unknown
         Left other -> do
           Logger.logErr logger $ "Failed to parse control message: " <> show other

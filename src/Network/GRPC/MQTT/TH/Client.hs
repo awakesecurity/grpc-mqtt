@@ -118,8 +118,9 @@ makeMQTTClientFuncs filepath = do
 -- | Constructs gRPC handler function type signature. Fails if the string does
 -- not refer to a type constructor that visible to the call site's namespace.
 --
--- >>> makeQueryOptsSigQ "HandlerType"
--- f :: MQTTGRPCClient -> Topic -> HandlerType MQTTRequest MQTTResult
+-- @
+-- makeClientHandlerSigQ (DotProto.Single "HandlerType")
+-- @
 --
 -- @since 0.1.0.0
 makeClientHandlerSigQ :: DotProtoIdentifier -> Q Type
@@ -168,7 +169,7 @@ makeClientMethodNameQ pkgId svcId rpcId = do
 -- * The service identifier @svc@ should refer to a service defined in the
 --   package @pkg@, but this is not checked.
 --
--- >>> let pkg = DotProto.Dots (DotProto.Path ["cool", "proto", "package"])
+-- >>> let pkg = DotProto.Dots (DotProto.Path (fromList ["cool", "proto", "package"]))
 -- >>> let svc = DotProto.Single "ServiceName"
 -- >>> $(makeClientEndpointNameQ pkg svc >>= TH.stringE)
 -- "cool.proto.package.ServiceName"
@@ -183,8 +184,8 @@ makeClientEndpointNameQ pkgId svcId = do
 -- | @'makeClientEndpointNameQ' idt@ produces a name of a client handler
 -- function with the (unqualified) 'DotProtoIdentifier' @idt@.
 --
--- >>> let idt = DotProto.Dots (DotProto.Path ["qualified", "ServiceName"])
--- >>> $(makeClientHandlerNameQ idt >>= stringE)
+-- >>> let idt = DotProto.Dots (DotProto.Path (fromList ["qualified", "ServiceName"]))
+-- >>> $(makeClientHandlerNameQ idt >>= TH.stringE)
 -- "serviceNameMqttClient"
 --
 -- @since 0.1.0.0

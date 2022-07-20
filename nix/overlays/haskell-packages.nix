@@ -65,7 +65,6 @@ in {
               cp -r ${proto-files}/. $out/proto/.
               cd $out
               ${haskellPackagesNew.proto3-suite}/bin/compile-proto-file --proto proto/mqtt.proto --out $out
-              ${haskellPackagesNew.proto3-suite}/bin/compile-proto-file --proto proto/test.proto --out $out
             '';
 
             copyGeneratedCode = ''

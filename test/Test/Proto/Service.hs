@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
@@ -59,7 +60,13 @@ newTestService = Proto.testServiceServer testServiceHandlers
     testServiceHandlers :: TestService ServerRequest ServerResponse
     testServiceHandlers =
       Proto.TestService
-        { Proto.testServiceNormalCall = handleClientNormal
+        {
+#if MIN_VERSION_proto3_suite(0,4,3)
+          Proto.testServicenormalCall
+#else
+          Proto.testServiceNormalCall
+#endif
+            = handleClientNormal
         , Proto.testServiceClientStreamCall = handleClientStream
         , Proto.testServiceServerStreamCall = handleServerStream
         , Proto.testServiceBiDiStreamCall = handleBiDi

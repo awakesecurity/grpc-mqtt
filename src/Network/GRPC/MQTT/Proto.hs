@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
 -- | This module defines functions used by @grpc-mqtt@ internals for:
@@ -632,6 +633,11 @@ showCompileError = \case
      in tagS ++ "the enumeration " ++ strS ++ " was defined without any fields."
   DotProto.Unimplemented str ->
     showEmbedded 'DotProto.Unimplemented "unimplemented" str
+#if MIN_VERSION_proto3_suite(0,5,0)
+  DotProto.InvalidModuleName mn ->
+    let tagS = showErrorName 'DotProto.InvalidModuleName
+     in tagS ++ "invalid module name " ++ show mn ++ "."
+#endif
   where
     -- @ proto3-suite error: {1}: @
     showErrorName :: Name -> String

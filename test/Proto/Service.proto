@@ -8,7 +8,7 @@ package haskell.grpc.mqtt.test;
 
 service TestService {
   /* Unary Service */
-  rpc NormalCall(TwoInts) returns (OneInt) {
+  rpc normalCall(TwoInts) returns (OneInt) {
   }
 
   /* Server Streaming Service */

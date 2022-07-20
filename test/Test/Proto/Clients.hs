@@ -28,4 +28,4 @@ import Proto.Service
 
 ---------------------------------------------------------------------------------
 
-$(makeMQTTClientFuncs "test/proto/service.proto")
+$(makeMQTTClientFuncs "test/Proto/Service.proto")

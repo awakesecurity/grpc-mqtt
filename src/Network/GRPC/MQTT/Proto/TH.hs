@@ -32,6 +32,7 @@ import Proto3.Suite.DotProto
 import Proto3.Suite.DotProto qualified as DotProto
 import Proto3.Suite.DotProto.Generate (CompileError)
 import Proto3.Suite.DotProto.Internal qualified as DotProto
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 
 import Relude
 
@@ -89,9 +90,9 @@ toQualProtoNameQ idt = hoistCompileErrorQ (DotProto.dpIdentQualName idt)
 -- @since 0.1.0.0
 makeServiceFieldNameQ :: DotProtoIdentifier -> DotProtoIdentifier -> Q Name
 makeServiceFieldNameQ svcId rpcId = do
-  svcNm <- DotProto.fieldLikeName <$> toProtoNameQ svcId
-  rpcNm <- formatTypeNameQ =<< toProtoNameQ rpcId
-  pure (TH.mkName (svcNm ++ rpcNm))
+  svcNm <- toProtoNameQ svcId
+  rpcNm <- toProtoNameQ rpcId
+  TH.mkName <$> hoistCompileErrorQ (prefixedMethodName svcNm rpcNm)
 
 -- Quotation - Error Reporting -------------------------------------------------
 

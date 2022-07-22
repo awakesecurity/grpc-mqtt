@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -6,6 +7,10 @@ module Test.Service
   ( tests,
   )
 where
+
+#if !MIN_VERSION_proto3_suite(0,4,3)
+#define testServicenormalCall testServiceNormalCall
+#endif
 
 --------------------------------------------------------------------------------
 
@@ -78,7 +83,7 @@ import Proto.Service
         testServiceBatchServerStreamCall,
         testServiceBiDiStreamCall,
         testServiceClientStreamCall,
-        testServiceNormalCall,
+        testServicenormalCall,
         testServiceServerStreamCall
       ),
   )
@@ -128,7 +133,7 @@ testNormalCall :: Fixture ()
 testNormalCall = do
   let msg = Message.TwoInts 5 10
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-  rsp <- makeMethodCall testServiceNormalCall rqt
+  rsp <- makeMethodCall testServicenormalCall rqt
 
   checkNormalResponse msg rsp
 
@@ -244,7 +249,7 @@ testClientTimeout = do
   rsp <- liftIO $ withMQTTGRPCClient logger clientConfig \client -> do
     let msg = Message.TwoInts 5 10
     let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-    testServiceNormalCall (testServiceMqttClient client baseTopic) rqt
+    testServicenormalCall (testServiceMqttClient client baseTopic) rqt
 
   liftIO case rsp of
     MQTTError err -> do
@@ -279,7 +284,7 @@ testMissingClientMethod = do
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           let msg = Message.TwoInts 5 10
           let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-          testServiceNormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+          testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
 
   liftIO case rsp of
     MQTTError err -> do
@@ -317,7 +322,7 @@ testMalformedMessage = do
 
           -- Make a well-formed request to ensure the previous request did not
           -- take down the service
-          testServiceNormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+          testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
 
   checkNormalResponse msg rsp
   where

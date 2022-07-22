@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+import "haskell/grpc/mqtt/clevel.proto";
+
+package haskell.grpc.mqtt;
+
+extend google.protobuf.FileOptions {
+  optional bool batched_stream_file = 50001;
+  optional CLevel server_clevel_file = 50002;
+  optional CLevel client_clevel_file = 50003;
+}
+
+extend google.protobuf.ServiceOptions {
+  optional bool batched_stream_service = 50001;
+  optional CLevel server_clevel_service = 50002;
+  optional CLevel client_clevel_service = 50003;
+}
+
+extend google.protobuf.MethodOptions {
+  optional bool batched_stream = 50001;
+  optional CLevel server_clevel = 50002;
+  optional CLevel client_clevel = 50003;
+}

@@ -1,0 +1,32 @@
+
+syntax = "proto3";
+
+package haskell.grpc.mqtt;
+
+enum CLevel {
+  option allow_alias = true;
+  CLEVEL_DISABLE = 0;
+  CLEVEL_UNKNOWN = 0;
+  CLEVEL_1 = 1;
+  CLEVEL_2 = 2;
+  CLEVEL_3 = 3;
+  CLEVEL_4 = 4;
+  CLEVEL_5 = 5;
+  CLEVEL_6 = 6;
+  CLEVEL_7 = 7;
+  CLEVEL_8 = 8;
+  CLEVEL_9 = 9;
+  CLEVEL_10 = 10;
+  CLEVEL_11 = 11;
+  CLEVEL_12 = 12;
+  CLEVEL_13 = 13;
+  CLEVEL_14 = 14;
+  CLEVEL_15 = 15;
+  CLEVEL_16 = 16;
+  CLEVEL_17 = 17;
+  CLEVEL_18 = 18;
+  CLEVEL_19 = 19;
+  CLEVEL_20 = 20;
+  CLEVEL_21 = 21;
+  CLEVEL_22 = 22;
+}

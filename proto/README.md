@@ -23,8 +23,8 @@ message Response {
 }
 
 service ExampleService {
-  // Enables zstandard compression with a compression level 10 for all RPCs in 
-  // this service.
+  // Enables response compression (via zstandard) with a compression level 10 
+  // for all RPCs in this service..
   option (haskell.grpc.mqtt.server_clevel_service) = CLEVEL_10;
   
   rpc SayHello(HelloRequest) returns (stream Response);
@@ -36,8 +36,8 @@ service ExampleService {
   }; 
 
   rpc SayGoodbye(HelloRequest) returns (stream Response) {
-    // Overrides the service's default compression level value and disables 
-    // response compression for this method.
+    // Overrides the service's default compression level value for responses and
+    // disables response compression for this method.
     option (haskell.grpc.mqtt.server_clevel) = CLEVEL_DISABLE;
   };
 }

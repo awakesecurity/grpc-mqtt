@@ -13,8 +13,6 @@ let
       };
     in (import source { inherit (pkgsNew) lib; }).gitignoreSource;
 
-  proto-files = ../../proto;
-
 in {
   all-cabal-hashes = pkgsOld.fetchurl {
     url = "https://github.com/commercialhaskell/all-cabal-hashes/archive/946958a82b6c589393f3ba9234345ac3f2d3d512.tar.gz";
@@ -60,27 +58,10 @@ in {
                 (gitignoreSource ../../.)
                 { };
 
-            compiled-protos = pkgsNew.runCommand "grpc-mqtt-compile-protos" { } ''
-              mkdir -p $out/proto
-              cp -r ${proto-files}/. $out/proto/.
-              cd $out
-              ${haskellPackagesNew.proto3-suite}/bin/compile-proto-file --proto proto/mqtt.proto --out $out
-            '';
-
-            copyGeneratedCode = ''
-              mkdir -p gen
-              ${pkgsNew.rsync}/bin/rsync \
-              --recursive \
-              --checksum \
-              ${compiled-protos}/ gen
-            '';
-
           in
             pkgsNew.haskell.lib.overrideCabal
               grpc-mqtt-base
               (old: {
-                postPatch = (old.postPatch or "") + copyGeneratedCode;
-
                 # Network failures?
                 doCheck = false;
               });

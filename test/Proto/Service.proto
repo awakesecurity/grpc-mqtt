@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "proto/message.proto";
+import "Proto/Message.proto";
 
 // Package declaration is only specified because the proto-suite code generator
 // requires it.

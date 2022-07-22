@@ -30,4 +30,4 @@ import Proto.Service
 
 ---------------------------------------------------------------------------------
 
-$(mqttRemoteClientMethodMap "test/proto/service.proto" Unbatched)
+$(mqttRemoteClientMethodMap "test/Proto/Service.proto" Unbatched)

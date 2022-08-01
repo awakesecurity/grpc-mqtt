@@ -236,10 +236,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                  reader >>= \case
-                    Nothing -> pure Nothing
-                    Just bs -> withExceptT Message.toRemoteError do
-                      Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
+                  chunks <- reader
+                  case chunks of
+                    [] -> pure Nothing
+                    (bs : bss) -> withExceptT Message.toRemoteError do
+                      putStrLn $ "Client receiver: " <> show bs <> show bss
+                      Just <$> Message.fromWireEncoded decodeOptions bs
 
             -- Run user-provided stream handler
             liftIO (streamHandler metadata mqttSRecv)
@@ -256,10 +258,11 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                  chunk <- reader
-                  case chunk of
-                    Nothing -> pure Nothing
-                    Just bs -> withExceptT Message.toRemoteError do
+                  chunks <- reader
+                  case chunks of
+                    [] -> pure Nothing
+                    (bs : bss) -> withExceptT Message.toRemoteError do
+                      putStrLn $ "Client receiver: " <> show bs <> show bss
                       Just <$> Message.fromWireEncoded decodeOptions bs
 
             let mqttSSend :: StreamSend request

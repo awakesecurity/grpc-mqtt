@@ -23,7 +23,7 @@ where
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.STM.TChan (TChan)
-import Control.Concurrent.STM.TQueue (TQueue)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue)
 
 import Control.Monad.Except (MonadError, throwError)
 
@@ -34,12 +34,10 @@ import Data.Vector qualified as Vector
 import Relude hiding (atomically)
 
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Async (mapConcurrently_)
 import UnliftIO.STM
   ( atomically,
     isEmptyTQueue,
     newTQueue,
-    readTQueue,
     writeTQueue,
   )
 
@@ -121,25 +119,26 @@ makeStreamReader ::
   (MonadIO io, MonadError RemoteError m, MonadIO m) =>
   TChan LByteString ->
   WireDecodeOptions ->
-  io (m (Maybe ByteString))
+  io (m [ByteString])
 makeStreamReader channel options = do
   queue <- atomically newTQueue
   pure (nextStreamChunk queue)
   where
-    nextStreamChunk :: TQueue ByteString -> m (Maybe ByteString)
+    nextStreamChunk :: TQueue ByteString -> m [ByteString]
     nextStreamChunk queue = do
       runStreamChunkRead channel options >>= \case
-        Nothing -> pure Nothing
+        Nothing -> pure []
         Just cs -> do
-          liftIO (mapConcurrently_ (atomically . writeTQueue queue) cs)
+          putStrLn $ "nextStreamChunk: " <> show cs
+          liftIO $ atomically (mapM_ (writeTQueue queue) cs)
           readStreamQueue queue
 
-    readStreamQueue :: TQueue ByteString -> m (Maybe ByteString)
+    readStreamQueue :: TQueue ByteString -> m [ByteString]
     readStreamQueue queue = do
       isdone <- atomically (isEmptyTQueue queue)
       if isdone
         then nextStreamChunk queue
-        else atomically (Just <$> readTQueue queue)
+        else atomically (flushTQueue queue)
 
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
@@ -167,7 +166,7 @@ makeStreamBatchSender limit options publish
           (accChunks, accSize) <- readIORef chunksRef
           let size :: Int64
               size = fromIntegral (ByteString.length chunk)
-          if fromIntegral limit <= accSize + size
+          if accSize + size < fromIntegral limit
             then atomicWriteIORef chunksRef (Vector.snoc accChunks chunk, accSize + size)
             else do
               (chunks, _) <- readIORef chunksRef

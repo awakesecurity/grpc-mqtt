@@ -97,7 +97,6 @@ import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap)
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
-import Data.Traversable
 import Network.GRPC.MQTT.Option (ProtoOptions)
 import Proto.Mqtt (RemoteError)
 import Proto.Mqtt qualified as Proto
@@ -425,13 +424,15 @@ makeClientStreamReader channel options = do
         liftIO $ runIO do
           Session.logError "client stream reader: encountered error reading chunk" (show err)
         throwError err
-      Right chunk -> do
+      Right chunks -> do
         liftIO $ runIO do
-          Session.logDebug "client stream reader: read chunk" (show chunk)
-        for chunk \bytes -> do
-          runExceptT (Message.fromWireEncoded options bytes) >>= \case
-            Left err -> throwError (Message.toRemoteError err)
-            Right rx -> pure rx
+          Session.logDebug "client stream reader: read chunk" (show chunks)
+        case chunks of
+          [] -> pure Nothing
+          (bytes : _bytess) -> do
+            runExceptT (Message.fromWireEncoded options bytes) >>= \case
+              Left err -> throwError (Message.toRemoteError err)
+              Right rx -> pure (Just rx)
 
 makeClientStreamSender ::
   Message a =>

@@ -74,6 +74,7 @@ import Test.Proto.Clients (testServiceMqttClient)
 import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
 import Test.Proto.Service (newTestService)
 
+import Data.Sequence ((|>))
 import Proto.Message (BiDiRequestReply, OneInt, StreamReply, TwoInts)
 import Proto.Message qualified as Message
 import Proto.Service
@@ -83,10 +84,11 @@ import Proto.Service
         testServiceBatchServerStreamCall,
         testServiceBiDiStreamCall,
         testServiceClientStreamCall,
-        testServicenormalCall,
-        testServiceServerStreamCall
+        testServiceServerStreamCall,
+        testServicenormalCall
       ),
   )
+import System.IO (hFlush)
 
 --------------------------------------------------------------------------------
 
@@ -181,19 +183,25 @@ testTreeServerStream =
 
 testServerStreamCall :: Fixture ()
 testServerStreamCall = do
-  let msg = Message.StreamRequest "Alice" 3
-  let rqt = MQTTReaderRequest msg 10 mempty serverStreamHandler
+  let msg = Message.StreamRequest "Alice" 100
+  repliesRef <- liftIO $ newIORef mempty
+  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler repliesRef)
   rsp <- makeMethodCall testServiceServerStreamCall rqt
 
-  checkServerStreamResponse rsp
+  let expectedReplies :: Seq StreamReply
+      expectedReplies = (\(n :: Int) -> Message.StreamReply $ "Alice" <> show n) <$> fromList [1 .. 100]
+  checkServerStreamResponse rsp expectedReplies repliesRef
 
 testBatchServerStreamCall :: Fixture ()
 testBatchServerStreamCall = do
-  let msg = Message.StreamRequest "Alice" 3
-  let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
+  let msg = Message.StreamRequest "Alice" 100
+  repliesRef <- liftIO $ newIORef mempty
+  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler repliesRef)
   rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
 
-  checkServerStreamResponse rsp
+  let expectedReplies :: Seq StreamReply
+      expectedReplies = (\(n :: Int) -> Message.StreamReply $ "Alice" <> show n) <$> fromList [1 .. 100]
+  checkServerStreamResponse rsp expectedReplies repliesRef
 
 --------------------------------------------------------------------------------
 
@@ -367,14 +375,18 @@ checkClientStreamResponse ints rsp =
 
 checkServerStreamResponse ::
   MQTTResult 'ServerStreaming StreamReply ->
+  Seq StreamReply ->
+  IORef (Seq StreamReply) ->
   Fixture ()
-checkServerStreamResponse rsp =
+checkServerStreamResponse rsp expected actualRef =
   liftIO case rsp of
     MQTTError err -> do
       assertFailure (show err)
     GRPCResult (ClientErrorResponse err) -> do
       assertFailure (show err)
     GRPCResult (ClientReaderResponse _ status _) -> do
+      actual <- readIORef actualRef
+      actual @?= expected
       status @?= StatusOk
 
 checkBiDiStreamResponse ::
@@ -409,14 +421,19 @@ clientStreamHandler ints send =
   forM_ ints \int -> do
     send int
 
-serverStreamHandler :: MetadataMap -> StreamRecv StreamReply -> IO ()
-serverStreamHandler _ recv =
+serverStreamHandler :: IORef (Seq StreamReply) -> MetadataMap -> StreamRecv StreamReply -> IO ()
+serverStreamHandler repliesRef _ recv =
   fix \loop -> do
     recieved <- recv
     case recieved of
       Left err -> error (show err)
       Right Nothing -> pure ()
-      Right (Just _) -> loop
+      Right (Just reply) -> do
+        putStrLn $ "Received: " <> show reply
+        hFlush stdout
+        hFlush stderr
+        modifyIORef repliesRef (|> reply)
+        loop
 
 bidiStreamHandler ::
   MetadataMap ->

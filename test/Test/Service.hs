@@ -23,6 +23,8 @@ import Test.Tasty.HUnit (assertFailure, (@?=))
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
+import Data.Sequence qualified as Seq
+
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
   ( ClientResult
@@ -181,19 +183,27 @@ testTreeServerStream =
 
 testServerStreamCall :: Fixture ()
 testServerStreamCall = do
-  let msg = Message.StreamRequest "Alice" 3
-  let rqt = MQTTReaderRequest msg 10 mempty serverStreamHandler
+  buffer <- liftIO $ newIORef Seq.empty
+
+  let msg = Message.StreamRequest "Alice" 100
+  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceServerStreamCall rqt
 
-  checkServerStreamResponse rsp
+  let expected :: Seq StreamReply
+      expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
+   in checkServerStreamResponse rsp expected buffer
 
 testBatchServerStreamCall :: Fixture ()
 testBatchServerStreamCall = do
-  let msg = Message.StreamRequest "Alice" 3
-  let rqt = MQTTReaderRequest msg 6 mempty serverStreamHandler
+  buffer <- liftIO $ newIORef Seq.empty
+
+  let msg = Message.StreamRequest "Alice" 100
+  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
 
-  checkServerStreamResponse rsp
+  let expected :: Seq StreamReply
+      expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
+   in checkServerStreamResponse rsp expected buffer
 
 --------------------------------------------------------------------------------
 
@@ -367,14 +377,18 @@ checkClientStreamResponse ints rsp =
 
 checkServerStreamResponse ::
   MQTTResult 'ServerStreaming StreamReply ->
+  Seq StreamReply -> 
+  IORef (Seq StreamReply) ->
   Fixture ()
-checkServerStreamResponse rsp =
+checkServerStreamResponse rsp expected buffer =
   liftIO case rsp of
     MQTTError err -> do
       assertFailure (show err)
     GRPCResult (ClientErrorResponse err) -> do
       assertFailure (show err)
     GRPCResult (ClientReaderResponse _ status _) -> do
+      actual <- readIORef buffer
+      actual @?= expected
       status @?= StatusOk
 
 checkBiDiStreamResponse ::
@@ -409,14 +423,20 @@ clientStreamHandler ints send =
   forM_ ints \int -> do
     send int
 
-serverStreamHandler :: MetadataMap -> StreamRecv StreamReply -> IO ()
-serverStreamHandler _ recv =
+serverStreamHandler ::
+  IORef (Seq StreamReply) ->
+  MetadataMap -> 
+  StreamRecv StreamReply -> 
+  IO ()
+serverStreamHandler buffer _ recv =
   fix \loop -> do
     recieved <- recv
     case recieved of
       Left err -> error (show err)
       Right Nothing -> pure ()
-      Right (Just _) -> loop
+      Right (Just reply) -> do 
+        modifyIORef buffer (Seq.|> reply)
+        loop
 
 bidiStreamHandler ::
   MetadataMap ->

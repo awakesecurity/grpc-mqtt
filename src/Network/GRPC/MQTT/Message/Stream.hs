@@ -120,6 +120,8 @@ makeStreamReader ::
   WireDecodeOptions ->
   io (m (Maybe ByteString))
 makeStreamReader channel options = do
+  -- TODO: document 'makeStreamReader' how buffering the stream chunks here, 
+  -- noting interactions with other functions such as 'makeClientStreamReader'.
   queue <- atomically newTQueue
   isdone <- newIORef False
   pure (readStreamQueue queue isdone)

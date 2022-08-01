@@ -7,6 +7,9 @@ module Network.GRPC.MQTT.Message
     Request,
     Packet,
 
+    -- * Remote Error
+    RemoteError,
+
     -- * Wire Encoding
     mapEncodeOptions,
     toWireEncoded,

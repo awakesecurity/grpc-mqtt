@@ -15,6 +15,7 @@ module Test.Network.GRPC.MQTT.Message.Gen
 
     -- * Stream Chunk Generators
     streamChunk,
+    streamChunkLength,
   )
 where
 
@@ -135,6 +136,14 @@ streamChunk :: MonadGen m => m (Maybe (Vector ByteString))
 streamChunk = Gen.maybe do
   chunks <- Gen.sized \size ->
     let range :: Range Int
-        range = Range.constant 0 (fromIntegral size)
+        range = Range.constant 1 (fromIntegral size)
      in Gen.list range packetBytes
   pure (Vector.fromList chunks)
+
+streamChunkLength :: MonadGen m => Maybe (Vector ByteString) -> m Int
+streamChunkLength Nothing = do 
+  Gen.int Range.constantBounded 
+streamChunkLength (Just xs) = do 
+  let limit :: Int 
+      limit = foldr ((+) . ByteString.length) 0 xs
+   in Gen.int (Range.constant 0 limit)

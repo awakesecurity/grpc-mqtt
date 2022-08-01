@@ -23,7 +23,7 @@ where
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.STM.TChan (TChan)
-import Control.Concurrent.STM.TQueue (TQueue)
+import Control.Concurrent.STM.TQueue (TQueue, isEmptyTQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, throwError)
 
@@ -34,12 +34,9 @@ import Data.Vector qualified as Vector
 import Relude hiding (atomically)
 
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Async (mapConcurrently_)
 import UnliftIO.STM
   ( atomically,
-    isEmptyTQueue,
     newTQueue,
-    readTQueue,
     writeTQueue,
   )
 
@@ -123,24 +120,36 @@ makeStreamReader ::
   WireDecodeOptions ->
   io (m (Maybe ByteString))
 makeStreamReader channel options = do
+  -- TODO: document 'makeStreamReader' how buffering the stream chunks here, 
+  -- noting interactions with other functions such as 'makeClientStreamReader'.
   queue <- atomically newTQueue
-  pure (nextStreamChunk queue)
+  isdone <- newIORef False
+  pure (readStreamQueue queue isdone)
   where
-    nextStreamChunk :: TQueue ByteString -> m (Maybe ByteString)
-    nextStreamChunk queue = do
+    nextStreamChunk :: TQueue ByteString -> IORef Bool -> m ()
+    nextStreamChunk queue isdone = do
       runStreamChunkRead channel options >>= \case
-        Nothing -> pure Nothing
-        Just cs -> do
-          liftIO (mapConcurrently_ (atomically . writeTQueue queue) cs)
-          readStreamQueue queue
+        Nothing -> writeIORef isdone True
+        Just cs -> liftIO (atomically (mapM_ (writeTQueue queue) cs))
 
-    readStreamQueue :: TQueue ByteString -> m (Maybe ByteString)
-    readStreamQueue queue = do
-      isdone <- atomically (isEmptyTQueue queue)
-      if isdone
-        then nextStreamChunk queue
-        else atomically (Just <$> readTQueue queue)
-
+    readStreamQueue :: 
+      TQueue ByteString ->
+      IORef Bool -> 
+      m (Maybe ByteString)
+    readStreamQueue queue isdone = do
+      isQueueEmpty <- atomically (isEmptyTQueue queue)
+      if isQueueEmpty 
+        then do 
+          isStreamDone <- readIORef isdone
+          if isStreamDone
+            then pure Nothing
+            else do 
+              nextStreamChunk queue isdone
+              readStreamQueue queue isdone
+        else do 
+          chunk <- atomically (readTQueue queue)
+          pure (Just chunk)
+      
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
   TChan LByteString ->
@@ -167,7 +176,7 @@ makeStreamBatchSender limit options publish
           (accChunks, accSize) <- readIORef chunksRef
           let size :: Int64
               size = fromIntegral (ByteString.length chunk)
-          if fromIntegral limit <= accSize + size
+          if accSize + size < fromIntegral limit
             then atomicWriteIORef chunksRef (Vector.snoc accChunks chunk, accSize + size)
             else do
               (chunks, _) <- readIORef chunksRef

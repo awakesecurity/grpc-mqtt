@@ -141,10 +141,11 @@ testCallLongBytes :: Fixture ()
 testCallLongBytes = do
   let msg = Message.OneInt 4
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 mempty
-  result <- makeMethodCall testServicecallLongBytes rqt
 
   baseTopic <- asks Suite.testConfigBaseTopic
-  _ <- withServiceFixture \client -> do
+  result <- withServiceFixture \client -> do
+    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
     testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
     testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
     testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt

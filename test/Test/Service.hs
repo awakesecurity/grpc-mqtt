@@ -142,9 +142,12 @@ testCallLongBytes = do
   let msg = Message.OneInt 4
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 mempty
   result <- makeMethodCall testServicecallLongBytes rqt
-  _ <- makeMethodCall testServicecallLongBytes rqt
-  _ <- makeMethodCall testServicecallLongBytes rqt
-  _ <- makeMethodCall testServicecallLongBytes rqt
+
+  baseTopic <- asks Suite.testConfigBaseTopic
+  _ <- withServiceFixture \client -> do
+    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
   liftIO $ case result of 
     GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 

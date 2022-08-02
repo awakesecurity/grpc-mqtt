@@ -285,7 +285,12 @@ publishClientResponse options result = do
   client <- asks cfgClient
   topic <- askResponseTopic
   limit <- asks cfgMsgSize
+
+  Session.logDebug "publishing unary response" (show topic <> " | " <> show limit)
+
   Response.makeResponseSender client topic limit options result
+
+  Session.logDebug "...finished publishing unary response" (Topic.unTopic topic)
 
 publishPackets :: WireEncodeOptions -> ByteString -> Session ()
 publishPackets options message = do

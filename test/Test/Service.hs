@@ -27,14 +27,7 @@ import Data.Sequence qualified as Seq
 
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
-  ( ClientResult
-      ( ClientBiDiResponse,
-        ClientErrorResponse,
-        ClientNormalResponse,
-        ClientReaderResponse,
-        ClientWriterResponse
-      ),
-    MetadataMap,
+  ( MetadataMap,
     StreamRecv,
     StreamSend,
     WritesDone,
@@ -46,6 +39,9 @@ import Network.GRPC.HighLevel.Generated
     withGRPCClient,
   )
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
+import Network.GRPC.HighLevel.Client
+  ( ClientResult (..),
+  )
 
 import Network.MQTT.Client (QoS (QoS1), publishq)
 
@@ -87,8 +83,9 @@ import Proto.Service
         testServiceClientStreamCall,
         testServicenormalCall,
         testServiceServerStreamCall
-      ),
+      ), testServicecallLongBytes
   )
+import qualified Data.ByteString as ByteString
 
 --------------------------------------------------------------------------------
 
@@ -106,6 +103,7 @@ tests =
 withTestService :: (Async () -> IO a) -> Fixture a
 withTestService k = do
   svcOptions <- Suite.askServiceOptions
+  -- liftIO (print $ GRPC.optMaxReceiveMessageLength svcOptions)
   liftIO (Async.withAsync (newTestService svcOptions) k)
 
 withServiceFixture :: (MQTTGRPCClient -> IO a) -> Fixture a
@@ -124,12 +122,38 @@ withServiceFixture k = do
         withMQTTGRPCClient logger clientConfig k
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Debug
+    logger = Logger print GRPC.MQTT.Logging.Silent 
 
 --------------------------------------------------------------------------------
 
 testTreeNormal :: TestTree
-testTreeNormal = Suite.testFixture "Test.Service.Normal" testNormalCall
+testTreeNormal = 
+  testGroup 
+    ""
+    [ Suite.testFixture "LongBytes" testCallLongBytes
+    , after
+        Test.AllSucceed 
+        "Normal"
+        (Suite.testFixture "Call" testNormalCall)
+    ]
+
+testCallLongBytes :: Fixture ()
+testCallLongBytes = do
+  let msg = Message.OneInt 4
+  let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 mempty
+  result <- makeMethodCall testServicecallLongBytes rqt
+  _ <- makeMethodCall testServicecallLongBytes rqt
+  _ <- makeMethodCall testServicecallLongBytes rqt
+  _ <- makeMethodCall testServicecallLongBytes rqt
+
+  liftIO $ case result of 
+    GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 
+      print (ByteString.length x)
+    GRPCResult (ClientErrorResponse err) -> do
+      assertFailure (show err)
+    MQTTError err -> do
+      error err
+
 
 testNormalCall :: Fixture ()
 testNormalCall = do

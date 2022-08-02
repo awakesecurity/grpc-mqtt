@@ -27,8 +27,10 @@ import Proto.Service
     testServiceClientStreamCall,
 #if MIN_VERSION_proto3_suite(0,4,3)
     testServicenormalCall,
+    testServicecallLongBytes,
 #else
     testServiceNormalCall,
+    testServiceCallLongBytes,
 #endif
     testServiceServerStreamCall,
   )

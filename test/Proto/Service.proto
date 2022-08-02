@@ -8,6 +8,9 @@ package haskell.grpc.mqtt.test;
 
 service TestService {
   /* Unary Service */
+  rpc callLongBytes(OneInt) returns (BytesResponse) {
+  }
+
   rpc normalCall(TwoInts) returns (OneInt) {
   }
 

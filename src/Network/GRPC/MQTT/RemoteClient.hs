@@ -38,7 +38,7 @@ import Data.Text qualified as Text
 import Network.GRPC.HighLevel (GRPCIOError, StreamRecv, StreamSend)
 import Network.GRPC.HighLevel.Client
   ( ClientError (ClientIOError),
-    ClientResult,
+    ClientResult (..),
     WritesDone,
   )
 
@@ -53,7 +53,7 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
-import Proto3.Suite (Message)
+import Proto3.Suite (Message, toLazyByteString)
 import Proto3.Suite qualified as Proto3
 
 import Proto3.Wire.Decode qualified as Decode
@@ -228,7 +228,7 @@ handleRequest handle = do
 
       Session.logDebug "handling client request" (show rqt)
 
-      dispatchClientHandler \clientHandler -> case clientHandler of
+      dispatchClientHandler \case
         ClientUnaryHandler k -> do
           result <- liftIO (k message timeout metadata)
           publishClientResponse encodeOptions result
@@ -285,6 +285,16 @@ publishClientResponse options result = do
   client <- asks cfgClient
   topic <- askResponseTopic
   limit <- asks cfgMsgSize
+
+  Session.logDebug "...to the response topic" (Topic.unTopic topic)
+  case result of 
+    ClientNormalResponse x _ _ _ _ -> Session.logDebug "message" (show (toLazyByteString x))
+    ClientWriterResponse x _ _ _ _ -> 
+      case x of 
+        Nothing -> Session.logDebug "message" "Nothing"
+        Just x' -> Session.logDebug "message" (show (toLazyByteString x'))
+    _ -> pure ()
+
   Response.makeResponseSender client topic limit options result
 
 publishPackets :: WireEncodeOptions -> ByteString -> Session ()

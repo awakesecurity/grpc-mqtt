@@ -108,7 +108,11 @@ withTestConfig = runCont do
 askServiceOptions :: MonadReader TestConfig m => m ServiceOptions
 askServiceOptions = do
   port <- asks testConfigServerPort
-  pure GRPC.Generated.defaultServiceOptions{GRPC.Generated.serverPort = port}
+  pure GRPC.Generated.defaultServiceOptions
+    { GRPC.Generated.serverPort = port
+    , GRPC.Generated.serverMaxReceiveMessageLength = Just 100_000_000_000_000
+    , GRPC.Generated.serverMaxMetadataSize = Just 100_000_000_000_000
+    }
 
 askConfigClientGRPC :: MonadReader TestConfig m => m ClientConfig
 askConfigClientGRPC = do

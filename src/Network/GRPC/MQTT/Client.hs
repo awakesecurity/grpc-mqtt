@@ -158,11 +158,6 @@ withMQTTGRPCClient logger cfg =
   bracket 
     (connectMQTTGRPC logger cfg) 
     disconnectMQTTGRPC 
-    -- \client -> do
-    -- result <- k client
-    -- disconnectMQTTGRPC client
-    -- print "client disconnected"
-    -- pure result
 
 -- | Send a gRPC request over MQTT using the provided client This function makes
 -- synchronous requests.

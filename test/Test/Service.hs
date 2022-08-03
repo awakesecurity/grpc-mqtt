@@ -100,10 +100,10 @@ tests =
   testGroup
     "Test.Service"
     [ after Test.AllSucceed "MQTT" testTreeNormal
-    -- , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
-    -- , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
-    -- , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
-    -- , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
+    , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
+    , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
+    , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
+    , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a

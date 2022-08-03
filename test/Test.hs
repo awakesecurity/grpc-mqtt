@@ -46,7 +46,7 @@ testTree =
   testGroup
     "Tests: grpc-mqtt"
     [ Test.Network.GRPC.HighLevel.Extra.tests
-    -- , Test.Network.GRPC.MQTT.tests
+    , Test.Network.GRPC.MQTT.tests
     , Test.Service.tests
     ]
 

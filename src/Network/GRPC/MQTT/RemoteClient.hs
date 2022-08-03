@@ -53,7 +53,7 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
-import Proto3.Suite (Message, toLazyByteString)
+import Proto3.Suite (Message)
 import Proto3.Suite qualified as Proto3
 
 import Proto3.Wire.Decode qualified as Decode
@@ -286,14 +286,8 @@ publishClientResponse options result = do
   topic <- askResponseTopic
   limit <- asks cfgMsgSize
 
-  Session.logDebug "...to the response topic" (Topic.unTopic topic)
-  case result of 
-    ClientNormalResponse x _ _ _ _ -> Session.logDebug "message" (show (toLazyByteString x))
-    ClientWriterResponse x _ _ _ _ -> 
-      case x of 
-        Nothing -> Session.logDebug "message" "Nothing"
-        Just x' -> Session.logDebug "message" (show (toLazyByteString x'))
-    _ -> pure ()
+  Session.logDebug "publishing response as packets to client" (Topic.unTopic topic)
+  Session.logDebug "...with packet size" (show limit)
 
   Response.makeResponseSender client topic limit options result
 

@@ -25,6 +25,7 @@ common common
   ghc-options:
     -Wall
     -Wcompat
+    -Werror
     -Widentities
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
@@ -145,7 +146,7 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N2
+    -with-rtsopts=-N4
     -O2
 
   other-modules:

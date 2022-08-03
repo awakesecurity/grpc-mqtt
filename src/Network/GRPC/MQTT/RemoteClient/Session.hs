@@ -75,11 +75,11 @@ where
 ----------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (Async)
+import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.STM.TChan (TChan, newTChanIO)
 
-import Control.Monad.Fix (MonadFix)
-import Control.Monad.IO.Unlift (MonadUnliftIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Data.Time.Clock (NominalDiffTime)
 
@@ -91,7 +91,6 @@ import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
-import UnliftIO.Async qualified as Async
 import UnliftIO.Exception (finally)
 
 import Relude
@@ -119,7 +118,7 @@ newtype Session a = Session
     (Functor, Applicative, Monad)
     via ReaderT SessionConfig IO
   deriving
-    (MonadFix, MonadIO, MonadUnliftIO, MonadReader SessionConfig)
+    (MonadIO, MonadUnliftIO, MonadReader SessionConfig)
     via ReaderT SessionConfig IO
 
 -- | Evaluates a 'Session' with the given 'SessionConfig'.
@@ -145,11 +144,12 @@ withSession :: (SessionHandle -> Session ()) -> Session ()
 withSession k = do
   config <- ask
   let sessionKey = topicSid (cfgTopics config)
-  rec handle <- liftIO (newSessionHandleIO thread)
-      insertSessionM sessionKey handle
-      thread <- Async.async do 
-        finally (k handle) (deleteSessionM sessionKey)
-  pure ()
+  withRunInIO \runIO -> do
+    rec handle <- newSessionHandleIO thread
+        thread <- Async.async $ runIO do
+          insertSessionM sessionKey handle
+          finally (k handle) (deleteSessionM sessionKey)
+    pure ()
 
 -- | Querys the ambient sessions map for session with the given session id
 -- 'Topic'.
@@ -176,10 +176,6 @@ insertSessionM sid handle = do
 deleteSessionM :: Topic -> Session ()
 deleteSessionM sid = do
   sessions <- asks cfgSessions
-  atomically (TMap.lookup sid sessions) >>= \case 
-    Nothing -> pure ()
-    Just handle -> liftIO do 
-      Async.cancel (hdlThread handle)
   liftIO (atomically (TMap.delete sid sessions))
 
 -- Session - Logging ------------------------------------------------------------

@@ -135,6 +135,7 @@ library
     , unordered-containers
     , zstd
 
+-- cabal v2-test +RTS -N4 -qb0 -G1 -T -RTS
 test-suite test
   import:  common
   type:    exitcode-stdio-1.0

@@ -49,7 +49,6 @@ import Proto.Message
     OneInt,
     StreamReply,
     StreamRequest,
-    BytesResponse
   )
 import Proto.Message qualified as Message
 import Proto.Service (TestService)

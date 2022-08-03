@@ -146,8 +146,8 @@ testTreeNormal =
 testCallLongBytes :: Fixture ()
 testCallLongBytes = do
   baseTopic <- asks Suite.testConfigBaseTopic
-  results <- withServiceFixture \MQTTGRPCConfig{mqttMsgSizeLimit} client ->
-    Async.replicateConcurrently 16 do
+  results <- withServiceFixture \MQTTGRPCConfig{} client ->
+    Async.replicateConcurrently 8 do
 
       -- For uniquely identifying requests to the server.
       uuid <- UUID.nextRandom

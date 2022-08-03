@@ -64,8 +64,8 @@ import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
-import UnliftIO.Async (forConcurrently_)
 import UnliftIO (MonadUnliftIO)
+import UnliftIO.Async (forConcurrently_)
 
 ---------------------------------------------------------------------------------
 

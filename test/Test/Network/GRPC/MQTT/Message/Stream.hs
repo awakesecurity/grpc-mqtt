@@ -47,7 +47,7 @@ tests =
   testGroup
     "Network.GRPC.MQTT.Message.Stream"
     [ testTreeStreamWire
-    -- , testTreeStreamHandle
+    , testTreeStreamHandle
     ]
 
 -- Stream.Wire -----------------------------------------------------------------

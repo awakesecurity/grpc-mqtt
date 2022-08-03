@@ -136,7 +136,7 @@ streamChunk :: MonadGen m => m (Maybe (Vector ByteString))
 streamChunk = Gen.maybe do
   chunks <- Gen.sized \size ->
     let range :: Range Int
-        range = Range.constant 1 (fromIntegral size)
+        range = Range.constant 1 (max 1 (fromIntegral size))
      in Gen.list range packetBytes
   pure (Vector.fromList chunks)
 

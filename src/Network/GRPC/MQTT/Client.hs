@@ -177,7 +177,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    chan <- newTChanIO 
+    responsechan <- newTChanIO 
 
 
     -- Topics
@@ -185,7 +185,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
     atomicModifyIORef' responseChans \cxs -> 
-      (Map.insert responseTopic chan cxs, ())
+      (Map.insert responseTopic responsechan cxs, ())
 
     -- Message options
     let encodeOptions = Serial.makeClientEncodeOptions options
@@ -221,7 +221,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         case request of
           -- Unary Requests
           MQTTNormalRequest _ _ _ ->
-            Response.makeNormalResponseReader chan decodeOptions
+            Response.makeNormalResponseReader responsechan decodeOptions
           -- Client Streaming Requests
           MQTTWriterRequest _ _ streamHandler -> do
             liftIO $ do
@@ -230,14 +230,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
               -- Send end of stream indicator
               publishToStreamCompleted
 
-            Response.makeClientResponseReader chan decodeOptions
+            Response.makeClientResponseReader responsechan decodeOptions
 
           -- Server Streaming Requests
           MQTTReaderRequest _ _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader chan decodeOptions
+            metadata <- makeMetadataMapReader responsechan decodeOptions
 
-            reader <- Stream.makeStreamReader chan decodeOptions
+            reader <- Stream.makeStreamReader responsechan decodeOptions
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
@@ -250,14 +250,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
             liftIO (streamHandler metadata mqttSRecv)
 
             -- Return final result
-            Response.makeServerResponseReader chan decodeOptions
+            Response.makeServerResponseReader responsechan decodeOptions
 
           -- BiDirectional Server Streaming Requests
           MQTTBiDiRequest _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader chan decodeOptions
+            metadata <- makeMetadataMapReader responsechan decodeOptions
 
-            reader <- Stream.makeStreamReader chan decodeOptions
+            reader <- Stream.makeStreamReader responsechan decodeOptions
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
@@ -279,7 +279,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
             liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
             -- Return final result
-            Response.makeBiDiResponseReader chan decodeOptions
+            Response.makeBiDiResponseReader responsechan decodeOptions
   where
     makeMetadataMapReader ::
       TChan LByteString ->
@@ -342,7 +342,6 @@ connectMQTTGRPC logger cfg = do
   let clientCallback :: MessageCallback
       clientCallback =
         SimpleCallback \_ topic msg _ -> do
-
           cxs <- readIORef chans 
           case Map.lookup topic cxs of 
             Nothing -> do

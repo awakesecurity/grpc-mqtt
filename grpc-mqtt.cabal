@@ -135,7 +135,7 @@ library
     , unordered-containers
     , zstd
 
--- cabal v2-test +RTS -N4 -qb0 -G1 -T -RTS
+-- cabal v2-test +RTS -N4 -I2 -qb -qg -RTS
 test-suite test
   import:  common
   type:    exitcode-stdio-1.0
@@ -147,7 +147,7 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N4
+    -with-rtsopts=-N4 -I2 -qb -qg
     -O2
 
   other-modules:

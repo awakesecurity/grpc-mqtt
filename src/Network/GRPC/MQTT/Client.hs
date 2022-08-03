@@ -155,9 +155,9 @@ data MQTTGRPCClient = MQTTGRPCClient
 -- @since 0.1.0.0
 withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
-  bracket 
-    (connectMQTTGRPC logger cfg) 
-    disconnectMQTTGRPC 
+  bracket
+    (connectMQTTGRPC logger cfg)
+    disconnectMQTTGRPC
 
 -- | Send a gRPC request over MQTT using the provided client This function makes
 -- synchronous requests.

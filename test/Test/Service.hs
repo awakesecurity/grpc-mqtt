@@ -139,16 +139,17 @@ testTreeNormal =
 
 testCallLongBytes :: Fixture ()
 testCallLongBytes = do
-  let msg = Message.OneInt 4
+  let msg = Message.OneInt 1
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 mempty
 
   baseTopic <- asks Suite.testConfigBaseTopic
   result <- withServiceFixture \client -> do
-    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-    testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+    result <- Async.replicateConcurrently 5 do
+      testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+
+    case result of
+      [] -> error "oh no"
+      (v:_) -> pure v
 
   liftIO $ case result of 
     GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 

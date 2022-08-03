@@ -59,6 +59,7 @@ import Network.GRPC.HighLevel.Client (ClientConfig, Host, Port)
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
 import Network.GRPC.HighLevel.Generated (ServiceOptions)
 import Network.GRPC.HighLevel.Generated qualified as GRPC.Generated
+import Network.GRPC.Unsafe.ChannelArgs (Arg(..))
 
 import Network.MQTT.Topic (Topic)
 
@@ -110,7 +111,7 @@ askServiceOptions = do
   port <- asks testConfigServerPort
   pure GRPC.Generated.defaultServiceOptions
     { GRPC.Generated.serverPort = port
-    , GRPC.Generated.serverMaxReceiveMessageLength = Just 100_000_000_000_000
+    , GRPC.Generated.serverMaxReceiveMessageLength = Just 268435456
     , GRPC.Generated.serverMaxMetadataSize = Just 100_000_000_000_000
     }
 
@@ -123,7 +124,8 @@ askConfigClientGRPC = do
         GRPC.Client.ClientConfig
           { GRPC.Client.clientServerHost = host
           , GRPC.Client.clientServerPort = port
-          , GRPC.Client.clientArgs = []
+          , GRPC.Client.clientArgs =
+              [ MaxReceiveMessageLength 268435456 ]
           , GRPC.Client.clientSSLConfig = Nothing
           , GRPC.Client.clientAuthority = Nothing
           }

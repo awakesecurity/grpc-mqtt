@@ -67,6 +67,7 @@ import Network.GRPC.MQTT.Types
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
+import Network.GRPC.MQTT.Core (MQTTGRPCConfig(..))
 
 import Test.Proto.Clients (testServiceMqttClient)
 import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
@@ -87,6 +88,11 @@ import Proto.Service
   )
 import qualified Data.ByteString as ByteString
 
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
+
+import qualified Data.Map.Strict as Map
+
 --------------------------------------------------------------------------------
 
 tests :: TestTree
@@ -106,7 +112,7 @@ withTestService k = do
   -- liftIO (print $ GRPC.optMaxReceiveMessageLength svcOptions)
   liftIO (Async.withAsync (newTestService svcOptions) k)
 
-withServiceFixture :: (MQTTGRPCClient -> IO a) -> Fixture a
+withServiceFixture :: (MQTTGRPCConfig -> MQTTGRPCClient -> IO a) -> Fixture a
 withServiceFixture k = do
   configGRPC <- Suite.askConfigClientGRPC
   remoteConfig <- Suite.askRemoteConfigMQTT
@@ -119,7 +125,7 @@ withServiceFixture k = do
       Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
         sleep 0.5
         Async.link2 server remote
-        withMQTTGRPCClient logger clientConfig k
+        withMQTTGRPCClient logger clientConfig (k clientConfig)
   where
     logger :: Logger
     logger = Logger print GRPC.MQTT.Logging.Silent 
@@ -137,27 +143,46 @@ testTreeNormal =
         (Suite.testFixture "Call" testNormalCall)
     ]
 
+-- What we know:
+--   - Client sends requests correctly
+--   - Server receives requests correctly
+-- 
+-- What we don't know:
+--   - Does server send response correctly?
+--   - Does client reassemble and receive its response correctly?
+
 testCallLongBytes :: Fixture ()
 testCallLongBytes = do
-  let msg = Message.OneInt 1
-  let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 mempty
-
   baseTopic <- asks Suite.testConfigBaseTopic
-  result <- withServiceFixture \client -> do
-    result <- Async.replicateConcurrently 5 do
+  results <- withServiceFixture \MQTTGRPCConfig{mqttMsgSizeLimit} client ->
+    Async.replicateConcurrently 5 do
+
+      uuid <- UUID.nextRandom
+
+      let msg = Message.OneInt (fromIntegral mqttMsgSizeLimit) -- Int -> Int32 conversion, unlikely to overflow but possible
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+
       testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
-    case result of
-      [] -> error "oh no"
-      (v:_) -> pure v
+  liftIO do
+    putStrLn " "
+    putStrLn " "
+    forM_ results $ \case
+      GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 
+        print (ByteString.length x)
+      GRPCResult (ClientErrorResponse err) -> do
+        print err
+      MQTTError err -> do
+        error err
 
-  liftIO $ case result of 
-    GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 
-      print (ByteString.length x)
-    GRPCResult (ClientErrorResponse err) -> do
-      assertFailure (show err)
-    MQTTError err -> do
-      error err
+  liftIO do
+    forM_ results $ \case
+      GRPCResult (ClientNormalResponse _ _ _ _ _) ->
+        pure ()
+      GRPCResult (ClientErrorResponse err) -> do
+        assertFailure (show err)
+      MQTTError err -> do
+        error err
 
 
 testNormalCall :: Fixture ()
@@ -442,7 +467,7 @@ makeMethodCall ::
   Fixture (MQTTResult s rsp)
 makeMethodCall method request = do
   baseTopic <- asks Suite.testConfigBaseTopic
-  withServiceFixture \client -> do
+  withServiceFixture \_ client -> do
     method (testServiceMqttClient client baseTopic) request
 
 --------------------------------------------------------------------------------

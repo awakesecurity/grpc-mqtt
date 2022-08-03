@@ -145,8 +145,8 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N
-    -O0
+    -with-rtsopts=-N2
+    -O2
 
   other-modules:
     Proto.Service

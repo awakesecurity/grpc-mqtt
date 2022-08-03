@@ -45,7 +45,7 @@ import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 import Crypto.Nonce qualified as Nonce
 
 import Data.ByteString qualified as ByteString
-
+import Data.Map qualified as Map
 import Data.Text qualified as Text
 
 import Network.GRPC.HighLevel
@@ -139,7 +139,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | Channel for passing MQTT messages back to calling thread
-    responseChan :: TChan LByteString
+    responseChans :: IORef (Map Topic (TChan LByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -155,9 +155,14 @@ data MQTTGRPCClient = MQTTGRPCClient
 -- @since 0.1.0.0
 withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
-  bracket
-    (connectMQTTGRPC logger cfg)
-    disconnectMQTTGRPC
+  bracket 
+    (connectMQTTGRPC logger cfg) 
+    disconnectMQTTGRPC 
+    -- \client -> do
+    -- result <- k client
+    -- disconnectMQTTGRPC client
+    -- print "client disconnected"
+    -- pure result
 
 -- | Send a gRPC request over MQTT using the provided client This function makes
 -- synchronous requests.
@@ -177,10 +182,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
+    chan <- newTChanIO 
+
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
+
+    modifyIORef' responseChans (Map.insert responseTopic chan)
 
     -- Message options
     let encodeOptions = Serial.makeClientEncodeOptions options
@@ -216,7 +225,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         case request of
           -- Unary Requests
           MQTTNormalRequest _ _ _ ->
-            Response.makeNormalResponseReader responseChan decodeOptions
+            Response.makeNormalResponseReader chan decodeOptions
           -- Client Streaming Requests
           MQTTWriterRequest _ _ streamHandler -> do
             liftIO $ do
@@ -225,14 +234,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
               -- Send end of stream indicator
               publishToStreamCompleted
 
-            Response.makeClientResponseReader responseChan decodeOptions
+            Response.makeClientResponseReader chan decodeOptions
 
           -- Server Streaming Requests
           MQTTReaderRequest _ _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseChan decodeOptions
+            metadata <- makeMetadataMapReader chan decodeOptions
 
-            reader <- Stream.makeStreamReader responseChan decodeOptions
+            reader <- Stream.makeStreamReader chan decodeOptions
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
@@ -245,14 +254,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
             liftIO (streamHandler metadata mqttSRecv)
 
             -- Return final result
-            Response.makeServerResponseReader responseChan decodeOptions
+            Response.makeServerResponseReader chan decodeOptions
 
           -- BiDirectional Server Streaming Requests
           MQTTBiDiRequest _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseChan decodeOptions
+            metadata <- makeMetadataMapReader chan decodeOptions
 
-            reader <- Stream.makeStreamReader responseChan decodeOptions
+            reader <- Stream.makeStreamReader chan decodeOptions
 
             let mqttSRecv :: StreamRecv response
                 mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
@@ -274,7 +283,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
             liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
             -- Return final result
-            Response.makeBiDiResponseReader responseChan decodeOptions
+            Response.makeBiDiResponseReader chan decodeOptions
   where
     makeMetadataMapReader ::
       TChan LByteString ->
@@ -331,18 +340,25 @@ withControlSignals publishControlMsg =
 -- @since 0.1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
-  chan <- liftIO newTChanIO
+  chans <- newIORef Map.empty
+  uuid <- Nonce.new
 
   let clientCallback :: MessageCallback
       clientCallback =
         SimpleCallback \_ topic msg _ -> do
-          logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
-          logDebug logger $ " Raw: " <> decodeUtf8 (toStrict msg)
-          atomically $ writeTChan chan msg
+
+          cxs <- readIORef chans 
+          case Map.lookup topic cxs of 
+            Nothing -> do
+              logDebug logger $ "no such response topic: " <> unTopic topic
+            Just chan -> do 
+              logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
+              logDebug logger $ " Raw: " <> decodeUtf8 (toStrict msg)
+              atomically $ writeTChan chan msg
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
-  uuid <- Nonce.new
-  pure (MQTTGRPCClient conn chan uuid logger (fromIntegral (mqttMsgSizeLimit cfg)))
+
+  pure (MQTTGRPCClient conn chans uuid logger (fromIntegral (mqttMsgSizeLimit cfg)))
 
 disconnectMQTTGRPC :: MonadIO io => MQTTGRPCClient -> io ()
 disconnectMQTTGRPC client = liftIO (normalDisconnect (mqttClient client))

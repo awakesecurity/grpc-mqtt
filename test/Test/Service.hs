@@ -135,11 +135,11 @@ withServiceFixture k = do
 testTreeNormal :: TestTree
 testTreeNormal = 
   testGroup 
-    ""
+    "Normal"
     [ Suite.testFixture "LongBytes" testCallLongBytes
     , after
         Test.AllSucceed 
-        "Normal"
+        "LongBytes"
         (Suite.testFixture "Call" testNormalCall)
     ]
 

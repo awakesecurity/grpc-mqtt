@@ -97,10 +97,7 @@ handleClientLongBytes (ServerNormalRequest ServerCall{metadata=mm} (Message.OneI
 
       details :: StatusDetails
       details = fromString ("client normal: added ints " ++ show x)
-   in do
-    putStrLn " "
-    print mm
-    return (ServerNormalResponse response metadata StatusOk details)
+   in return (ServerNormalResponse response metadata StatusOk details)
 
 handleClientNormal :: Handler 'Normal Message.TwoInts Message.OneInt
 handleClientNormal (ServerNormalRequest _ (Message.TwoInts x y)) =

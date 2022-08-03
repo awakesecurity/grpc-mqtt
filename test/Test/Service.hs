@@ -143,50 +143,34 @@ testTreeNormal =
         (Suite.testFixture "Call" testNormalCall)
     ]
 
--- What we know:
---   - Client sends requests correctly
---   - Server receives requests correctly
--- 
--- What we don't know:
---   - Does server send response correctly?
---   - Does client reassemble and receive its response correctly?
-
 testCallLongBytes :: Fixture ()
 testCallLongBytes = do
   baseTopic <- asks Suite.testConfigBaseTopic
   results <- withServiceFixture \MQTTGRPCConfig{mqttMsgSizeLimit} client ->
     Async.replicateConcurrently 5 do
 
+      -- For uniquely identifying requests to the server.
       uuid <- UUID.nextRandom
 
       -- NB: 2022-08-02 we discovered a bug with concurrent client
       -- requests that send responses which, when sent back by the
       -- server trigger a GRPCIOTimeout error in some of the clients.
+      --
+      -- This test verifies that we packetize _at_ the MQTT message
+      -- size boundary, correctly.
       let msg = Message.OneInt (fromIntegral mqttMsgSizeLimit) -- Int -> Int32 conversion, unlikely to overflow but possible
-      let rqt = GRPC.MQTT.MQTTNormalRequest msg 2 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 3 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
       testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
   liftIO do
-    putStrLn " "
-    putStrLn " "
     forM_ results $ \case
       GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
         print (ByteString.length x)
       GRPCResult (ClientErrorResponse err) -> do
-        print err
-      MQTTError err -> do
-        error err
-
-  liftIO do
-    forM_ results $ \case
-      GRPCResult (ClientNormalResponse _ _ _ _ _) ->
-        pure ()
-      GRPCResult (ClientErrorResponse err) -> do
         assertFailure (show err)
       MQTTError err -> do
         error err
-
 
 testNormalCall :: Fixture ()
 testNormalCall = do

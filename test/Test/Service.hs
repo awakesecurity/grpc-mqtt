@@ -159,8 +159,11 @@ testCallLongBytes = do
 
       uuid <- UUID.nextRandom
 
+      -- NB: 2022-08-02 we discovered a bug with concurrent client
+      -- requests that send responses which, when sent back by the
+      -- server trigger a GRPCIOTimeout error in some of the clients.
       let msg = Message.OneInt (fromIntegral mqttMsgSizeLimit) -- Int -> Int32 conversion, unlikely to overflow but possible
-      let rqt = GRPC.MQTT.MQTTNormalRequest msg 15 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 2 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
       testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
@@ -168,7 +171,7 @@ testCallLongBytes = do
     putStrLn " "
     putStrLn " "
     forM_ results $ \case
-      GRPCResult (ClientNormalResponse (Message.BytesResponse x) ms0 ms1 stat details) -> do 
+      GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
         print (ByteString.length x)
       GRPCResult (ClientErrorResponse err) -> do
         print err

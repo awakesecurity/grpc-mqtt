@@ -21,7 +21,7 @@ import Network.GRPC.HighLevel
   )
 import Network.GRPC.HighLevel.Generated
   ( GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
-    ServiceOptions,
+    ServiceOptions, ServerCall(..),
   )
 import Network.GRPC.HighLevel.Server
   ( ServerRequest
@@ -88,16 +88,19 @@ newTestService = Proto.testServiceServer testServiceHandlers
 type Handler s rqt rsp = ServerRequest s rqt rsp -> IO (ServerResponse s rsp)
 
 handleClientLongBytes :: Handler 'Normal Message.OneInt Message.BytesResponse 
-handleClientLongBytes (ServerNormalRequest _ (Message.OneInt x)) =
+handleClientLongBytes (ServerNormalRequest ServerCall{metadata=mm} (Message.OneInt x)) =
   let response :: Message.BytesResponse
       response = Message.BytesResponse (ByteString.replicate (fromIntegral x) 1)
 
       metadata :: MetadataMap
-      metadata = [("normal_client_key", "normal_client_metadata")]
+      metadata = mm<>[("normal_client_key", "normal_client_metadata")]
 
       details :: StatusDetails
       details = fromString ("client normal: added ints " ++ show x)
-   in return (ServerNormalResponse response metadata StatusOk details)
+   in do
+    putStrLn " "
+    print mm
+    return (ServerNormalResponse response metadata StatusOk details)
 
 handleClientNormal :: Handler 'Normal Message.TwoInts Message.OneInt
 handleClientNormal (ServerNormalRequest _ (Message.TwoInts x y)) =

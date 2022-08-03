@@ -64,6 +64,7 @@ import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
+import UnliftIO.Async (forConcurrently_)
 import UnliftIO (MonadUnliftIO)
 
 ---------------------------------------------------------------------------------
@@ -232,7 +233,7 @@ makePacketSender ::
 makePacketSender limit options publish message =
   let packets :: Vector (Packet ByteString)
       packets = splitPackets limit message
-   in for_ packets \packet -> do
+   in forConcurrently_ packets \packet -> do
         publish (wireWrapPacket' options packet)
 
 -- PacketInfo - Query ----------------------------------------------------------

@@ -145,7 +145,6 @@ askConfigMQTT = do
                 (defaultParamsClient "localhost" "")
                   { TLS.clientSupported = def{TLS.supportedCiphers = ciphersuite_default}
                   }
-          , GRPC.MQTT.mqttMsgSizeLimit = 32
           }
    in pure config
 
@@ -155,7 +154,6 @@ askClientConfigMQTT = do
   config <- askConfigMQTT
   pure config 
     { GRPC.MQTT._connID = clientid
-    , GRPC.MQTT.mqttMsgSizeLimit = 32
     }
 
 
@@ -165,7 +163,6 @@ askRemoteConfigMQTT = do
   config <- askConfigMQTT
   pure config 
     { GRPC.MQTT._connID = remoteid
-    , GRPC.MQTT.mqttMsgSizeLimit = 32
     }
 
 --------------------------------------------------------------------------------

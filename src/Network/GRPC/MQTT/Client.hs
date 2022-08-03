@@ -189,7 +189,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
-    modifyIORef' responseChans (Map.insert responseTopic chan)
+    atomicModifyIORef' responseChans \cxs -> 
+      (Map.insert responseTopic chan cxs, ())
 
     -- Message options
     let encodeOptions = Serial.makeClientEncodeOptions options

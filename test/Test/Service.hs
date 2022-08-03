@@ -100,10 +100,10 @@ tests =
   testGroup
     "Test.Service"
     [ after Test.AllSucceed "MQTT" testTreeNormal
-    , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
-    , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
-    , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
-    , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
+    -- , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
+    -- , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
+    -- , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
+    -- , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a
@@ -155,15 +155,15 @@ testCallLongBytes :: Fixture ()
 testCallLongBytes = do
   baseTopic <- asks Suite.testConfigBaseTopic
   results <- withServiceFixture \MQTTGRPCConfig{mqttMsgSizeLimit} client ->
-    Async.replicateConcurrently 5 do
+    Async.replicateConcurrently 16 do
 
       uuid <- UUID.nextRandom
 
       -- NB: 2022-08-02 we discovered a bug with concurrent client
       -- requests that send responses which, when sent back by the
       -- server trigger a GRPCIOTimeout error in some of the clients.
-      let msg = Message.OneInt (fromIntegral mqttMsgSizeLimit) -- Int -> Int32 conversion, unlikely to overflow but possible
-      let rqt = GRPC.MQTT.MQTTNormalRequest msg 2 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+      let msg = Message.OneInt 16
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 60 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
       testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 

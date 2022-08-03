@@ -90,7 +90,7 @@ type Handler s rqt rsp = ServerRequest s rqt rsp -> IO (ServerResponse s rsp)
 handleClientLongBytes :: Handler 'Normal Message.OneInt Message.BytesResponse 
 handleClientLongBytes (ServerNormalRequest ServerCall{metadata=mm} (Message.OneInt x)) =
   let response :: Message.BytesResponse
-      response = Message.BytesResponse (ByteString.replicate (fromIntegral x) 1)
+      response = Message.BytesResponse (ByteString.replicate (1_000_000 * fromIntegral x) 1)
 
       metadata :: MetadataMap
       metadata = mm<>[("normal_client_key", "normal_client_metadata")]

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -11,6 +12,7 @@ where
 
 ---------------------------------------------------------------------------------
 
+import Data.ByteString qualified as ByteString 
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
@@ -19,7 +21,7 @@ import Network.GRPC.HighLevel
   )
 import Network.GRPC.HighLevel.Generated
   ( GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
-    ServiceOptions,
+    ServiceOptions, ServerCall(..),
   )
 import Network.GRPC.HighLevel.Server
   ( ServerRequest
@@ -62,11 +64,12 @@ newTestService = Proto.testServiceServer testServiceHandlers
       Proto.TestService
         {
 #if MIN_VERSION_proto3_suite(0,4,3)
-          Proto.testServicenormalCall
+          Proto.testServicecallLongBytes = handleClientLongBytes
+        , Proto.testServicenormalCall = handleClientNormal
 #else
-          Proto.testServiceNormalCall
+          Proto.testServiceCallLongBytes
+        , Proto.testServiceNormalCall = handleClientNormal
 #endif
-            = handleClientNormal
         , Proto.testServiceClientStreamCall = handleClientStream
         , Proto.testServiceServerStreamCall = handleServerStream
         , Proto.testServiceBiDiStreamCall = handleBiDi
@@ -82,6 +85,18 @@ newTestService = Proto.testServiceServer testServiceHandlers
 --
 
 type Handler s rqt rsp = ServerRequest s rqt rsp -> IO (ServerResponse s rsp)
+
+handleClientLongBytes :: Handler 'Normal Message.OneInt Message.BytesResponse 
+handleClientLongBytes (ServerNormalRequest ServerCall{metadata=mm} (Message.OneInt x)) =
+  let response :: Message.BytesResponse
+      response = Message.BytesResponse (ByteString.replicate (1_000_000 * fromIntegral x) 1)
+
+      metadata :: MetadataMap
+      metadata = mm<>[("normal_client_key", "normal_client_metadata")]
+
+      details :: StatusDetails
+      details = fromString ("client normal: added ints " ++ show x)
+   in return (ServerNormalResponse response metadata StatusOk details)
 
 handleClientNormal :: Handler 'Normal Message.TwoInts Message.OneInt
 handleClientNormal (ServerNormalRequest _ (Message.TwoInts x y)) =

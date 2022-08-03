@@ -38,7 +38,7 @@ import Data.Text qualified as Text
 import Network.GRPC.HighLevel (GRPCIOError, StreamRecv, StreamSend)
 import Network.GRPC.HighLevel.Client
   ( ClientError (ClientIOError),
-    ClientResult,
+    ClientResult (..),
     WritesDone,
   )
 
@@ -228,7 +228,7 @@ handleRequest handle = do
 
       Session.logDebug "handling client request" (show rqt)
 
-      dispatchClientHandler \clientHandler -> case clientHandler of
+      dispatchClientHandler \case
         ClientUnaryHandler k -> do
           result <- liftIO (k message timeout metadata)
           publishClientResponse encodeOptions result
@@ -285,6 +285,10 @@ publishClientResponse options result = do
   client <- asks cfgClient
   topic <- askResponseTopic
   limit <- asks cfgMsgSize
+
+  Session.logDebug "publishing response as packets to client" (Topic.unTopic topic)
+  Session.logDebug "...with packet size" (show limit)
+
   Response.makeResponseSender client topic limit options result
 
 publishPackets :: WireEncodeOptions -> ByteString -> Session ()

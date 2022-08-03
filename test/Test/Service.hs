@@ -27,14 +27,7 @@ import Data.Sequence qualified as Seq
 
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
-  ( ClientResult
-      ( ClientBiDiResponse,
-        ClientErrorResponse,
-        ClientNormalResponse,
-        ClientReaderResponse,
-        ClientWriterResponse
-      ),
-    MetadataMap,
+  ( MetadataMap,
     StreamRecv,
     StreamSend,
     WritesDone,
@@ -46,6 +39,9 @@ import Network.GRPC.HighLevel.Generated
     withGRPCClient,
   )
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
+import Network.GRPC.HighLevel.Client
+  ( ClientResult (..),
+  )
 
 import Network.MQTT.Client (QoS (QoS1), publishq)
 
@@ -71,6 +67,7 @@ import Network.GRPC.MQTT.Types
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
+import Network.GRPC.MQTT.Core (MQTTGRPCConfig(..))
 
 import Test.Proto.Clients (testServiceMqttClient)
 import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
@@ -87,8 +84,14 @@ import Proto.Service
         testServiceClientStreamCall,
         testServicenormalCall,
         testServiceServerStreamCall
-      ),
+      ), testServicecallLongBytes
   )
+import qualified Data.ByteString as ByteString
+
+import qualified Data.UUID as UUID
+import qualified Data.UUID.V4 as UUID
+
+import qualified Data.Map.Strict as Map
 
 --------------------------------------------------------------------------------
 
@@ -106,9 +109,10 @@ tests =
 withTestService :: (Async () -> IO a) -> Fixture a
 withTestService k = do
   svcOptions <- Suite.askServiceOptions
+  -- liftIO (print $ GRPC.optMaxReceiveMessageLength svcOptions)
   liftIO (Async.withAsync (newTestService svcOptions) k)
 
-withServiceFixture :: (MQTTGRPCClient -> IO a) -> Fixture a
+withServiceFixture :: (MQTTGRPCConfig -> MQTTGRPCClient -> IO a) -> Fixture a
 withServiceFixture k = do
   configGRPC <- Suite.askConfigClientGRPC
   remoteConfig <- Suite.askRemoteConfigMQTT
@@ -121,15 +125,49 @@ withServiceFixture k = do
       Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
         sleep 0.5
         Async.link2 server remote
-        withMQTTGRPCClient logger clientConfig k
+        withMQTTGRPCClient logger clientConfig (k clientConfig)
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Debug
+    logger = Logger print GRPC.MQTT.Logging.Silent 
 
 --------------------------------------------------------------------------------
 
 testTreeNormal :: TestTree
-testTreeNormal = Suite.testFixture "Test.Service.Normal" testNormalCall
+testTreeNormal = 
+  testGroup 
+    "Normal"
+    [ Suite.testFixture "LongBytes" testCallLongBytes
+    , after
+        Test.AllSucceed 
+        "LongBytes"
+        (Suite.testFixture "Call" testNormalCall)
+    ]
+
+testCallLongBytes :: Fixture ()
+testCallLongBytes = do
+  baseTopic <- asks Suite.testConfigBaseTopic
+  results <- withServiceFixture \MQTTGRPCConfig{} client ->
+    Async.replicateConcurrently 8 do
+
+      -- For uniquely identifying requests to the server.
+      uuid <- UUID.nextRandom
+
+      -- NB: 2022-08-02 we discovered a bug with concurrent client
+      -- requests that send responses which, when sent back by the
+      -- server trigger a GRPCIOTimeout error in some of the clients.
+      let msg = Message.OneInt 16
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+
+      testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+
+  liftIO do
+    forM_ results $ \case
+      GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
+        print (ByteString.length x)
+      GRPCResult (ClientErrorResponse err) -> do
+        assertFailure (show err)
+      MQTTError err -> do
+        error err
 
 testNormalCall :: Fixture ()
 testNormalCall = do
@@ -413,7 +451,7 @@ makeMethodCall ::
   Fixture (MQTTResult s rsp)
 makeMethodCall method request = do
   baseTopic <- asks Suite.testConfigBaseTopic
-  withServiceFixture \client -> do
+  withServiceFixture \_ client -> do
     method (testServiceMqttClient client baseTopic) request
 
 --------------------------------------------------------------------------------

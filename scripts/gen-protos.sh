@@ -41,7 +41,7 @@ compile_proto_files () {
 
 if [ $(command -v compile-proto-file) ]; then
   # Generate grpc-mqtt *.hs source files from *.proto files.
-  compile_proto_files "." "proto" "gen/src"
+  # compile_proto_files "." "proto" "gen/src"
 
   # Generate test-suite *.hs source files from mock *.proto files.
   compile_proto_files "./test" "./test" "gen/test"

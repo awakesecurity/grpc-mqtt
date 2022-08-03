@@ -135,6 +135,7 @@ library
     , unordered-containers
     , zstd
 
+-- cabal v2-test +RTS -N4 -I2 -qb -qg -RTS
 test-suite test
   import:  common
   type:    exitcode-stdio-1.0
@@ -146,7 +147,7 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N2
+    -with-rtsopts=-N4 -I2 -qb -qg
     -O2
 
   other-modules:
@@ -194,3 +195,5 @@ test-suite test
     , tasty-hedgehog < 1.1.0.0
     , tasty-hunit
     , tls
+    , uuid
+    , containers

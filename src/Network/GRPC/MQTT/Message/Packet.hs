@@ -230,11 +230,31 @@ makePacketSender ::
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit options publish message =
-  let packets :: Vector (Packet ByteString)
-      packets = splitPackets limit message
-   in forConcurrently_ packets \packet -> do
-        publish (wireWrapPacket' options packet)
+makePacketSender limit options publish message 
+  | limit <= 0 || ByteString.length message < limit =
+    -- In the case that the maximum packet payload length @size@ is not at least
+    -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
+    -- terminal packet.
+    let packet :: Packet ByteString
+        packet = (Packet message (PacketInfo 0 1))
+      in publish (wireWrapPacket' options packet)
+  | otherwise = 
+    -- Allocates a vector of containing @ByteString.length bytes / size@
+    -- elements rounded upwards. For example, fix the length of @bytes@ to
+    -- be 5 and @size@ to be 2, then a vector of length 3 is allocated.
+    let count :: Int
+        count = (ByteString.length message + (limit - 1)) `quot` limit
+     in forConcurrently_ [0 .. count - 1] \i -> do 
+          let packet :: Packet ByteString
+              packet = makePacket count i 
+           in publish (wireWrapPacket' options packet)
+  where
+    -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
+    sliceBytes :: Int -> ByteString
+    sliceBytes i = ByteString.take limit (ByteString.drop (i * limit) message)
+
+    makePacket :: Int -> Int -> Packet ByteString
+    makePacket count i = Packet (sliceBytes i) (PacketInfo i count)
 
 -- PacketInfo - Query ----------------------------------------------------------
 

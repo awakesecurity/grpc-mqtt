@@ -28,16 +28,16 @@ service TestService {
 
   /* Server Streaming with batching */
   rpc BatchServerStreamCall(StreamRequest) returns (stream StreamReply) {
-    option haskell.grpc.mqtt.batched_stream = true;
+    option (haskell.grpc.mqtt.batched_stream) = true;
   }
 
   /* Client Streaming with batching */
   rpc BatchClientStreamCall (stream OneInt) returns (OneInt) {
-    option haskell.grpc.mqtt.batched_stream = true;
+    option (haskell.grpc.mqtt.batched_stream) = true;
   }
 
   /* BiDi streaming with batching: ping-pong echo */
   rpc BatchBiDiStreamCall(stream BiDiRequestReply) returns (stream BiDiRequestReply) {
-    option haskell.grpc.mqtt.batched_stream = true;
+    option (haskell.grpc.mqtt.batched_stream) = true;
   }
 }

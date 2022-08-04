@@ -22,6 +22,9 @@ in {
   haskellPackages = pkgsOld.haskell.packages."${compiler}".override (old: {
     overrides = pkgsNew.lib.composeManyExtensions [
       (haskellPackagesNew: haskellPackagesOld: {
+        word-compat = pkgsNew.haskell.lib.dontCheck (haskellPackagesNew.callPackage ../packages/word-compat.nix {});
+      })
+      (haskellPackagesNew: haskellPackagesOld: {
         proto3-suite = pkgsNew.haskell.lib.dontCheck (haskellPackagesNew.callPackage ../packages/proto3-suite.nix {});
         proto3-wire  = haskellPackagesNew.callPackage ../packages/proto3-wire.nix  {};
         grpc-haskell = pkgsNew.haskell.lib.dontCheck (haskellPackagesNew.callPackage ../packages/grpc-haskell.nix {});

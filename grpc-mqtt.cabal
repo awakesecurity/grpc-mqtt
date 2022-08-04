@@ -55,7 +55,7 @@ common common
     , grpc-haskell
     , grpc-haskell-core
     , net-mqtt >= 0.8.1
-    , proto3-suite
+    , proto3-suite >= 0.5.1
     , proto3-wire
     , relude
     , text
@@ -147,7 +147,7 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N4 -I2 -qb -qg
+    "-with-rtsopts=-N4 -I2 -qb0 -G1"
     -O2
 
   other-modules:

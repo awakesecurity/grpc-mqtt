@@ -145,29 +145,51 @@ testTreeNormal =
 
 testCallLongBytes :: Fixture ()
 testCallLongBytes = do
+  configGRPC <- Suite.askConfigClientGRPC
+  remoteConfig <- Suite.askRemoteConfigMQTT
+  clientConfig <- Suite.askClientConfigMQTT
   baseTopic <- asks Suite.testConfigBaseTopic
-  results <- withServiceFixture \MQTTGRPCConfig{} client ->
-    Async.replicateConcurrently 8 do
 
-      -- For uniquely identifying requests to the server.
-      uuid <- UUID.nextRandom
+  withTestService \_ -> do
+    withGRPCClient configGRPC \grpcClient -> do
+      methods <- testServiceRemoteClientMethodMap grpcClient
+      results <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
 
-      -- NB: 2022-08-02 we discovered a bug with concurrent client
-      -- requests that send responses which, when sent back by the
-      -- server trigger a GRPCIOTimeout error in some of the clients.
-      let msg = Message.OneInt 16
-      let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+        _ <- Async.async do
+          withMQTTGRPCClient logger clientConfig \client ->
+            Async.replicateConcurrently 8 do
+              uuid <- UUID.nextRandom
 
-      testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+              let msg = Message.OneInt 8
+              let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
-  liftIO do
-    forM_ results $ \case
-      GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
-        print (ByteString.length x)
-      GRPCResult (ClientErrorResponse err) -> do
-        assertFailure (show err)
-      MQTTError err -> do
-        error err
+              testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+
+        withMQTTGRPCClient logger clientConfig \client ->
+          Async.replicateConcurrently 8 do
+
+            -- For uniquely identifying requests to the server.
+            uuid <- UUID.nextRandom
+
+            -- NB: 2022-08-02 we discovered a bug with concurrent client
+            -- requests that send responses which, when sent back by the
+            -- server trigger a GRPCIOTimeout error in some of the clients.
+            let msg = Message.OneInt 8
+            let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+
+            testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+
+      liftIO do
+        forM_ results $ \case
+          GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
+            print (ByteString.length x)
+          GRPCResult (ClientErrorResponse err) -> do
+            assertFailure (show err)
+          MQTTError err -> do
+            error err
+  where
+    logger :: Logger
+    logger = Logger print GRPC.MQTT.Logging.Silent 
 
 testNormalCall :: Fixture ()
 testNormalCall = do
@@ -194,6 +216,7 @@ testClientStreamCall :: Fixture ()
 testClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
   let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
+
   rsp <- makeMethodCall testServiceClientStreamCall rqt
 
   checkClientStreamResponse msg rsp

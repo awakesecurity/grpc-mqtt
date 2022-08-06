@@ -219,7 +219,7 @@ mockHandlePacket encodeOptions decodeOptions = do
   Right message === result
 
 mockPublish :: TChan LByteString -> ByteString -> IO ()
-mockPublish channel message = atomically do
+mockPublish channel message = do
   let message' :: LByteString
       message' = fromStrict @LByteString @ByteString message
-   in writeTChan channel message'
+   in atomically (writeTChan channel message')

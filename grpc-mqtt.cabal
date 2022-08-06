@@ -147,7 +147,7 @@ test-suite test
   ghc-options:
     -threaded
     -rtsopts
-    -with-rtsopts=-N4
+    "-with-rtsopts=-N4 -I2 -qb0 -G1"
     -O2
 
   other-modules:

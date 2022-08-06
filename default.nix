@@ -22,11 +22,12 @@ let
                 gpr = self.grpc;
               };
               grpc-haskell = self.haskell.lib.dontCheck (haskellPackagesNew.callPackage nix/packages/grpc-haskell.nix { });
+              grpc-mqtt = haskellPackagesNew.callCabal2nix "grpc-mqtt" (gitignoreSource ./.) { };
               range-set-list = self.haskell.lib.overrideCabal haskellPackagesOld.range-set-list (_: {
                 broken = false;
                 jailbreak = true;
               });
-              grpc-mqtt = haskellPackagesNew.callCabal2nix "grpc-mqtt" (gitignoreSource ./.) { };
+              word-compat = haskellPackagesNew.callPackage nix/packages/word-compat.nix { };
             })
           ];
         });

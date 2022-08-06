@@ -12,9 +12,9 @@ module Network.GRPC.MQTT.TH.RemoteClient
   )
 where
 
-import Relude
+import Network.GRPC.HighLevel.Client (Client)
 
-import Network.GRPC.MQTT.TH.Proto (forEachService)
+import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 
 import Language.Haskell.TH
   ( Dec,
@@ -31,23 +31,30 @@ import Language.Haskell.TH
     varE,
     varP,
   )
-import Network.GRPC.HighLevel.Client (Client)
-import Network.GRPC.MQTT.Option.Batched (Batched)
-import Network.GRPC.MQTT.Types (MethodMap)
-import Network.GRPC.MQTT.Wrapping (wrapServerStreamingClientHandler, wrapUnaryClientHandler)
-import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
+
+import Relude
+
 import Turtle (FilePath)
 
 --------------------------------------------------------------------------------
 
-mqttRemoteClientMethodMap :: Turtle.FilePath -> Batched -> Q [Dec]
-mqttRemoteClientMethodMap fp defaultBatchedStream = fmap concat $
-  forEachService fp defaultBatchedStream $ \serviceName serviceMethods -> do
+import Network.GRPC.MQTT.TH.Proto (forEachService)
+import Network.GRPC.MQTT.Types (MethodMap)
+import Network.GRPC.MQTT.Wrapping
+  ( wrapServerStreamingClientHandler,
+    wrapUnaryClientHandler,
+  )
+
+--------------------------------------------------------------------------------
+
+mqttRemoteClientMethodMap :: Turtle.FilePath -> Q [Dec]
+mqttRemoteClientMethodMap fp = fmap concat $
+  forEachService fp \serviceName serviceMethods -> do
     clientFuncName <- mkName <$> prefixedMethodName serviceName "RemoteClientMethodMap"
     grpcClientName <- mkName <$> prefixedMethodName serviceName "Client"
     lift $ rcMethodMap clientFuncName grpcClientName serviceMethods
 
-rcMethodMap :: Name -> Name -> [(String, Batched, ExpQ, Name)] -> DecsQ
+rcMethodMap :: Name -> Name -> [(String, ExpQ, Name)] -> DecsQ
 rcMethodMap fname grpcName methods = do
   fSig <- sigD fname [t|Client -> IO MethodMap|]
   fDef <- funD fname [clause args (normalB methodMapE) []]
@@ -57,10 +64,7 @@ rcMethodMap fname grpcName methods = do
     clientE = varE clientName
     args = [varP clientName]
     clientVarName = mkName "client"
-    methodPairs =
-      fmap
-        (\(method, _, wrapFun, clientFun) -> [e|(method, $wrapFun ($(varE clientFun) $(varE clientVarName)))|])
-        methods
+    methodPairs = fmap (\(method, wrapFun, clientFun) -> [e|(method, $wrapFun ($(varE clientFun) $(varE clientVarName)))|]) methods
     methodMapE =
       [e|
         do

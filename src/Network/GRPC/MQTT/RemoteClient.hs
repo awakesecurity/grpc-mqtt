@@ -237,13 +237,13 @@ handleRequest handle = do
             let sender = makeClientStreamSender channel options
             k timeout metadata (runIO . sender)
           publishClientResponse encodeOptions result
-        ClientServerStreamHandler _ k -> do
+        ClientServerStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k message timeout metadata \_ ms recv -> runIO do
               publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
               makeServerStreamReader encodeOptions recv
           publishClientResponse encodeOptions result
-        ClientBiDiStreamHandler _ k -> do
+        ClientBiDiStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k timeout metadata \_ ms recv send done -> runIO do
               publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)

@@ -45,10 +45,6 @@ import Text.Show qualified as Show
 
 --------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Option.Batched (Batched)
-
---------------------------------------------------------------------------------
-
 -- | Represents the session ID for a request
 type SessionId = Text
 
@@ -131,11 +127,9 @@ data ClientHandler where
     ClientHandler
   ClientServerStreamHandler ::
     (Message response) =>
-    Batched ->
     (ByteString -> TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> IO ()) -> IO (ClientResult 'ServerStreaming response)) ->
     ClientHandler
   ClientBiDiStreamHandler ::
     (Message request, Message response) =>
-    Batched ->
     (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
     ClientHandler

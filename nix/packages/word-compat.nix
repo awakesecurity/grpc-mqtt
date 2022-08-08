@@ -1,4 +1,5 @@
 { mkDerivation, base, ghc-prim, lib }:
+
 mkDerivation {
   pname = "word-compat";
   version = "0.0.2";

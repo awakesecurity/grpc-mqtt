@@ -79,9 +79,6 @@ import Proto3.Wire.Decode (ParseError (..))
 
 ---------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Option.Batched (Batched)
-
----------------------------------------------------------------------------------
 
 -- Client Handler Wrappers
 wrapUnaryClientHandler ::
@@ -96,11 +93,10 @@ wrapUnaryClientHandler handler =
 
 wrapServerStreamingClientHandler ::
   (Message request, Message response) =>
-  Batched ->
   (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
   ClientHandler
-wrapServerStreamingClientHandler useBatchedStream handler =
-  ClientServerStreamHandler useBatchedStream $ \rawRequest timeout metadata recv ->
+wrapServerStreamingClientHandler handler =
+  ClientServerStreamHandler \rawRequest timeout metadata recv ->
     case fromByteString rawRequest of
       Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
       Right req -> handler (ClientReaderRequest req timeout metadata recv)
@@ -115,11 +111,10 @@ wrapClientStreamingClientHandler handler =
 
 wrapBiDiStreamingClientHandler ::
   (Message request, Message response) =>
-  Batched ->
   (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
   ClientHandler
-wrapBiDiStreamingClientHandler useBatchedStream handler =
-  ClientBiDiStreamHandler useBatchedStream $ \timeout metadata bidi -> do
+wrapBiDiStreamingClientHandler handler =
+  ClientBiDiStreamHandler \timeout metadata bidi -> do
     handler (ClientBiDiRequest timeout metadata bidi)
 
 -- Utilities

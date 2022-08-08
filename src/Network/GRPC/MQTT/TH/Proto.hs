@@ -56,10 +56,10 @@ import Proto3.Suite.DotProto qualified as DotProto
 import Proto3.Suite.DotProto.AST
   ( DotProto,
     DotProtoIdentifier,
-    DotProtoOption (dotProtoOptionIdentifier),
+    DotProtoOption,
     DotProtoPackageSpec,
-    DotProtoServicePart (DotProtoServiceOption, DotProtoServiceRPCMethod),
-    DotProtoValue (BoolLit),
+    DotProtoServicePart (DotProtoServiceRPCMethod),
+    DotProtoValue,
     Path,
     RPCMethod
       ( RPCMethod,
@@ -71,7 +71,6 @@ import Proto3.Suite.DotProto.AST
         rpcMethodResponseType
       ),
     Streaming (NonStreaming, Streaming),
-    dotProtoOptionValue,
   )
 import Proto3.Suite.DotProto.Internal (CompileError, invalidMethodNameError)
 import Proto3.Suite.DotProto.Internal qualified as DotProto
@@ -91,7 +90,6 @@ import Network.GRPC.MQTT.Option
       ),
     defaultProtoOptions,
   )
-import Network.GRPC.MQTT.Option.Batched (Batched (Batched, Unbatched))
 import Network.GRPC.MQTT.Proto
   ( ProtoDatum,
     ProtoOptionError (OptionValueTypeMismatch),
@@ -347,10 +345,9 @@ batchedStreamOptionIdent = DotProto.Single "hs_grpc_mqtt_batched_stream"
 
 forEachService ::
   Turtle.FilePath ->
-  Batched ->
-  (String -> [(String, Batched, ExpQ, Name)] -> ExceptT CompileError Q a) ->
+  (String -> [(String, ExpQ, Name)] -> ExceptT CompileError Q a) ->
   Q [a]
-forEachService filepath defBatchedStream action = do
+forEachService filepath action = do
   dotproto <- openProtoFileQ filepath
 
   pkgName <- toPackageNameQ (DotProto.protoPackage dotproto)
@@ -360,37 +357,18 @@ forEachService filepath defBatchedStream action = do
     serviceName <- toUnqualifiedNameQ nm
     let endpointPrefix = "/" ++ pkgQual ++ "." ++ serviceName ++ "/"
 
-    let isBatchedStreamEnabled :: [DotProtoOption] -> Maybe Batched
-        isBatchedStreamEnabled opts =
-          let maybeOpt = find (\opt -> dotProtoOptionIdentifier opt == batchedStreamOptionIdent) opts
-              isBatched opt =
-                if dotProtoOptionValue opt == BoolLit True
-                  then Batched
-                  else Unbatched
-           in isBatched <$> maybeOpt
-
-    let serviceUsesBatchedStream :: Maybe Batched
-        serviceUsesBatchedStream = isBatchedStreamEnabled $ mapMaybe toOption ps
-          where
-            toOption (DotProtoServiceOption opt) = Just opt
-            toOption _ = Nothing
-
-    let methodUsesBatchedStream :: RPCMethod -> Maybe Batched
-        methodUsesBatchedStream = isBatchedStreamEnabled . rpcMethodOptions
-
-    let serviceMethodName (DotProtoServiceRPCMethod method@RPCMethod{..}) = do
+    let serviceMethodName (DotProtoServiceRPCMethod RPCMethod{..}) = do
           case rpcMethodName of
             DotProto.Single rpcNm -> do
-              let useBatchedStream = fromMaybe defBatchedStream $ methodUsesBatchedStream method <|> serviceUsesBatchedStream
 
               let streamingWrapper =
                     case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
-                      (NonStreaming, Streaming) -> [e|wrapServerStreamingClientHandler useBatchedStream|]
+                      (NonStreaming, Streaming) -> [e|wrapServerStreamingClientHandler|]
                       (NonStreaming, NonStreaming) -> [e|wrapUnaryClientHandler|]
                       (Streaming, NonStreaming) -> [e|wrapClientStreamingClientHandler|]
-                      (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler useBatchedStream|]
+                      (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler|]
               clientFun <- mapCompileErrorQ (prefixedMethodName serviceName rpcNm)
-              return [(endpointPrefix <> rpcNm, useBatchedStream, streamingWrapper, TH.mkName clientFun)]
+              return [(endpointPrefix <> rpcNm, streamingWrapper, TH.mkName clientFun)]
             _ -> mapCompileErrorQ (invalidMethodNameError rpcMethodName)
         serviceMethodName _ = pure []
 

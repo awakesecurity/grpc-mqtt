@@ -1,4 +1,4 @@
 let 
-  pkgs = import nix/pkgs.nix {};
+  pkgs = import ./default.nix {};
 in
   pkgs.haskell.packages."${ghc}".grpc-mqtt

@@ -172,7 +172,6 @@ test-suite test
     Test.Suite.Fixture
     Test.Suite.Wire
     Test.Proto.Clients
-    Test.Proto.Message.Gen
     Test.Proto.RemoteClients
     Test.Proto.Service
 

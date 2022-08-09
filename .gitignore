@@ -3,3 +3,4 @@ test/certs/
 .vscode
 cabal.project.local
 result
+.hpc

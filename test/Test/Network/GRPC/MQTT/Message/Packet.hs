@@ -60,6 +60,7 @@ tests =
     , testTreePacketSplit
     , testTreePacketOrder
     , testTreePacketHandle
+    , testTreePacketInfo
     ]
 
 -- Packet.Wire -----------------------------------------------------------------

@@ -40,7 +40,7 @@ let
     overlays = [ overlay ];
   };
 in {
-  inherit (pkgs) cabal-install grpc mosquitto;
+  inherit (pkgs) cabal-install grpc haskell-language-server mosquitto;
   inherit (pkgs.haskell.packages."${ghc}") 
     grpc-mqtt hp2pretty proto3-suite threadscope;
 }

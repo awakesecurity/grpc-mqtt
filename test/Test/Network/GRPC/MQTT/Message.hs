@@ -16,7 +16,7 @@ import Test.Network.GRPC.MQTT.Message.Stream qualified
 tests :: TestTree
 tests =
   testGroup
-    "Network.GRPC.MQTT.Message"
+    "Message"
     [ Test.Network.GRPC.MQTT.Message.Packet.tests
     , Test.Network.GRPC.MQTT.Message.Request.tests
     , Test.Network.GRPC.MQTT.Message.Stream.tests

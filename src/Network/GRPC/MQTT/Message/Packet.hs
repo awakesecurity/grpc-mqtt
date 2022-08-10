@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -44,6 +45,8 @@ where
 
 ---------------------------------------------------------------------------------
 
+import Control.Concurrent ( getNumCapabilities )
+
 import Control.Concurrent.STM.TChan (TChan, readTChan)
 
 import Control.Monad.Except (MonadError, liftEither)
@@ -65,7 +68,7 @@ import Proto3.Wire.Encode qualified as Encode
 import Relude
 
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Async (forConcurrently_)
+import UnliftIO.Async (replicateConcurrently_)
 
 ---------------------------------------------------------------------------------
 
@@ -230,31 +233,43 @@ makePacketSender ::
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit options publish message 
+makePacketSender limit options publish message
   | limit <= 0 || ByteString.length message < limit =
     -- In the case that the maximum packet payload length @size@ is not at least
     -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
     -- terminal packet.
     let packet :: Packet ByteString
-        packet = (Packet message (PacketInfo 0 1))
-      in publish (wireWrapPacket' options packet)
-  | otherwise = 
-    -- Allocates a vector of containing @ByteString.length bytes / size@
-    -- elements rounded upwards. For example, fix the length of @bytes@ to
-    -- be 5 and @size@ to be 2, then a vector of length 3 is allocated.
-    let count :: Int
-        count = (ByteString.length message + (limit - 1)) `quot` limit
-     in forConcurrently_ [0 .. count - 1] \i -> do 
+        packet = Packet message (PacketInfo 0 1)
+     in publish (wireWrapPacket' options packet)
+  | otherwise = do
+    caps <- liftIO getNumCapabilities
+    jobs <- newTVarIO 0
+
+    replicateConcurrently_ caps $ fix \next -> 
+      atomically (takeJobId jobs) >>= \case
+        Nothing -> pure ()
+        Just jobid -> do 
           let packet :: Packet ByteString
-              packet = makePacket count i 
+              packet = makePacket jobid
            in publish (wireWrapPacket' options packet)
+          next
   where
+    njobs :: Int
+    njobs = (ByteString.length message + (limit - 1)) `quot` limit
+
+    takeJobId :: TVar Int -> STM (Maybe Int)
+    takeJobId jobs = do 
+      jobid <- readTVar jobs
+      if jobid < njobs
+        then writeTVar jobs (1 + jobid) $> Just jobid
+        else pure Nothing
+
     -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
     sliceBytes :: Int -> ByteString
     sliceBytes i = ByteString.take limit (ByteString.drop (i * limit) message)
 
-    makePacket :: Int -> Int -> Packet ByteString
-    makePacket count i = Packet (sliceBytes i) (PacketInfo i count)
+    makePacket :: Int -> Packet ByteString
+    makePacket jobid = Packet (sliceBytes jobid) (PacketInfo jobid njobs)
 
 -- PacketInfo - Query ----------------------------------------------------------
 

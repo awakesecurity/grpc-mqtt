@@ -72,6 +72,7 @@ import Network.GRPC.HighLevel.Extra (wireEncodeMetadataMap)
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
     connectMQTT,
+    heartbeatPeriodSeconds,
     subscribeOrThrow,
   )
 
@@ -189,7 +190,7 @@ handleNewSession config handle = handleWithHeartbeat
 
     runHeartbeat :: IO ()
     runHeartbeat = do
-      let period'sec = 1 + defaultWatchdogPeriodSec
+      let period'sec = 3 * heartbeatPeriodSeconds
       newWatchdogIO period'sec (hdlHeartbeat handle)
       Logger.logWarn (cfgLogger config) "Watchdog timed out"
 

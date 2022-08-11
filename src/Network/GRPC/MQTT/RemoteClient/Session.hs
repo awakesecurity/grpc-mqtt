@@ -41,7 +41,6 @@ module Network.GRPC.MQTT.RemoteClient.Session
       ),
 
     -- ** Session Watchdog
-    defaultWatchdogPeriodSec,
     newWatchdogIO,
 
     -- * Session Config
@@ -279,15 +278,6 @@ data SessionHandle = SessionHandle
   , hdlRqtQueue :: TQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
-
--- | The default watchdog timeout period in seconds.
---
--- >>> defaultWatchdogPeriodSec
--- 10s
---
--- @since 0.1.0.0
-defaultWatchdogPeriodSec :: NominalDiffTime
-defaultWatchdogPeriodSec = 10
 
 -- | Constructs a 'SessionHandle' monitoring from a request handler thread.
 --

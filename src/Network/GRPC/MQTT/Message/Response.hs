@@ -22,7 +22,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TChan (TChan)
+import Control.Concurrent.STM.TQueue (TQueue)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Traversable (for)
@@ -273,40 +273,40 @@ makeErrorResponseSender client topic limit options err = do
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'Normal a)
-makeNormalResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
+makeNormalResponseReader queue options = do
+  runExceptT (Packet.makePacketReader queue options) >>= \case
     Left err -> throwError (Message.toRemoteError err)
     Right bs -> unwrapUnaryResponse options bs
 
 makeClientResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ClientStreaming a)
-makeClientResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
+makeClientResponseReader queue options = do
+  runExceptT (Packet.makePacketReader queue options) >>= \case
     Left err -> throwError (Message.toRemoteError err)
     Right bs -> unwrapClientStreamResponse options bs
 
 makeServerResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ServerStreaming a)
-makeServerResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
+makeServerResponseReader queue options = do
+  runExceptT (Packet.makePacketReader queue options) >>= \case
     Left err -> throwError (Message.toRemoteError err)
     Right bs -> unwrapServerStreamResponse options bs
 
 makeBiDiResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'BiDiStreaming a)
-makeBiDiResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
+makeBiDiResponseReader queue options = do
+  runExceptT (Packet.makePacketReader queue options) >>= \case
     Left err -> throwError (Message.toRemoteError err)
     Right bs -> unwrapBiDiStreamResponse options bs

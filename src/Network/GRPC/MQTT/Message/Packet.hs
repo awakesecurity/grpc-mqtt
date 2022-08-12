@@ -47,7 +47,7 @@ where
 
 import Control.Concurrent ( getNumCapabilities )
 
-import Control.Concurrent.STM.TChan (TChan, readTChan)
+import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, liftEither)
 
@@ -203,11 +203,11 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
 -- @since 0.1.0.0
 makePacketReader ::
   (MonadIO m, MonadError WireDecodeError m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m ByteString
-makePacketReader channel options = do
-  liftEither =<< liftIO (runPacketReader accumulate channel)
+makePacketReader queue options = do
+  liftEither =<< liftIO (runPacketReader accumulate queue)
   where
     accumulate :: PacketReader ByteString
     accumulate = do
@@ -338,27 +338,27 @@ newtype PacketReader a = PacketReader
 --
 -- @since 0.1.0.0
 data PacketReaderEnv = PacketReaderEnv
-  { channel :: {-# UNPACK #-} !(TChan LByteString)
+  { queue :: {-# UNPACK #-} !(TQueue ByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
 runPacketReader ::
   PacketReader a ->
-  TChan LByteString ->
+  TQueue ByteString ->
   IO (Either WireDecodeError a)
-runPacketReader m channel = do
+runPacketReader m queue = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
   unPacketReader m
-    & flip runReaderT (PacketReaderEnv channel pxs var)
+    & flip runReaderT (PacketReaderEnv queue pxs var)
     & runExceptT
 
 readNextPacket :: WireDecodeOptions -> PacketReader ()
 readNextPacket options = do
-  query <- asks (readTChan . channel)
+  query <- asks (readTQueue . queue)
   bytes <- liftIO (atomically query)
-  packet <- wireUnwrapPacket options (toStrict bytes)
+  packet <- wireUnwrapPacket options bytes
   pxs <- asks packets
   var <- asks npacket
   liftIO $ atomically do

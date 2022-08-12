@@ -9,7 +9,7 @@ where
 --------------------------------------------------------------------------------
 
 import Hedgehog (Property, PropertyT, forAll, property, tripping, (===))
-import Hedgehog qualified as Hedgehog
+import Hedgehog qualified
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
 
@@ -27,7 +27,7 @@ import Test.Suite.Wire qualified as Test.Wire
 
 import Control.Concurrent.Async (concurrently)
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
+import Control.Concurrent.STM.TQueue (TQueue, writeTQueue, newTQueueIO)
 
 import Data.ByteString qualified as ByteString
 import Data.Vector (Vector)
@@ -193,10 +193,10 @@ mockPacketShuffle encodeOptions decodeOptions = do
   -- channel. This is to simulate recieving packet out of the order in they are
   -- needed.
   result <- Hedgehog.evalIO do
-    channel <- newTChanIO
+    queue <- newTQueueIO
     for_ pys \packet -> atomically do
-      writeTChan channel (Packet.wireWrapPacket encodeOptions packet)
-    runExceptT (Packet.makePacketReader channel decodeOptions)
+      writeTQueue queue (Packet.wireWrapPacket' encodeOptions packet)
+    runExceptT (Packet.makePacketReader queue decodeOptions)
 
   -- If 'Packet.packetReader' is able to correctly order packets it recieves,
   -- then @result@ should be equal to the unshuffled vector of packets.
@@ -205,22 +205,19 @@ mockPacketShuffle encodeOptions decodeOptions = do
 mockHandlePacket :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandlePacket encodeOptions decodeOptions = do
   message <- forAll Message.Gen.packetBytes
-  channel <- Hedgehog.evalIO newTChanIO
+  queue <- Hedgehog.evalIO newTQueueIO
   maxsize <- forAll (Message.Gen.packetSplitLength message)
 
   let reader :: ExceptT WireDecodeError IO ByteString
-      reader = Packet.makePacketReader channel decodeOptions
+      reader = Packet.makePacketReader queue decodeOptions
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize encodeOptions (mockPublish channel)
+      sender = Packet.makePacketSender maxsize encodeOptions (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender message) (runExceptT reader)
 
   Right message === result
 
-mockPublish :: TChan LByteString -> ByteString -> IO ()
-mockPublish channel message = do
-  let message' :: LByteString
-      message' = fromStrict @LByteString @ByteString message
-   in atomically (writeTChan channel message')
+mockPublish :: TQueue ByteString -> ByteString -> IO ()
+mockPublish queue message = atomically (writeTQueue queue message)

@@ -24,7 +24,7 @@ import Test.Suite.Wire qualified as Test.Wire
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (concurrently)
-import Control.Concurrent.STM.TChan (newTChanIO, writeTChan)
+import Control.Concurrent.STM.TQueue (newTQueueIO, writeTQueue)
 
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
@@ -108,12 +108,12 @@ mockHandleStream :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandleStream encodeOptions decodeOptions = do
   chunks <- forAll Message.Gen.streamChunk
   limit <- forAll (Message.Gen.streamChunkLength chunks)
-  channel <- Hedgehog.evalIO newTChanIO
+  queue <- Hedgehog.evalIO newTQueueIO
 
   (sender, done) <- makeStreamBatchSender @_ @IO limit encodeOptions \x -> do
-    atomically (writeTChan channel (fromStrict x))
+    atomically (writeTQueue queue x)
 
-  reader <- makeStreamReader channel decodeOptions
+  reader <- makeStreamReader queue decodeOptions
 
   ((), result) <- Hedgehog.evalIO do
     concurrently

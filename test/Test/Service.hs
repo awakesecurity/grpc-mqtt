@@ -31,6 +31,7 @@ import Network.GRPC.HighLevel.Client
     StreamRecv,
     StreamSend,
     WritesDone,
+    ClientResult (..),
   )
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
 import Network.GRPC.HighLevel.Generated
@@ -39,9 +40,6 @@ import Network.GRPC.HighLevel.Generated
     withGRPCClient,
   )
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
-import Network.GRPC.HighLevel.Client
-  ( ClientResult (..),
-  )
 
 import Network.MQTT.Client (QoS (QoS1), publishq)
 

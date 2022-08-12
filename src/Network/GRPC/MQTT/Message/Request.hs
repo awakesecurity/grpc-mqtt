@@ -126,7 +126,7 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (TChan)
+import Control.Concurrent.STM.TQueue (TQueue)
 
 import Control.Monad.Except (MonadError, liftEither)
 
@@ -325,11 +325,11 @@ wireParseRequest = do
 
 makeRequestReader ::
   (MonadIO m, MonadError WireDecodeError m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   m (Request ByteString)
-makeRequestReader channel = do
+makeRequestReader queue = do
   -- TODO: explain 'Serial.defaultDecodeOptions'
-  bytes <- Packet.makePacketReader channel Serial.defaultDecodeOptions
+  bytes <- Packet.makePacketReader queue Serial.defaultDecodeOptions
   case wireUnwrapRequest bytes of
     Left err -> Message.throwWireError err
     Right rx -> pure rx

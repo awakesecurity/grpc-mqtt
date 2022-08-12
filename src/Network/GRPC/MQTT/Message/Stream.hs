@@ -22,7 +22,6 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TChan (TChan)
 import Control.Concurrent.STM.TQueue (TQueue, isEmptyTQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, throwError)
@@ -116,10 +115,10 @@ wireUnwrapStreamChunk options bytes =
 makeStreamReader ::
   forall io m.
   (MonadIO io, MonadError RemoteError m, MonadIO m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   io (m (Maybe ByteString))
-makeStreamReader channel options = do
+makeStreamReader source options = do
   -- TODO: document 'makeStreamReader' how buffering the stream chunks here, 
   -- noting interactions with other functions such as 'makeClientStreamReader'.
   queue <- atomically newTQueue
@@ -128,7 +127,7 @@ makeStreamReader channel options = do
   where
     nextStreamChunk :: TQueue ByteString -> IORef Bool -> m ()
     nextStreamChunk queue isdone = do
-      runStreamChunkRead channel options >>= \case
+      runStreamChunkRead source options >>= \case
         Nothing -> writeIORef isdone True
         Just cs -> liftIO (atomically (mapM_ (writeTQueue queue) cs))
 
@@ -152,11 +151,11 @@ makeStreamReader channel options = do
       
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (Maybe (Vector ByteString))
-runStreamChunkRead channel options = do
-  result <- runExceptT (Packet.makePacketReader channel options)
+runStreamChunkRead queue options = do
+  result <- runExceptT (Packet.makePacketReader queue options)
   case result of
     Left err -> throwError (Message.toRemoteError err)
     Right bs -> wireUnwrapStreamChunk options bs

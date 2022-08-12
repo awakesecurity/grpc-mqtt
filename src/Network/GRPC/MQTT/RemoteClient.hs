@@ -24,7 +24,7 @@ where
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TChan (TChan, writeTChan)
+import Control.Concurrent.STM.TQueue (TQueue , writeTQueue)
 
 import Control.Exception (bracket)
 import Control.Exception.Safe (handleAny)
@@ -158,9 +158,9 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
                 let session :: Session ()
                     session = case sessionHandle of
                       Just handle -> liftIO do
-                        atomically (writeTChan (hdlRqtChan handle) msg)
+                        atomically (writeTQueue (hdlRqtQueue handle) (toStrict msg))
                       Nothing -> withSession \handle -> liftIO do
-                        atomically (writeTChan (hdlRqtChan handle) msg)
+                        atomically (writeTQueue (hdlRqtQueue handle) (toStrict msg))
                         handleNewSession config handle
                  in runSessionIO session config
 
@@ -217,8 +217,8 @@ handleControlMessage logger handle msg =
 -- @since 0.1.0.0
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
-  let channel = hdlRqtChan handle
-  runExceptT (Request.makeRequestReader channel) >>= \case
+  let queue = hdlRqtQueue handle
+  runExceptT (Request.makeRequestReader queue) >>= \case
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
       publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
@@ -234,7 +234,7 @@ handleRequest handle = do
           publishClientResponse encodeOptions result
         ClientClientStreamHandler k -> do
           result <- withRunInIO \runIO -> do
-            let sender = makeClientStreamSender channel options
+            let sender = makeClientStreamSender queue options
             k timeout metadata (runIO . sender)
           publishClientResponse encodeOptions result
         ClientServerStreamHandler k -> do
@@ -248,7 +248,7 @@ handleRequest handle = do
             k timeout metadata \_ ms recv send done -> runIO do
               publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
               let reader = makeServerStreamReader encodeOptions recv
-                  sender = makeServerStreamSender channel encodeOptions decodeOptions send done
+                  sender = makeServerStreamSender queue encodeOptions decodeOptions send done
                in concurrently_ sender reader
           publishClientResponse encodeOptions result
 
@@ -329,11 +329,11 @@ publishRemoteError options err = do
 ---------------------------------------------------------------------------------
 
 makePacketReader ::
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   Session (Either RemoteError ByteString)
-makePacketReader channel options = do
-  result <- runExceptT (Packet.makePacketReader channel options)
+makePacketReader queue options = do
+  result <- runExceptT (Packet.makePacketReader queue options)
   case result of
     Left err -> do
       Session.logError "wire parse error encountered parsing Packet" (show err)
@@ -364,14 +364,14 @@ handleWritesDone options done =
 makeServerStreamSender ::
   forall a.
   Message a =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireEncodeOptions ->
   WireDecodeOptions ->
   StreamSend a ->
   WritesDone ->
   Session ()
-makeServerStreamSender channel encodeOptions decodeOptions sender done = do
-  reader <- makeClientStreamReader @_ @a channel decodeOptions
+makeServerStreamSender queue encodeOptions decodeOptions sender done = do
+  reader <- makeClientStreamReader @_ @a queue decodeOptions
   fix \loop -> do
     runExceptT reader >>= \case
       Left err -> do
@@ -417,11 +417,11 @@ makeServerStreamReader options recv = do
 
 makeClientStreamReader ::
   (MonadError RemoteError m, MonadIO m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   Session (m (Maybe a))
-makeClientStreamReader channel options = do
-  reader <- Stream.makeStreamReader channel options
+makeClientStreamReader queue options = do
+  reader <- Stream.makeStreamReader queue options
   withRunInIO \runIO -> pure do
     result <- runExceptT reader
     case result of
@@ -439,14 +439,14 @@ makeClientStreamReader channel options = do
 
 makeClientStreamSender ::
   Message a =>
-  TChan LByteString ->
+  TQueue ByteString ->
   ProtoOptions ->
   StreamSend a ->
   Session ()
-makeClientStreamSender channel options sender = do
+makeClientStreamSender queue options sender = do
   let encodeOptions = Serial.makeRemoteEncodeOptions options
   let decodeOptions = Serial.makeRemoteDecodeOptions options
-  reader <- makeClientStreamReader channel decodeOptions
+  reader <- makeClientStreamReader queue decodeOptions
   fix \loop ->
     runExceptT reader >>= \case
       Left err -> publishRemoteError encodeOptions err

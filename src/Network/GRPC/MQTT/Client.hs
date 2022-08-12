@@ -37,7 +37,7 @@ import Control.Exception
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, writeTQueue)
 
 import Control.Monad.Except (throwError, withExceptT)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
@@ -138,8 +138,8 @@ import Proto.Mqtt (RemoteError)
 data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
-  , -- | Channel for passing MQTT messages back to calling thread
-    responseChans :: IORef (Map Topic (TChan LByteString))
+  , -- | 'TQueue' for passing MQTT messages back to calling thread
+    responseChans :: IORef (Map Topic (TQueue ByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -177,8 +177,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    responsechan <- newTChanIO 
-
+    responsechan <- newTQueueIO
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
@@ -282,12 +281,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
             Response.makeBiDiResponseReader responsechan decodeOptions
   where
     makeMetadataMapReader ::
-      TChan LByteString ->
+      TQueue ByteString ->
       WireDecodeOptions ->
       ExceptT RemoteError IO MetadataMap
-    makeMetadataMapReader channel decodeOptions = do
+    makeMetadataMapReader queue decodeOptions = do
       bytes <- withExceptT Message.toRemoteError do
-        Packet.makePacketReader channel decodeOptions
+        Packet.makePacketReader queue decodeOptions
       case wireDecodeMetadataMap bytes of
         Left err -> throwError (parseErrorToRCE err)
         Right rx -> pure rx
@@ -336,7 +335,7 @@ withControlSignals publishControlMsg =
 -- @since 0.1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
-  chans <- newIORef Map.empty
+  chans <- newIORef (Map.empty @Topic @(TQueue ByteString))
   uuid <- Nonce.new
 
   let clientCallback :: MessageCallback
@@ -348,8 +347,8 @@ connectMQTTGRPC logger cfg = do
               logDebug logger $ "no such response topic: " <> unTopic topic
             Just chan -> do 
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
-              logDebug logger $ " Raw: " <> decodeUtf8 (toStrict msg)
-              atomically $ writeTChan chan msg
+              logDebug logger $ " Raw: " <> decodeUtf8 msg
+              atomically $ writeTQueue chan (toStrict msg)
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

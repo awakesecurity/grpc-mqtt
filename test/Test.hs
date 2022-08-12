@@ -44,7 +44,7 @@ main =
 testTree :: TestTree
 testTree =
   testGroup
-    "Tests: grpc-mqtt"
+    "Test"
     [ Test.Network.GRPC.HighLevel.Extra.tests
     , Test.Network.GRPC.MQTT.tests
     , Test.Service.tests

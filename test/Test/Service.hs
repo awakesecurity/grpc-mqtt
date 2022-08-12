@@ -98,12 +98,12 @@ import qualified Data.Map.Strict as Map
 tests :: TestTree
 tests =
   testGroup
-    "Test.Service"
+    "Service"
     [ after Test.AllSucceed "MQTT" testTreeNormal
-    , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
-    , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
-    , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
-    , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
+    , after Test.AllSucceed "Normal" testTreeClientStream
+    , after Test.AllSucceed "ClientStream" testTreeServerStream
+    , after Test.AllSucceed "ServerStream" testTreeBiDiStream
+    , after Test.AllSucceed "BiDiStream" testTreeErrors
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a
@@ -155,16 +155,6 @@ testCallLongBytes = do
       methods <- testServiceRemoteClientMethodMap grpcClient
       results <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
 
-        _ <- Async.async do
-          withMQTTGRPCClient logger clientConfig \client ->
-            Async.replicateConcurrently 8 do
-              uuid <- UUID.nextRandom
-
-              let msg = Message.OneInt 8
-              let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
-
-              testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-
         withMQTTGRPCClient logger clientConfig \client ->
           Async.replicateConcurrently 8 do
 
@@ -204,7 +194,7 @@ testNormalCall = do
 testTreeClientStream :: TestTree
 testTreeClientStream =
   testGroup
-    "Test.Service.ClientStream"
+    "ClientStream"
     [ Suite.testFixture "Test.Service.ClientStream.Unbatched" testClientStreamCall
     , after
         Test.AllSucceed
@@ -234,7 +224,7 @@ testBatchClientStreamCall = do
 testTreeServerStream :: TestTree
 testTreeServerStream =
   testGroup
-    "Test.Service.ServerStream"
+    "ServerStream"
     [ Suite.testFixture "Test.Service.ServerStream.Unbatched" testServerStreamCall
     , after
         Test.AllSucceed
@@ -271,7 +261,7 @@ testBatchServerStreamCall = do
 testTreeBiDiStream :: TestTree
 testTreeBiDiStream =
   testGroup
-    "Test.Service.BiDiStream"
+    "BiDiStream"
     [ Suite.testFixture "Test.Service.BiDiStream.Unbatched" testBiDiStreamCall
     , after
         Test.AllSucceed

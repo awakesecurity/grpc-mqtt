@@ -51,6 +51,7 @@ import Network.GRPC.MQTT.Serial qualified as Serial
 
 import Proto.Mqtt (RemoteError, WrappedStreamChunk)
 import Proto.Mqtt qualified as Proto
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 
 -- Stream Chunks ---------------------------------------------------------------
 
@@ -154,10 +155,10 @@ runStreamChunkRead ::
   TQueue ByteString ->
   WireDecodeOptions ->
   m (Maybe (Vector ByteString))
-runStreamChunkRead queue options = do
-  result <- runExceptT (Packet.makePacketReader queue options)
+runStreamChunkRead channel options = do
+  result <- runExceptT (Packet.makePacketReader channel)
   case result of
-    Left err -> throwError (Message.toRemoteError err)
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> wireUnwrapStreamChunk options bs
 
 makeStreamBatchSender ::
@@ -215,7 +216,7 @@ makeStreamChunkSender ::
 makeStreamChunkSender limit options chunks publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options (Just chunks)
-   in Packet.makePacketSender limit options publish message
+   in Packet.makePacketSender limit publish message
 
 makeStreamFinalSender ::
   MonadUnliftIO m =>
@@ -226,4 +227,4 @@ makeStreamFinalSender ::
 makeStreamFinalSender limit options publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options Nothing
-   in Packet.makePacketSender limit options publish message
+   in Packet.makePacketSender limit publish message

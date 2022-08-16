@@ -63,6 +63,7 @@ import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError))
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Proto.Mqtt
   ( MQTTResponse (..),
     RemoteError,
@@ -250,7 +251,7 @@ makeResponseSender ::
 makeResponseSender client topic limit options response = do
   let message :: ByteString
       message = wireEncodeResponse options response
-   in Packet.makePacketSender limit options (liftIO . publish) message
+   in Packet.makePacketSender limit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
     publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
@@ -266,7 +267,7 @@ makeErrorResponseSender ::
 makeErrorResponseSender client topic limit options err = do
   let message :: ByteString
       message = wireEncodeErrorResponse options err
-   in Packet.makePacketSender limit options (liftIO . publish) message
+   in Packet.makePacketSender limit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
     publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
@@ -276,9 +277,9 @@ makeNormalResponseReader ::
   TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'Normal a)
-makeNormalResponseReader queue options = do
-  runExceptT (Packet.makePacketReader queue options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+makeNormalResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapUnaryResponse options bs
 
 makeClientResponseReader ::
@@ -286,9 +287,9 @@ makeClientResponseReader ::
   TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ClientStreaming a)
-makeClientResponseReader queue options = do
-  runExceptT (Packet.makePacketReader queue options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+makeClientResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapClientStreamResponse options bs
 
 makeServerResponseReader ::
@@ -296,9 +297,9 @@ makeServerResponseReader ::
   TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ServerStreaming a)
-makeServerResponseReader queue options = do
-  runExceptT (Packet.makePacketReader queue options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+makeServerResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapServerStreamResponse options bs
 
 makeBiDiResponseReader ::
@@ -306,7 +307,7 @@ makeBiDiResponseReader ::
   TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'BiDiStreaming a)
-makeBiDiResponseReader queue options = do
-  runExceptT (Packet.makePacketReader queue options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+makeBiDiResponseReader channel options = do
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapBiDiStreamResponse options bs

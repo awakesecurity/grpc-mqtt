@@ -24,7 +24,7 @@ where
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue , writeTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, writeTQueue)
 
 import Control.Exception (bracket)
 import Control.Exception.Safe (handleAny)
@@ -34,6 +34,7 @@ import Control.Monad.IO.Unlift (withRunInIO)
 
 import Data.List (stripPrefix)
 import Data.Text qualified as Text
+import Data.Traversable (for)
 
 import Network.GRPC.HighLevel (GRPCIOError, StreamRecv, StreamSend)
 import Network.GRPC.HighLevel.Client
@@ -88,6 +89,8 @@ import Network.GRPC.MQTT.Message.Request qualified as Request
 import Network.GRPC.MQTT.Message.Response qualified as Response
 import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
+import Network.GRPC.MQTT.Option (ProtoOptions)
+
 import Network.GRPC.MQTT.RemoteClient.Session
 import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
@@ -96,10 +99,9 @@ import Network.GRPC.MQTT.Serial qualified as Serial
 import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
 import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap)
 
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
-import Data.Traversable
-import Network.GRPC.MQTT.Option (ProtoOptions)
 import Proto.Mqtt (RemoteError)
 import Proto.Mqtt qualified as Proto
 
@@ -241,13 +243,13 @@ handleRequest handle = do
         ClientServerStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k message timeout metadata \_ ms recv -> runIO do
-              publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+              publishPackets (toStrict $ wireEncodeMetadataMap ms)
               makeServerStreamReader encodeOptions recv
           publishClientResponse encodeOptions result
         ClientBiDiStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k timeout metadata \_ ms recv send done -> runIO do
-              publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+              publishPackets (toStrict $ wireEncodeMetadataMap ms)
               let reader = makeServerStreamReader encodeOptions recv
                   sender = makeServerStreamSender queue encodeOptions decodeOptions send done
                in concurrently_ sender reader
@@ -292,8 +294,8 @@ publishClientResponse options result = do
 
   Response.makeResponseSender client topic limit options result
 
-publishPackets :: WireEncodeOptions -> ByteString -> Session ()
-publishPackets options message = do
+publishPackets :: ByteString -> Session ()
+publishPackets message = do
   client <- asks cfgClient
   topic <- askResponseTopic
   limit <- asks cfgMsgSize
@@ -303,7 +305,7 @@ publishPackets options message = do
 
   let publish :: ByteString -> IO ()
       publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
-   in Packet.makePacketSender limit options (liftIO . publish) message
+   in Packet.makePacketSender limit (liftIO . publish) message
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
 publishGRPCIOError options err =
@@ -331,14 +333,13 @@ publishRemoteError options err = do
 
 makePacketReader ::
   TQueue ByteString ->
-  WireDecodeOptions ->
   Session (Either RemoteError ByteString)
-makePacketReader queue options = do
-  result <- runExceptT (Packet.makePacketReader queue options)
+makePacketReader channel = do
+  result <- runExceptT (Packet.makePacketReader channel)
   case result of
     Left err -> do
       Session.logError "wire parse error encountered parsing Packet" (show err)
-      pure (Left $ Message.toRemoteError err)
+      pure (Left $ parseErrorToRCE err)
     Right bs -> do
       Session.logDebug "read packets to ByteString" (show bs)
       pure (Right bs)

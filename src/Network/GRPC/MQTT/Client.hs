@@ -107,7 +107,6 @@ import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
 import Network.GRPC.MQTT.Option (ProtoOptions)
 
-import Network.GRPC.MQTT.Serial (WireDecodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
 
 import Network.GRPC.MQTT.Topic qualified as Topic
@@ -234,7 +233,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
           -- Server Streaming Requests
           MQTTReaderRequest _ _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responsechan decodeOptions
+            metadata <- makeMetadataMapReader responsechan 
 
             reader <- Stream.makeStreamReader responsechan decodeOptions
 
@@ -254,7 +253,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
           -- BiDirectional Server Streaming Requests
           MQTTBiDiRequest _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responsechan decodeOptions
+            metadata <- makeMetadataMapReader responsechan 
 
             reader <- Stream.makeStreamReader responsechan decodeOptions
 
@@ -282,12 +281,10 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
   where
     makeMetadataMapReader ::
       TQueue ByteString ->
-      WireDecodeOptions ->
       ExceptT RemoteError IO MetadataMap
-    makeMetadataMapReader queue decodeOptions = do
-      bytes <- withExceptT Message.toRemoteError do
-        Packet.makePacketReader queue decodeOptions
-      case wireDecodeMetadataMap bytes of
+    makeMetadataMapReader channel = do
+      bytes <- runExceptT (Packet.makePacketReader channel)
+      case wireDecodeMetadataMap =<< bytes of
         Left err -> throwError (parseErrorToRCE err)
         Right rx -> pure rx
 

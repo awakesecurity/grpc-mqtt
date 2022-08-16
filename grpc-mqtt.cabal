@@ -64,7 +64,10 @@ common common
 
 library
   import:      common
-  ghc-options: -O2
+  ghc-options: 
+    -O2
+    -fregs-iterative
+    -fno-prof-count-entries
 
   hs-source-dirs:
     src
@@ -101,7 +104,6 @@ library
   other-modules:
     Control.Concurrent.TMap
     Network.GRPC.HighLevel.Orphans
-    Network.GRPC.MQTT.Message.Packet.Core
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
     Proto3.Suite.Orphans
@@ -145,10 +147,13 @@ test-suite test
     test
 
   ghc-options:
+    -O2
     -threaded
     -rtsopts
-    "-with-rtsopts=-N4"
-    -O2
+    "-with-rtsopts=-N4 -hT -ls -l -i0.005"
+    -eventlog
+    -fregs-iterative
+    -fno-prof-count-entries
 
   other-modules:
     Proto.Service

@@ -9,6 +9,7 @@ in pkgs.grpc-mqtt.env.overrideAttrs (old: {
   buildInputs = (old.buildAttrs or []) ++ [
     pkgs.cabal-install
     pkgs.grpc
+    pkgs.haskell-language-server
     pkgs.hp2pretty
     pkgs.proto3-suite
     pkgs.mosquitto

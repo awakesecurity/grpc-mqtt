@@ -175,9 +175,8 @@ fromStatusDetails :: StatusDetails -> LText
 fromStatusDetails = decodeUtf8 . unStatusDetails
 
 -- Error conversions
-toRemoteError :: ClientError -> RemoteError
-toRemoteError (ClientErrorNoParse pe) = parseErrorToRCE pe
-toRemoteError (ClientIOError ge) =
+toRemoteError :: GRPCIOError -> RemoteError
+toRemoteError ge =
   case ge of
     GRPCIOCallError ce ->
       case ce of

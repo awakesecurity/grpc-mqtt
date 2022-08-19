@@ -35,7 +35,6 @@ import Network.GRPC.HighLevel as HL
 import Network.GRPC.HighLevel.Client
   ( ClientResult
       ( ClientBiDiResponse,
-        ClientErrorResponse,
         ClientNormalResponse,
         ClientReaderResponse,
         ClientWriterResponse
@@ -59,10 +58,11 @@ import Network.GRPC.MQTT.Message.Packet qualified as Packet
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 
-import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError))
+import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError), RemoteResult (..))
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
+import Network.GRPC.LowLevel (NormalRequestResult (..))
 import Proto.Mqtt
   ( MQTTResponse (..),
     RemoteError,
@@ -77,14 +77,10 @@ import Proto.Mqtt
 -- Response - Wire Encoding ----------------------------------------------------
 
 wireEncodeResponse ::
-  Message a =>
   WireEncodeOptions ->
-  ClientResult s a ->
+  RemoteResult s ->
   ByteString
-wireEncodeResponse options result =
-  let response :: WrappedResponse
-      response = wrapResponse (Message.toWireEncoded options <$> result)
-   in Message.toWireEncoded options response
+wireEncodeResponse options result = Message.toWireEncoded options (wrapResponse result)
 
 wireEncodeErrorResponse ::
   WireEncodeOptions ->
@@ -95,11 +91,11 @@ wireEncodeErrorResponse options err =
       response = WrappedResponse (Just (WrappedResponseOrErrorError err))
    in Message.toWireEncoded options response
 
-wrapResponse :: ClientResult s ByteString -> WrappedResponse
+wrapResponse :: RemoteResult s -> WrappedResponse
 wrapResponse res =
   WrappedResponse . Just $
     case res of
-      ClientNormalResponse rspBody initMD trailMD rspCode details ->
+      RemoteNormalResult NormalRequestResult{rspBody, initMD, trailMD, rspCode, details} ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
             (Just $ ResponseBody rspBody)
@@ -107,7 +103,7 @@ wrapResponse res =
             (Just $ Wrapping.fromMetadataMap trailMD)
             (Wrapping.fromStatusCode rspCode)
             (Wrapping.fromStatusDetails details)
-      ClientWriterResponse rspBody initMD trailMD rspCode details ->
+      RemoteWriterResult (rspBody, initMD, trailMD, rspCode, details) ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
             (ResponseBody <$> rspBody)
@@ -115,7 +111,7 @@ wrapResponse res =
             (Just $ Wrapping.fromMetadataMap trailMD)
             (Wrapping.fromStatusCode rspCode)
             (Wrapping.fromStatusDetails details)
-      ClientReaderResponse rspMetadata statusCode details ->
+      RemoteReaderResult (rspMetadata, statusCode, details) ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
             Nothing
@@ -123,7 +119,7 @@ wrapResponse res =
             (Just $ Wrapping.fromMetadataMap rspMetadata)
             (Wrapping.fromStatusCode statusCode)
             (Wrapping.fromStatusDetails details)
-      ClientBiDiResponse rspMetadata statusCode details ->
+      RemoteBiDiResult (rspMetadata, statusCode, details) ->
         WrappedResponseOrErrorResponse $
           MQTTResponse
             Nothing
@@ -131,7 +127,7 @@ wrapResponse res =
             (Just $ Wrapping.fromMetadataMap rspMetadata)
             (Wrapping.fromStatusCode statusCode)
             (Wrapping.fromStatusDetails details)
-      ClientErrorResponse err ->
+      RemoteErrorResult err ->
         WrappedResponseOrErrorError $ Wrapping.toRemoteError err
 
 -- Response - Wire Decoding ----------------------------------------------------
@@ -240,20 +236,19 @@ unwrapBiDiStreamResponse options =
 -- Response Handlers -----------------------------------------------------------
 
 makeResponseSender ::
-  (MonadUnliftIO m, Message a) =>
+  MonadUnliftIO m =>
   MQTTClient ->
   Topic ->
   Int ->
   WireEncodeOptions ->
-  ClientResult s a ->
+  RemoteResult s ->
   m ()
 makeResponseSender client topic limit options response = do
+  let publish :: ByteString -> IO ()
+      publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
   let message :: ByteString
       message = wireEncodeResponse options response
-   in Packet.makePacketSender limit options (liftIO . publish) message
-  where
-    publish :: ByteString -> IO ()
-    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+  Packet.makePacketSender limit options (liftIO . publish) message
 
 makeErrorResponseSender ::
   MonadUnliftIO m =>

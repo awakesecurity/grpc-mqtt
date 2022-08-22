@@ -41,6 +41,8 @@ where
 
 import Control.Concurrent (getNumCapabilities)
 
+import Control.Concurrent.TMap as TMap
+
 import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, liftEither)
@@ -49,7 +51,6 @@ import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
 import Data.ByteString.Builder qualified as ByteString.Builder
 import Data.Data (Data)
-import Data.IntMap.Strict qualified as IntMap
 
 import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
@@ -144,7 +145,7 @@ makePacketReader queue = do
         when missing (readNextPacket >> loop)
 
       packets <- asks packets
-      bytes <- liftIO (mergePacketSet packets)
+      bytes <- atomically (mergePacketSet packets)
       pure (toStrict bytes)
 
 -- Packet - Packet Senders -----------------------------------------------------
@@ -212,24 +213,24 @@ isLastPacket (Packet _ i n) = i == n - 1
 -- | 'PacketSet' is a set of packets carrying a message payload type @a@.
 --
 -- @since 0.1.0.0
-newtype PacketSet = PacketSet
-  {getPacketSet :: IORef (IntMap ByteString)}
+newtype PacketSet a = PacketSet
+  {getPacketSet :: TMap Int a}
 
 -- | Constructs an empty 'PacketSet' in 'IO'.
 --
 -- @since 0.1.0.0
-emptyPacketSetIO :: IO PacketSet
-emptyPacketSetIO = PacketSet <$> newIORef IntMap.empty
+emptyPacketSetIO :: IO (PacketSet a)
+emptyPacketSetIO = fmap PacketSet TMap.emptyIO
 
 -- | Merge the payloads of each packet in a 'PacketSet' back into the original
 -- unpacketized 'ByteString'.
 --
 -- @since 0.1.0.0
-mergePacketSet :: PacketSet -> IO LByteString
-mergePacketSet (PacketSet var) = do
-  kvs <- readIORef var
+mergePacketSet :: PacketSet ByteString -> STM LByteString
+mergePacketSet (PacketSet pxs) = do
+  parts <- TMap.elems pxs
   let builder :: ByteString.Builder
-      builder = foldMap' ByteString.Builder.byteString kvs
+      builder = foldMap' ByteString.Builder.byteString parts
    in pure (ByteString.Builder.toLazyByteString builder)
 
 -- | Inserts a 'Packet' into a 'PacketSet'. If the packet's 'metadata' has the
@@ -237,21 +238,18 @@ mergePacketSet (PacketSet var) = do
 -- 'PacketSet' is made.
 --
 -- @since 0.1.0.0
-insertPacketSet :: Packet ByteString -> PacketSet -> IO ()
-insertPacketSet px (PacketSet var) = do
+insertPacketSet :: Packet a -> PacketSet a -> STM ()
+insertPacketSet px (PacketSet pxs) = do
   let key = position px
   let val = payload px
-  kvs <- readIORef var
-  unless (IntMap.member key kvs) do
-    -- TODO: document!!
-    -- TODO: MUST BE ATOMIC WRITE/MODIFY!!!!
-    atomicWriteIORef var (IntMap.insert key val kvs)
+  exists <- TMap.member key pxs
+  unless exists (TMap.insert key val pxs)
 
 -- | Obtain the number of packets in a 'PacketSet'.
 --
 -- @since 0.1.0.0
-lengthPacketSet :: PacketSet -> IO Int
-lengthPacketSet (PacketSet pxs) = length <$> readIORef pxs
+lengthPacketSet :: PacketSet a -> STM Int
+lengthPacketSet (PacketSet pxs) = TMap.length pxs
 
 -- ------------------------------------------------------------------------------
 
@@ -269,7 +267,7 @@ newtype PacketReader a = PacketReader
 -- @since 0.1.0.0
 data PacketReaderEnv = PacketReaderEnv
   { queue :: {-# UNPACK #-} !(TQueue ByteString)
-  , packets :: {-# UNPACK #-} !PacketSet
+  , packets :: {-# UNPACK #-} !(PacketSet ByteString)
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
@@ -277,11 +275,11 @@ runPacketReader ::
   PacketReader a ->
   TQueue ByteString ->
   IO (Either ParseError a)
-runPacketReader m queue = do
+runPacketReader m channel = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
   unPacketReader m
-    & flip runReaderT (PacketReaderEnv queue pxs var)
+    & flip runReaderT (PacketReaderEnv channel pxs var)
     & runExceptT
 
 readNextPacket :: PacketReader ()
@@ -291,17 +289,17 @@ readNextPacket = do
   packet <- wireUnwrapPacket bytes
   pxs <- asks packets
   var <- asks npacket
-  liftIO do
+  liftIO $ atomically do
     when (isLastPacket packet) do
-      atomically (putTMVar var (position packet))
+      putTMVar var (position packet)
     insertPacketSet packet pxs
 
 isMissingPackets :: PacketReader Bool
 isMissingPackets = do
   var <- asks npacket
   pxs <- asks packets
-  liftIO do
-    count <- atomically (tryReadTMVar var)
+  liftIO $ atomically do
+    count <- tryReadTMVar var
     case count of
       Nothing -> pure True
       Just ct -> do

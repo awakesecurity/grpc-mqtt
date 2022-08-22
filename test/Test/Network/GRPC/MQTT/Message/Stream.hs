@@ -108,7 +108,7 @@ mockHandleStream :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandleStream encodeOptions decodeOptions = do
   chunks <- forAll Message.Gen.streamChunk
   limit <- forAll (Message.Gen.streamChunkLength chunks)
-  queue <- Hedgehog.evalIO newTQueueIO
+  queue <- Hedgehog.evalIO (newTQueueIO @ByteString)
 
   (sender, done) <- makeStreamBatchSender @_ @IO limit encodeOptions \x -> do
     atomically (writeTQueue queue x)
@@ -125,9 +125,7 @@ mockHandleStream encodeOptions decodeOptions = do
     runSendStream :: (ByteString -> IO ()) -> IO () -> Maybe (Vector ByteString) -> IO ()
     runSendStream send done = \case
       Nothing -> done
-      Just cs -> do
-        traverse_ send cs
-        done
+      Just cs -> traverse_ send cs >> done
 
     runReadStream ::
       ExceptT RemoteError IO (Maybe ByteString) ->

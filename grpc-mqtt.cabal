@@ -67,7 +67,6 @@ library
   ghc-options: 
     -O2
     -fregs-iterative
-    -fno-prof-count-entries
 
   hs-source-dirs:
     src
@@ -150,10 +149,8 @@ test-suite test
     -O2
     -threaded
     -rtsopts
-    "-with-rtsopts=-N4 -hT -ls -l -i0.005"
-    -eventlog
+    "-with-rtsopts=-N4"
     -fregs-iterative
-    -fno-prof-count-entries
 
   other-modules:
     Proto.Service

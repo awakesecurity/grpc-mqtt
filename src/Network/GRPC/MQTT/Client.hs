@@ -138,7 +138,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | 'TQueue' for passing MQTT messages back to calling thread
-    responseChans :: IORef (Map Topic (TQueue ByteString))
+    responseQueues :: IORef (Map Topic (TQueue ByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -182,7 +182,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
-    atomicModifyIORef' responseChans \cxs -> 
+    atomicModifyIORef' responseQueues \cxs -> 
       (Map.insert responseTopic responseQueue cxs, ())
 
     -- Message options
@@ -282,8 +282,8 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     makeMetadataMapReader ::
       TQueue ByteString ->
       ExceptT RemoteError IO MetadataMap
-    makeMetadataMapReader channel = do
-      bytes <- runExceptT (Packet.makePacketReader channel)
+    makeMetadataMapReader queue = do
+      bytes <- runExceptT (Packet.makePacketReader queue)
       case wireDecodeMetadataMap =<< bytes of
         Left err -> throwError (parseErrorToRCE err)
         Right rx -> pure rx

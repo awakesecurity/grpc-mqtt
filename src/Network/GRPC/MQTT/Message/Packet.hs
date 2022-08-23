@@ -283,11 +283,11 @@ runPacketReader ::
   PacketReader a ->
   TQueue ByteString ->
   IO (Either ParseError a)
-runPacketReader m channel = do
+runPacketReader m queue = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
   unPacketReader m
-    & flip runReaderT (PacketReaderEnv channel pxs var)
+    & flip runReaderT (PacketReaderEnv queue pxs var)
     & runExceptT
 
 readNextPacket :: PacketReader ()

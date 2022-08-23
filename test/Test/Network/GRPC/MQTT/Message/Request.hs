@@ -22,7 +22,7 @@ import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
 
 import Control.Concurrent.Async (concurrently)
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, writeTQueue)
 
 import Relude hiding (reader)
 
@@ -55,15 +55,15 @@ propRequestWire = property do
 
 propRequestHandle :: Property
 propRequestHandle = property do
-  channel <- Hedgehog.evalIO newTChanIO
+  queue <- Hedgehog.evalIO newTQueueIO
   request <- forAll Message.Gen.request
   maxsize <- forAll (Message.Gen.packetSplitLength (Request.message request))
 
   let reader :: ExceptT WireDecodeError IO (Request ByteString)
-      reader = Request.makeRequestReader channel
+      reader = Request.makeRequestReader queue
 
   let sender :: Request ByteString -> IO ()
-      sender = Request.makeRequestSender maxsize (mockPublish channel)
+      sender = Request.makeRequestSender maxsize (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender request) (runExceptT reader)
@@ -72,8 +72,5 @@ propRequestHandle = property do
 
 --------------------------------------------------------------------------------
 
-mockPublish :: TChan LByteString -> ByteString -> IO ()
-mockPublish channel message =
-  let message' :: LByteString
-      message' = fromStrict @LByteString @ByteString message
-   in atomically (writeTChan channel message')
+mockPublish :: TQueue ByteString -> ByteString -> IO ()
+mockPublish queue message = atomically (writeTQueue queue message)

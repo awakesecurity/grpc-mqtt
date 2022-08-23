@@ -22,7 +22,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TChan (TChan)
+import Control.Concurrent.STM.TQueue (TQueue)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Traversable (for)
@@ -62,6 +62,7 @@ import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError), RemoteResult
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.LowLevel (NormalRequestResult (..))
 import Proto.Mqtt
   ( MQTTResponse (..),
@@ -243,12 +244,13 @@ makeResponseSender ::
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
-makeResponseSender client topic limit options response = do
-  let publish :: ByteString -> IO ()
-      publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+makeResponseSender client topic limit options response =
   let message :: ByteString
       message = wireEncodeResponse options response
-  Packet.makePacketSender limit options (liftIO . publish) message
+   in Packet.makePacketSender limit (liftIO . publish) message
+  where
+    publish :: ByteString -> IO ()
+    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
 
 makeErrorResponseSender ::
   MonadUnliftIO m =>
@@ -261,47 +263,47 @@ makeErrorResponseSender ::
 makeErrorResponseSender client topic limit options err = do
   let message :: ByteString
       message = wireEncodeErrorResponse options err
-   in Packet.makePacketSender limit options (liftIO . publish) message
+   in Packet.makePacketSender limit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
     publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'Normal a)
 makeNormalResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapUnaryResponse options bs
 
 makeClientResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ClientStreaming a)
 makeClientResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapClientStreamResponse options bs
 
 makeServerResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ServerStreaming a)
 makeServerResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapServerStreamResponse options bs
 
 makeBiDiResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'BiDiStreaming a)
-makeBiDiResponseReader channel options = do
-  runExceptT (Packet.makePacketReader channel options) >>= \case
-    Left err -> throwError (Message.toRemoteError err)
+makeBiDiResponseReader channel options =
+  runExceptT (Packet.makePacketReader channel) >>= \case
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> unwrapBiDiStreamResponse options bs

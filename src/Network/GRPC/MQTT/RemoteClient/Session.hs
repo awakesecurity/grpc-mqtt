@@ -36,7 +36,7 @@ module Network.GRPC.MQTT.RemoteClient.Session
     SessionHandle
       ( SessionHandle,
         hdlThread,
-        hdlRqtChan,
+        hdlRqtQueue,
         hdlHeartbeat
       ),
 
@@ -76,7 +76,7 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO)
 
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
@@ -275,7 +275,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 0.1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtChan :: TChan LByteString
+  , hdlRqtQueue :: TQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
 
@@ -284,9 +284,9 @@ data SessionHandle = SessionHandle
 -- @since 0.1.0.0
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
-  channel <- newTChanIO
-  monitor <- newTMVarIO ()
-  pure (SessionHandle thread channel monitor)
+  SessionHandle thread 
+    <$> newTQueueIO
+    <*> newTMVarIO ()
 
 -- | TODO
 --

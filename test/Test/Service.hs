@@ -31,6 +31,7 @@ import Network.GRPC.HighLevel.Client
     StreamRecv,
     StreamSend,
     WritesDone,
+    ClientResult (..),
   )
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
 import Network.GRPC.HighLevel.Generated
@@ -39,9 +40,6 @@ import Network.GRPC.HighLevel.Generated
     withGRPCClient,
   )
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
-import Network.GRPC.HighLevel.Client
-  ( ClientResult (..),
-  )
 
 import Network.MQTT.Client (QoS (QoS1), publishq)
 
@@ -98,12 +96,12 @@ import qualified Data.Map.Strict as Map
 tests :: TestTree
 tests =
   testGroup
-    "Test.Service"
+    "Service"
     [ after Test.AllSucceed "MQTT" testTreeNormal
-    , after Test.AllSucceed "Test.Service.Normal" testTreeClientStream
-    , after Test.AllSucceed "Test.Service.ClientStream" testTreeServerStream
-    , after Test.AllSucceed "Test.Service.ServerStream" testTreeBiDiStream
-    , after Test.AllSucceed "Test.Service.BiDiStream" testTreeErrors
+    , after Test.AllSucceed "Normal" testTreeClientStream
+    , after Test.AllSucceed "ClientStream" testTreeServerStream
+    , after Test.AllSucceed "ServerStream" testTreeBiDiStream
+    , after Test.AllSucceed "BiDiStream" testTreeErrors
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a
@@ -194,7 +192,7 @@ testNormalCall = do
 testTreeClientStream :: TestTree
 testTreeClientStream =
   testGroup
-    "Test.Service.ClientStream"
+    "ClientStream"
     [ Suite.testFixture "Test.Service.ClientStream.Unbatched" testClientStreamCall
     , after
         Test.AllSucceed
@@ -224,7 +222,7 @@ testBatchClientStreamCall = do
 testTreeServerStream :: TestTree
 testTreeServerStream =
   testGroup
-    "Test.Service.ServerStream"
+    "ServerStream"
     [ Suite.testFixture "Test.Service.ServerStream.Unbatched" testServerStreamCall
     , after
         Test.AllSucceed
@@ -261,7 +259,7 @@ testBatchServerStreamCall = do
 testTreeBiDiStream :: TestTree
 testTreeBiDiStream =
   testGroup
-    "Test.Service.BiDiStream"
+    "BiDiStream"
     [ Suite.testFixture "Test.Service.BiDiStream.Unbatched" testBiDiStreamCall
     , after
         Test.AllSucceed

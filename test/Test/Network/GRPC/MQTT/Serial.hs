@@ -118,7 +118,7 @@ testDiffClient = property do
 
 data SerialTestLabel
   = SerialZstdEnable
-  deriving (Enum, Eq, Ord, Show)
+  deriving (Show)
 
 -- Test Combinators ------------------------------------------------------------
 

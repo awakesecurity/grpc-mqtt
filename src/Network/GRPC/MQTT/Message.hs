@@ -42,7 +42,7 @@ import Relude
 import Network.GRPC.MQTT.Compress (ZstdError)
 import Network.GRPC.MQTT.Compress qualified as Compress
 
-import Network.GRPC.MQTT.Message.Packet.Core (Packet)
+import Network.GRPC.MQTT.Message.Packet (Packet)
 import Network.GRPC.MQTT.Message.Request.Core (Request)
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)

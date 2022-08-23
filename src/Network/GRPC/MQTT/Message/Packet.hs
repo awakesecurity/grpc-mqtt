@@ -64,13 +64,21 @@ import UnliftIO.Async (replicateConcurrently_)
 
 -- Packet ----------------------------------------------------------------------
 
--- | TODO
+-- | 'Packet' is a MQTT packet.  
 --
 -- @since 0.1.0.0
 data Packet msg = Packet
-  { payload :: msg
-  , position :: {-# UNPACK #-} !Int
-  , npackets :: {-# UNPACK #-} !Int
+  { -- | 'payload' is the packets payload. For a @'Packet' 'ByteString'@, this 
+    -- is typically a serialized protobuf message. 
+    payload :: msg
+  , -- | 'position' is an index referring to a packets location within a stream
+    -- of packets. A packets 'position' should always be strictly less than the 
+    -- value for 'npackets'.
+    position :: {-# UNPACK #-} !Int
+  , -- | 'npackets' is the number of packets expected in this packets stream. 
+    -- The last or terminal packet within a stream of packets should always 
+    -- have a 'position' equal to @'npackets' - 1@.
+    npackets :: {-# UNPACK #-} !Int
   }
   deriving stock (Eq, Ord, Show)
   deriving stock (Data, Generic, Typeable)

@@ -126,9 +126,9 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.STM (TChan)
+import Control.Concurrent.STM.TQueue (TQueue)
 
-import Control.Monad.Except (MonadError, liftEither)
+import Control.Monad.Except (MonadError, liftEither, throwError)
 
 import Data.ByteString qualified as ByteString
 
@@ -167,8 +167,6 @@ import Network.GRPC.MQTT.Option
 import Network.GRPC.MQTT.Serial (WireEncodeOptions)
 
 import Network.GRPC.MQTT.Types (MQTTRequest (..))
-
-import Network.GRPC.MQTT.Serial qualified as Serial
 
 import Proto3.Wire.Decode.Extra qualified as Decode
 import Proto3.Wire.Encode.Extra qualified as Encode
@@ -325,13 +323,12 @@ wireParseRequest = do
 
 makeRequestReader ::
   (MonadIO m, MonadError WireDecodeError m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   m (Request ByteString)
-makeRequestReader channel = do
-  -- TODO: explain 'Serial.defaultDecodeOptions'
-  bytes <- Packet.makePacketReader channel Serial.defaultDecodeOptions
-  case wireUnwrapRequest bytes of
-    Left err -> Message.throwWireError err
+makeRequestReader queue = do
+  result <- runExceptT (Packet.makePacketReader queue)
+  case wireUnwrapRequest =<< result of
+    Left err -> throwError (Message.DecodeWireError err)
     Right rx -> pure rx
 
 makeRequestSender ::
@@ -343,4 +340,4 @@ makeRequestSender limit publish x =
   -- TODO: explain 'Serial.defaultEncodeOptions'
   let message :: ByteString
       message = wireWrapRequest' x
-   in Packet.makePacketSender limit Serial.defaultEncodeOptions publish message
+   in Packet.makePacketSender limit publish message

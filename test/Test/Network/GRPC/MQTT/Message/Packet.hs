@@ -9,9 +9,7 @@ where
 --------------------------------------------------------------------------------
 
 import Hedgehog (Property, PropertyT, forAll, property, tripping, (===))
-import Hedgehog qualified as Hedgehog
-import Hedgehog.Gen qualified as Gen
-import Hedgehog.Range qualified as Range
+import Hedgehog qualified
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog (testProperty)
@@ -19,31 +17,20 @@ import Test.Tasty.Hedgehog (testProperty)
 --------------------------------------------------------------------------------
 
 import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
-import Test.Network.GRPC.MQTT.Option.Gen qualified as Option.Gen
-
-import Test.Suite.Wire qualified as Test.Wire
 
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (concurrently)
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
-
-import Data.ByteString qualified as ByteString
-import Data.Vector (Vector)
-import Data.Vector qualified as Vector
-
-import Proto3.Suite qualified as Proto3
+import Control.Concurrent.STM.TQueue (TQueue, writeTQueue, newTQueueIO)
 
 import Relude hiding (reader)
 
 --------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Message (Packet, WireDecodeError)
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
 
-import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
-import Network.GRPC.MQTT.Serial qualified as Serial
+import Proto3.Wire.Decode (ParseError)
 
 --------------------------------------------------------------------------------
 
@@ -57,10 +44,7 @@ tests =
   testGroup
     "Network.GRPC.MQTT.Message.Packet"
     [ testTreePacketWire
-    , testTreePacketSplit
-    , testTreePacketOrder
     , testTreePacketHandle
-    , testTreePacketInfo
     ]
 
 -- Packet.Wire -----------------------------------------------------------------
@@ -76,7 +60,7 @@ testTreePacketWire =
 propPacketWireClient :: Property
 propPacketWireClient = property do
   packet <- forAll Message.Gen.packet
-  Test.Wire.testWireClientRoundtrip
+  tripping @_ @(Either ParseError)
     packet
     Packet.wireWrapPacket'
     Packet.wireUnwrapPacket
@@ -84,63 +68,10 @@ propPacketWireClient = property do
 propPacketWireRemote :: Property
 propPacketWireRemote = property do
   packet <- forAll Message.Gen.packet
-  Test.Wire.testWireRemoteRoundtrip
+  tripping @_ @(Either ParseError)
     packet
     Packet.wireWrapPacket'
     Packet.wireUnwrapPacket
-
--- Packet.Split ----------------------------------------------------------------
-
-testTreePacketSplit :: TestTree
-testTreePacketSplit =
-  testGroup
-    "Packet.Split"
-    [ testProperty "Packet.Split.Empty" propPacketSplitEmpty
-    , testProperty "Packet.Split.Merge" propPacketSplitMerge
-    ]
-
--- | Splitting an empty 'ByteString' into packets yields a singleton vector
--- containing a packet with an empty payload.
-propPacketSplitEmpty :: Property
-propPacketSplitEmpty = property do
-  maxsize <- forAll (Gen.int Range.constantBounded)
-  let packets :: Vector (Packet ByteString)
-      packets = Packet.splitPackets maxsize ByteString.empty
-   in packets === Vector.singleton (Packet.Packet ByteString.empty (Packet.PacketInfo 0 1))
-
--- | Splitting a 'ByteString' into a vector of 'Packet' can be reversed by
--- concatenating the payload's of each packet.
-propPacketSplitMerge :: Property
-propPacketSplitMerge = property do
-  message <- forAll Message.Gen.packetBytes
-  maxsize <- forAll (Message.Gen.packetSplitLength message)
-  let packets :: Vector (Packet ByteString)
-      packets = Packet.splitPackets maxsize message
-   in message === foldMap Packet.payload packets
-
--- Packet.Order ----------------------------------------------------------------
-
-testTreePacketOrder :: TestTree
-testTreePacketOrder =
-  testGroup
-    "Packet.Order"
-    [ testProperty "Packet.Order.Client" propPacketOrderClient
-    , testProperty "Packet.Order.Remote" propPacketOrderRemote
-    ]
-
-propPacketOrderClient :: Property
-propPacketOrderClient = property do
-  options <- forAll Option.Gen.protoOptions
-  mockPacketShuffle
-    (Serial.makeClientEncodeOptions options)
-    (Serial.makeClientDecodeOptions options)
-
-propPacketOrderRemote :: Property
-propPacketOrderRemote = property do
-  options <- forAll Option.Gen.protoOptions
-  mockPacketShuffle
-    (Serial.makeRemoteEncodeOptions options)
-    (Serial.makeRemoteDecodeOptions options)
 
 -- Packet.Handle ---------------------------------------------------------------
 
@@ -149,78 +80,27 @@ testTreePacketHandle =
   testGroup
     "Packet.Handle"
     [ testProperty "Packet.Handle.ClientToRemote" propHandleClientToRemote
-    , testProperty "Packet.Handle.RemoteToClient" propHandleRemoteToClient
     ]
 
 propHandleClientToRemote :: Property
-propHandleClientToRemote = property do
-  options <- forAll Option.Gen.protoOptions
-  mockHandlePacket
-    (Serial.makeClientEncodeOptions options)
-    (Serial.makeClientDecodeOptions options)
+propHandleClientToRemote = property mockHandlePacket 
 
-propHandleRemoteToClient :: Property
-propHandleRemoteToClient = property do
-  options <- forAll Option.Gen.protoOptions
-  mockHandlePacket
-    (Serial.makeRemoteEncodeOptions options)
-    (Serial.makeRemoteDecodeOptions options)
-
--- Packet.PacketInfo.Wire ------------------------------------------------------
-
-testTreePacketInfo :: TestTree
-testTreePacketInfo =
-  testGroup
-    "Packet.PacketInfo"
-    [ testProperty "Packet.PacketInfo.Wire" propPacketInfoWire
-    ]
-
-propPacketInfoWire :: Property
-propPacketInfoWire = property do
-  info <- forAll Message.Gen.packetInfo
-  tripping info (toStrict . Proto3.toLazyByteString) Proto3.fromByteString
-
---------------------------------------------------------------------------------
-
-mockPacketShuffle :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
-mockPacketShuffle encodeOptions decodeOptions = do
-  -- Generates a packetized 'ByteString' @pxs@, along with a random permutation
-  -- of those packets @pys@.
-  pxs <- forAll Message.Gen.packetVector
-  pys <- forAll (Message.Gen.shufflePackets pxs)
-
-  -- Writes each encoded packet from the shuffled vector of packets to the
-  -- channel. This is to simulate recieving packet out of the order in they are
-  -- needed.
-  result <- Hedgehog.evalIO do
-    channel <- newTChanIO
-    for_ pys \packet -> atomically do
-      writeTChan channel (Packet.wireWrapPacket encodeOptions packet)
-    runExceptT (Packet.makePacketReader channel decodeOptions)
-
-  -- If 'Packet.packetReader' is able to correctly order packets it recieves,
-  -- then @result@ should be equal to the unshuffled vector of packets.
-  Right (foldMap Packet.payload pxs) === result
-
-mockHandlePacket :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
-mockHandlePacket encodeOptions decodeOptions = do
+mockHandlePacket :: PropertyT IO ()
+mockHandlePacket = do
   message <- forAll Message.Gen.packetBytes
-  channel <- Hedgehog.evalIO newTChanIO
+  queue <- Hedgehog.evalIO newTQueueIO
   maxsize <- forAll (Message.Gen.packetSplitLength message)
 
-  let reader :: ExceptT WireDecodeError IO ByteString
-      reader = Packet.makePacketReader channel decodeOptions
+  let reader :: ExceptT ParseError IO ByteString
+      reader = Packet.makePacketReader queue
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize encodeOptions (mockPublish channel)
+      sender = Packet.makePacketSender maxsize (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender message) (runExceptT reader)
 
   Right message === result
 
-mockPublish :: TChan LByteString -> ByteString -> IO ()
-mockPublish channel message = do
-  let message' :: LByteString
-      message' = fromStrict @LByteString @ByteString message
-   in atomically (writeTChan channel message')
+mockPublish :: TQueue ByteString -> ByteString -> IO ()
+mockPublish queue message = atomically (writeTQueue queue message)

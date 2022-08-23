@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | This module exports definitions for the 'Packet' message type.
@@ -8,17 +8,14 @@
 -- @since 0.1.0.0
 module Network.GRPC.MQTT.Message.Packet
   ( -- * Packet
-    Packet (Packet, payload, metadata),
+    Packet (Packet, payload, position, npackets),
 
-    -- ** Splitting
-    splitPackets,
-
-    -- ** Wire Encoding
+    -- * Wire Encoding
     wireWrapPacket,
     wireWrapPacket',
     wireBuildPacket,
 
-    -- ** Wire Decoding
+    -- * Wire Decoding
     wireUnwrapPacket,
     wireParsePacket,
 
@@ -28,11 +25,8 @@ module Network.GRPC.MQTT.Message.Packet
     -- * Packet Senders
     makePacketSender,
 
-    -- * PacketInfo
-    PacketInfo (PacketInfo, position, npackets),
-
-    -- ** Query
-    isLastPacketInfo,
+    -- * Query
+    isLastPacket,
 
     -- * PacketSet
     PacketSet (PacketSet, getPacketSet),
@@ -43,24 +37,22 @@ module Network.GRPC.MQTT.Message.Packet
   )
 where
 
----------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
-import Control.Concurrent ( getNumCapabilities )
+import Control.Concurrent (getNumCapabilities)
 
-import Control.Concurrent.STM.TChan (TChan, readTChan)
+import Control.Concurrent.TMap as TMap
+
+import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, liftEither)
 
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
 import Data.ByteString.Builder qualified as ByteString.Builder
-import Data.Vector (Vector)
-import Data.Vector qualified as Vector
-import Data.Vector.Mutable qualified as MVector
+import Data.Data (Data)
 
-import Proto3.Suite (FieldNumber, decodeMessageField, encodeMessageField)
-
-import Proto3.Wire.Decode (Parser, RawMessage)
+import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
@@ -70,95 +62,52 @@ import Relude
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Async (replicateConcurrently_)
 
----------------------------------------------------------------------------------
+-- Packet ----------------------------------------------------------------------
 
-import Control.Concurrent.TMap (TMap)
-import Control.Concurrent.TMap qualified as TMap
-
-import Network.GRPC.MQTT.Message.Packet.Core
-  ( Packet (Packet, metadata, payload),
-    PacketInfo (PacketInfo, npackets, position),
-  )
-import Network.GRPC.MQTT.Message.TH (reifyFieldNumber, reifyRecordField)
-
-import Network.GRPC.MQTT.Message (WireDecodeError)
-import Network.GRPC.MQTT.Message qualified as Message
-
-import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
-
-import Proto3.Wire.Decode.Extra qualified as Decode
-import Proto3.Wire.Types.Extra (RecordField)
-
--- Packet - Splitting -----------------------------------------------------------
-
--- | @'splitPackets' n bytes@ splits the 'ByteString' @bytes@ into a vector of
--- packets with a 'ByteString' payload of length @n@-bytes.
---
--- A singleton packet vector with payload @bytes@ is produced in the case that
--- @n@ is negative or @bytes@ is an empty 'ByteString'.
+-- | 'Packet' is a MQTT packet.  
 --
 -- @since 0.1.0.0
-splitPackets :: Int -> ByteString -> Vector (Packet ByteString)
-splitPackets size bytes
-  | size <= 0 || ByteString.null bytes =
-    -- In the case that the maximum packet payload length @size@ is not at least
-    -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
-    -- terminal packet.
-    Vector.singleton (Packet bytes (PacketInfo 0 1))
-  | otherwise = Vector.create do
-    -- Allocates a vector of containing @ByteString.length bytes / size@
-    -- elements rounded upwards. For example, fix the length of @bytes@ to
-    -- be 5 and @size@ to be 2, then a vector of length 3 is allocated.
-    let count :: Int
-        count = quotCeil (ByteString.length bytes) size
-     in MVector.generate count (makePacket count)
-  where
-    -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
-    sliceBytes :: Int -> ByteString
-    sliceBytes i = ByteString.take size (ByteString.drop (i * size) bytes)
-
-    -- 'quot' on 'Int', rounding upwards/toward positive infinity.
-    quotCeil :: Int -> Int -> Int
-    quotCeil a b = (a + (b - 1)) `quot` b
-
-    makePacket :: Int -> Int -> Packet ByteString
-    makePacket count i = Packet (sliceBytes i) (PacketInfo i count)
+data Packet msg = Packet
+  { -- | 'payload' is the packets payload. For a @'Packet' 'ByteString'@, this 
+    -- is typically a serialized protobuf message. 
+    payload :: msg
+  , -- | 'position' is an index referring to a packets location within a stream
+    -- of packets. A packets 'position' should always be strictly less than the 
+    -- value for 'npackets'.
+    position :: {-# UNPACK #-} !Int
+  , -- | 'npackets' is the number of packets expected in this packets stream. 
+    -- The last or terminal packet within a stream of packets should always 
+    -- have a 'position' equal to @'npackets' - 1@.
+    npackets :: {-# UNPACK #-} !Int
+  }
+  deriving stock (Eq, Ord, Show)
+  deriving stock (Data, Generic, Typeable)
 
 -- Packet - Wire Format - Encoding ----------------------------------------------
 
 -- | Encodes 'Packet' message in the wire binary format.
 --
 -- @since 0.1.0.0
-wireWrapPacket :: WireEncodeOptions -> Packet ByteString -> LByteString
-wireWrapPacket options packet = fromStrict (wireWrapPacket' options packet)
+wireWrapPacket :: Packet ByteString -> LByteString
+wireWrapPacket = Encode.toLazyByteString . wireBuildPacket
+{-# INLINE wireWrapPacket #-}
 
 -- | Like 'wireWrapPacket', but the resulting 'ByteString' is strict.
 --
 -- @since 0.1.0.0
-wireWrapPacket' :: WireEncodeOptions -> Packet ByteString -> ByteString
-wireWrapPacket' options packet =
-  wireBuildPacket packet
-    & Encode.toLazyByteString
-    & toStrict
-    & Message.mapEncodeOptions options
+wireWrapPacket' :: Packet ByteString -> ByteString
+wireWrapPacket' = toStrict . wireWrapPacket
+{-# INLINE wireWrapPacket' #-}
 
 -- | 'MessageBuilder' combinator capable of serializing a 'Packet' message.
 --
 -- @since 0.1.0.0
 wireBuildPacket :: Packet ByteString -> MessageBuilder
-wireBuildPacket px = wireBuildPayloadField <> wireBuildVarintsField
-  where
-    wireBuildPayloadField :: MessageBuilder
-    wireBuildPayloadField =
-      let fieldnum :: FieldNumber
-          fieldnum = $(reifyFieldNumber ''Packet 'payload)
-       in Encode.byteString fieldnum (payload px)
-
-    wireBuildVarintsField :: MessageBuilder
-    wireBuildVarintsField =
-      let fieldnum :: FieldNumber
-          fieldnum = $(reifyFieldNumber ''Packet 'metadata)
-       in encodeMessageField fieldnum (metadata px)
+wireBuildPacket (Packet bxs i n) =
+  Encode.byteString 1 bxs
+    <> Encode.sint64 2 (fromIntegral i)
+    <> Encode.sint64 3 (fromIntegral n)
+{-# INLINE wireBuildPacket #-}
 
 -- Packet - Wire Format - Decoding ----------------------------------------------
 
@@ -166,33 +115,22 @@ wireBuildPacket px = wireBuildPayloadField <> wireBuildVarintsField
 --
 -- @since 0.1.0.0
 wireUnwrapPacket ::
-  MonadError WireDecodeError m =>
-  WireDecodeOptions ->
+  MonadError ParseError m =>
   ByteString ->
   m (Packet ByteString)
-wireUnwrapPacket options bytes = do
-  bytes' <- Message.mapDecodeOptions options bytes
-  case Decode.parse wireParsePacket bytes' of
-    Left err -> Message.throwWireError err
-    Right rx -> pure rx
+wireUnwrapPacket bxs = liftEither (Decode.parse wireParsePacket bxs)
+{-# INLINE wireUnwrapPacket #-}
 
 -- | Parses a serialized 'Packet' message.
 --
 -- @since 0.1.0.0
 wireParsePacket :: Parser RawMessage (Packet ByteString)
-wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
-  where
-    wireParsePayloadField :: Parser RawMessage ByteString
-    wireParsePayloadField =
-      let recField :: RecordField
-          recField = $(reifyRecordField ''Packet 'payload)
-       in Decode.primOneField recField Decode.byteString
-
-    wireParseMetadataField :: Parser RawMessage PacketInfo
-    wireParseMetadataField =
-      let recField :: RecordField
-          recField = $(reifyRecordField ''Packet 'metadata)
-       in Decode.msgOneField recField decodeMessageField
+wireParsePacket =
+  Packet
+    <$> Decode.at (Decode.one Decode.byteString ByteString.empty) 1
+    <*> Decode.at (fromIntegral <$> Decode.one Decode.sint64 0) 2
+    <*> Decode.at (fromIntegral <$> Decode.one Decode.sint64 1) 3
+{-# INLINE wireParsePacket #-}
 
 -- Packet - Packet Readers ----------------------------------------------------
 
@@ -202,18 +140,17 @@ wireParsePacket = Packet <$> wireParsePayloadField <*> wireParseMetadataField
 --
 -- @since 0.1.0.0
 makePacketReader ::
-  (MonadIO m, MonadError WireDecodeError m) =>
-  TChan LByteString ->
-  WireDecodeOptions ->
+  (MonadIO m, MonadError ParseError m) =>
+  TQueue ByteString ->
   m ByteString
-makePacketReader channel options = do
-  liftEither =<< liftIO (runPacketReader accumulate channel)
+makePacketReader queue = do
+  liftEither =<< liftIO (runPacketReader accumulate queue)
   where
     accumulate :: PacketReader ByteString
     accumulate = do
       fix \loop -> do
         missing <- isMissingPackets
-        when missing (readNextPacket options >> loop)
+        when missing (readNextPacket >> loop)
 
       packets <- asks packets
       bytes <- atomically (mergePacketSet packets)
@@ -229,36 +166,35 @@ makePacketReader channel options = do
 makePacketSender ::
   MonadUnliftIO m =>
   Int ->
-  WireEncodeOptions ->
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit options publish message
+makePacketSender limit publish message
   | limit <= 0 || ByteString.length message < limit =
     -- In the case that the maximum packet payload length @size@ is not at least
     -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
     -- terminal packet.
     let packet :: Packet ByteString
-        packet = Packet message (PacketInfo 0 1)
-     in publish (wireWrapPacket' options packet)
+        packet = Packet message 0 1
+     in publish (wireWrapPacket' packet)
   | otherwise = do
     caps <- liftIO getNumCapabilities
     jobs <- newTVarIO 0
 
-    replicateConcurrently_ caps $ fix \next -> 
+    replicateConcurrently_ caps $ fix \next ->
       atomically (takeJobId jobs) >>= \case
         Nothing -> pure ()
-        Just jobid -> do 
+        Just jobid -> do
           let packet :: Packet ByteString
               packet = makePacket jobid
-           in publish (wireWrapPacket' options packet)
+           in publish (wireWrapPacket' packet)
           next
   where
     njobs :: Int
     njobs = (ByteString.length message + (limit - 1)) `quot` limit
 
     takeJobId :: TVar Int -> STM (Maybe Int)
-    takeJobId jobs = do 
+    takeJobId jobs = do
       jobid <- readTVar jobs
       if jobid < njobs
         then writeTVar jobs (1 + jobid) $> Just jobid
@@ -269,7 +205,7 @@ makePacketSender limit options publish message
     sliceBytes i = ByteString.take limit (ByteString.drop (i * limit) message)
 
     makePacket :: Int -> Packet ByteString
-    makePacket jobid = Packet (sliceBytes jobid) (PacketInfo jobid njobs)
+    makePacket jobid = Packet (sliceBytes jobid) jobid njobs
 
 -- PacketInfo - Query ----------------------------------------------------------
 
@@ -277,8 +213,8 @@ makePacketSender limit options publish message
 -- it's 'npackets'.
 --
 -- @since 0.1.0.0
-isLastPacketInfo :: PacketInfo -> Bool
-isLastPacketInfo info = position info == npackets info - 1
+isLastPacket :: Packet a -> Bool
+isLastPacket (Packet _ i n) = i == n - 1
 
 -- PacketSet -------------------------------------------------------------------
 
@@ -312,7 +248,7 @@ mergePacketSet (PacketSet pxs) = do
 -- @since 0.1.0.0
 insertPacketSet :: Packet a -> PacketSet a -> STM ()
 insertPacketSet px (PacketSet pxs) = do
-  let key = position (metadata px)
+  let key = position px
   let val = payload px
   exists <- TMap.member key pxs
   unless exists (TMap.insert key val pxs)
@@ -329,24 +265,24 @@ lengthPacketSet (PacketSet pxs) = TMap.length pxs
 --
 -- @since 0.1.0.0
 newtype PacketReader a = PacketReader
-  {unPacketReader :: ReaderT PacketReaderEnv (ExceptT WireDecodeError IO) a}
+  {unPacketReader :: ReaderT PacketReaderEnv (ExceptT ParseError IO) a}
   deriving newtype (Functor, Applicative, Monad)
   deriving newtype (MonadIO)
-  deriving newtype (MonadError WireDecodeError, MonadReader PacketReaderEnv)
+  deriving newtype (MonadError ParseError, MonadReader PacketReaderEnv)
 
 -- | TODO
 --
 -- @since 0.1.0.0
 data PacketReaderEnv = PacketReaderEnv
-  { channel :: {-# UNPACK #-} !(TChan LByteString)
+  { queue :: {-# UNPACK #-} !(TQueue ByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)
   , npacket :: {-# UNPACK #-} !(TMVar Int)
   }
 
 runPacketReader ::
   PacketReader a ->
-  TChan LByteString ->
-  IO (Either WireDecodeError a)
+  TQueue ByteString ->
+  IO (Either ParseError a)
 runPacketReader m channel = do
   pxs <- liftIO emptyPacketSetIO
   var <- liftIO newEmptyTMVarIO
@@ -354,18 +290,16 @@ runPacketReader m channel = do
     & flip runReaderT (PacketReaderEnv channel pxs var)
     & runExceptT
 
-readNextPacket :: WireDecodeOptions -> PacketReader ()
-readNextPacket options = do
-  query <- asks (readTChan . channel)
+readNextPacket :: PacketReader ()
+readNextPacket = do
+  query <- asks (readTQueue . queue)
   bytes <- liftIO (atomically query)
-  packet <- wireUnwrapPacket options (toStrict bytes)
+  packet <- wireUnwrapPacket bytes
   pxs <- asks packets
   var <- asks npacket
   liftIO $ atomically do
-    let info :: PacketInfo
-        info = metadata packet
-     in when (isLastPacketInfo info) do
-          putTMVar var (position info)
+    when (isLastPacket packet) do
+      putTMVar var (position packet)
     insertPacketSet packet pxs
 
 isMissingPackets :: PacketReader Bool

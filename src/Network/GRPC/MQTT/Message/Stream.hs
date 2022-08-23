@@ -22,7 +22,6 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TChan (TChan)
 import Control.Concurrent.STM.TQueue (TQueue, isEmptyTQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, throwError)
@@ -52,6 +51,7 @@ import Network.GRPC.MQTT.Serial qualified as Serial
 
 import Proto.Mqtt (RemoteError, WrappedStreamChunk)
 import Proto.Mqtt qualified as Proto
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 
 -- Stream Chunks ---------------------------------------------------------------
 
@@ -116,10 +116,10 @@ wireUnwrapStreamChunk options bytes =
 makeStreamReader ::
   forall io m.
   (MonadIO io, MonadError RemoteError m, MonadIO m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   io (m (Maybe ByteString))
-makeStreamReader channel options = do
+makeStreamReader source options = do
   -- TODO: document 'makeStreamReader' how buffering the stream chunks here, 
   -- noting interactions with other functions such as 'makeClientStreamReader'.
   queue <- atomically newTQueue
@@ -128,7 +128,7 @@ makeStreamReader channel options = do
   where
     nextStreamChunk :: TQueue ByteString -> IORef Bool -> m ()
     nextStreamChunk queue isdone = do
-      runStreamChunkRead channel options >>= \case
+      runStreamChunkRead source options >>= \case
         Nothing -> writeIORef isdone True
         Just cs -> liftIO (atomically (mapM_ (writeTQueue queue) cs))
 
@@ -152,13 +152,13 @@ makeStreamReader channel options = do
       
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
-  TChan LByteString ->
+  TQueue ByteString ->
   WireDecodeOptions ->
   m (Maybe (Vector ByteString))
 runStreamChunkRead channel options = do
-  result <- runExceptT (Packet.makePacketReader channel options)
+  result <- runExceptT (Packet.makePacketReader channel)
   case result of
-    Left err -> throwError (Message.toRemoteError err)
+    Left err -> throwError (parseErrorToRCE err)
     Right bs -> wireUnwrapStreamChunk options bs
 
 makeStreamBatchSender ::
@@ -216,7 +216,7 @@ makeStreamChunkSender ::
 makeStreamChunkSender limit options chunks publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options (Just chunks)
-   in Packet.makePacketSender limit options publish message
+   in Packet.makePacketSender limit publish message
 
 makeStreamFinalSender ::
   MonadUnliftIO m =>
@@ -227,4 +227,4 @@ makeStreamFinalSender ::
 makeStreamFinalSender limit options publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options Nothing
-   in Packet.makePacketSender limit options publish message
+   in Packet.makePacketSender limit publish message

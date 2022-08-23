@@ -36,12 +36,11 @@ module Network.GRPC.MQTT.RemoteClient.Session
     SessionHandle
       ( SessionHandle,
         hdlThread,
-        hdlRqtChan,
+        hdlRqtQueue,
         hdlHeartbeat
       ),
 
     -- ** Session Watchdog
-    defaultWatchdogPeriodSec,
     newWatchdogIO,
 
     -- * Session Config
@@ -77,7 +76,7 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TChan (TChan, newTChanIO)
+import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO)
 
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
@@ -276,27 +275,18 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 0.1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtChan :: TChan LByteString
+  , hdlRqtQueue :: TQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
-
--- | The default watchdog timeout period in seconds.
---
--- >>> defaultWatchdogPeriodSec
--- 10s
---
--- @since 0.1.0.0
-defaultWatchdogPeriodSec :: NominalDiffTime
-defaultWatchdogPeriodSec = 10
 
 -- | Constructs a 'SessionHandle' monitoring from a request handler thread.
 --
 -- @since 0.1.0.0
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
-  channel <- newTChanIO
-  monitor <- newTMVarIO ()
-  pure (SessionHandle thread channel monitor)
+  SessionHandle thread 
+    <$> newTQueueIO
+    <*> newTMVarIO ()
 
 -- | TODO
 --

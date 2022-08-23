@@ -7,8 +7,6 @@ module Test.Network.GRPC.MQTT.Message.Gen
 
     -- * Packet Generators
     packet,
-    packetInfo,
-    packetVector,
     shufflePackets,
     packetSplitLength,
     packetBytes,
@@ -40,7 +38,7 @@ import Relude
 
 --------------------------------------------------------------------------------
 
-import Network.GRPC.MQTT.Message.Packet (Packet, PacketInfo)
+import Network.GRPC.MQTT.Message.Packet (Packet)
 import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Network.GRPC.MQTT.Message.Request (Request)
 import Network.GRPC.MQTT.Message.Request qualified as Request
@@ -86,21 +84,8 @@ packet =
   Gen.sized \size ->
     Packet.Packet
       <$> Gen.bytes (Range.constant 0 (fromIntegral size))
-      <*> packetInfo
-
--- | Generates a 'Packet' information record.
-packetInfo :: MonadGen m => m PacketInfo
-packetInfo =
-  Packet.PacketInfo
-    <$> Gen.int Range.constantBounded
-    <*> Gen.int Range.constantBounded
-
--- | Produces a vector of packets by packetizing a random 'ByteString'.
-packetVector :: MonadGen m => m (Vector (Packet ByteString))
-packetVector = do
-  message <- packetBytes
-  maxsize <- packetSplitLength message
-  pure (Packet.splitPackets maxsize message)
+      <*> Gen.int Range.constantBounded
+      <*> Gen.int Range.constantBounded
 
 -- | Generates a new packets vector that is a random permutation of the vector
 -- provided.

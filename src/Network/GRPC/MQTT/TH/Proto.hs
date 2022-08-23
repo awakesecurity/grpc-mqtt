@@ -48,8 +48,7 @@ import Control.Monad.Except (Except, MonadError, runExcept, throwError)
 
 import Data.Map.Strict qualified as Map
 
-import Language.Haskell.TH (ExpQ, Name, Q)
-import Language.Haskell.TH qualified as TH
+import Language.Haskell.TH (Q)
 import Language.Haskell.TH.Syntax qualified as TH
 
 import Proto3.Suite.DotProto qualified as DotProto
@@ -81,6 +80,8 @@ import Turtle qualified
 
 --------------------------------------------------------------------------------
 
+import Network.GRPC.LowLevel (GRPCMethodType (..))
+
 import Network.GRPC.MQTT.Option
   ( ProtoOptions
       ( ProtoOptions,
@@ -107,14 +108,6 @@ import Network.GRPC.MQTT.Proto
     servicesOf,
     throwCompileErrorIO,
   )
-import Network.GRPC.MQTT.Wrapping
-  ( wrapBiDiStreamingClientHandler,
-    wrapClientStreamingClientHandler,
-    wrapServerStreamingClientHandler,
-    wrapUnaryClientHandler,
-  )
-
-import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 
 --------------------------------------------------------------------------------
 
@@ -345,7 +338,7 @@ batchedStreamOptionIdent = DotProto.Single "hs_grpc_mqtt_batched_stream"
 
 forEachService ::
   Turtle.FilePath ->
-  (String -> [(String, ExpQ, Name)] -> ExceptT CompileError Q a) ->
+  (String -> [(String, GRPCMethodType)] -> ExceptT CompileError Q a) ->
   Q [a]
 forEachService filepath action = do
   dotproto <- openProtoFileQ filepath
@@ -357,22 +350,21 @@ forEachService filepath action = do
     serviceName <- toUnqualifiedNameQ nm
     let endpointPrefix = "/" ++ pkgQual ++ "." ++ serviceName ++ "/"
 
-    let serviceMethodName (DotProtoServiceRPCMethod RPCMethod{..}) = do
+    let serviceMethodInfo :: DotProtoServicePart -> Q [(String, GRPCMethodType)]
+        serviceMethodInfo (DotProtoServiceRPCMethod RPCMethod{..}) = do
           case rpcMethodName of
             DotProto.Single rpcNm -> do
-
-              let streamingWrapper =
+              let methodType =
                     case (rpcMethodRequestStreaming, rpcMethodResponseStreaming) of
-                      (NonStreaming, Streaming) -> [e|wrapServerStreamingClientHandler|]
-                      (NonStreaming, NonStreaming) -> [e|wrapUnaryClientHandler|]
-                      (Streaming, NonStreaming) -> [e|wrapClientStreamingClientHandler|]
-                      (Streaming, Streaming) -> [e|wrapBiDiStreamingClientHandler|]
-              clientFun <- mapCompileErrorQ (prefixedMethodName serviceName rpcNm)
-              return [(endpointPrefix <> rpcNm, streamingWrapper, TH.mkName clientFun)]
+                      (NonStreaming, NonStreaming) -> Normal
+                      (NonStreaming, Streaming) -> ServerStreaming
+                      (Streaming, NonStreaming) -> ClientStreaming
+                      (Streaming, Streaming) -> BiDiStreaming
+              return [(endpointPrefix <> rpcNm, methodType)]
             _ -> mapCompileErrorQ (invalidMethodNameError rpcMethodName)
-        serviceMethodName _ = pure []
+        serviceMethodInfo _ = pure []
 
-    serviceMethods <- foldMapM serviceMethodName ps
+    serviceMethods <- foldMapM serviceMethodInfo ps
     result <- runExceptT (action serviceName serviceMethods)
     mapCompileErrorQ result
   where

@@ -1,11 +1,5 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
 
 -- Copyright (c) 2021 Arista Networks, Inc.
 -- Use of this source code is governed by the Apache License 2.0
@@ -26,7 +20,7 @@ import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.STM.TChan (TChan, writeTChan)
 
-import Control.Exception (bracket)
+import Control.Exception (bracket, throwIO)
 import Control.Exception.Safe (handleAny)
 
 import Control.Monad.Except (MonadError, throwError)
@@ -35,12 +29,8 @@ import Control.Monad.IO.Unlift (withRunInIO)
 import Data.List (stripPrefix)
 import Data.Text qualified as Text
 
-import Network.GRPC.HighLevel (GRPCIOError, StreamRecv, StreamSend)
-import Network.GRPC.HighLevel.Client
-  ( ClientError (ClientIOError),
-    ClientResult (..),
-    WritesDone,
-  )
+import Network.GRPC.LowLevel (GRPCIOError, StreamRecv, StreamSend)
+import Network.GRPC.LowLevel.Op (WritesDone)
 
 import Network.MQTT.Client
   ( MQTTClient,
@@ -53,7 +43,6 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter, Topic)
 import Network.MQTT.Topic qualified as Topic
 
-import Proto3.Suite (Message)
 import Proto3.Suite qualified as Proto3
 
 import Proto3.Wire.Decode qualified as Decode
@@ -94,7 +83,7 @@ import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
 import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
-import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap)
+import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult)
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
@@ -246,11 +235,12 @@ handleRequest handle = do
           publishClientResponse encodeOptions result
         ClientBiDiStreamHandler k -> do
           result <- withRunInIO \runIO -> do
-            k timeout metadata \_ ms recv send done -> runIO do
-              publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
-              let reader = makeServerStreamReader encodeOptions recv
-                  sender = makeServerStreamSender channel encodeOptions decodeOptions send done
-               in concurrently_ sender reader
+            k timeout metadata \_ getMetadata recv send done ->
+              liftIO getMetadata >>= either throwIO \ms -> runIO do
+                publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+                let reader = makeServerStreamReader encodeOptions recv
+                    sender = makeServerStreamSender channel encodeOptions decodeOptions send done
+                 in concurrently_ sender reader
           publishClientResponse encodeOptions result
 
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
@@ -278,9 +268,8 @@ dispatchClientHandler k = do
 ---------------------------------------------------------------------------------
 
 publishClientResponse ::
-  Message a =>
   WireEncodeOptions ->
-  ClientResult s a ->
+  RemoteResult s ->
   Session ()
 publishClientResponse options result = do
   client <- asks cfgClient
@@ -307,9 +296,7 @@ publishPackets options message = do
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
 publishGRPCIOError options err =
-  let message :: RemoteError
-      message = Wrapping.toRemoteError (ClientIOError err)
-   in publishRemoteError options message
+  publishRemoteError options (Wrapping.toRemoteError err)
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --
@@ -363,16 +350,14 @@ handleWritesDone options done =
 ---------------------------------------------------------------------------------
 
 makeServerStreamSender ::
-  forall a.
-  Message a =>
   TChan LByteString ->
   WireEncodeOptions ->
   WireDecodeOptions ->
-  StreamSend a ->
+  StreamSend ByteString ->
   WritesDone ->
   Session ()
 makeServerStreamSender channel encodeOptions decodeOptions sender done = do
-  reader <- makeClientStreamReader @_ @a channel decodeOptions
+  reader <- makeClientStreamReader @_ channel decodeOptions
   fix \loop -> do
     runExceptT reader >>= \case
       Left err -> do
@@ -385,9 +370,8 @@ makeServerStreamSender channel encodeOptions decodeOptions sender done = do
         loop
 
 makeServerStreamReader ::
-  Message a =>
   WireEncodeOptions ->
-  StreamRecv a ->
+  StreamRecv ByteString ->
   Session ()
 makeServerStreamReader options recv = do
   (send, done) <- makeStreamSender
@@ -402,7 +386,7 @@ makeServerStreamReader options recv = do
         done
       Right (Just x) ->
         let message :: ByteString
-            message = Message.toWireEncoded options x
+            message = Message.mapEncodeOptions options x
          in send message >> loop
   where
     makeStreamSender :: Session (ByteString -> Session (), Session ())
@@ -417,10 +401,10 @@ makeServerStreamReader options recv = do
 ---------------------------------------------------------------------------------
 
 makeClientStreamReader ::
-  (MonadError RemoteError m, MonadIO m, Message a) =>
+  (MonadError RemoteError m, MonadIO m) =>
   TChan LByteString ->
   WireDecodeOptions ->
-  Session (m (Maybe a))
+  Session (m (Maybe ByteString))
 makeClientStreamReader channel options = do
   reader <- Stream.makeStreamReader channel options
   withRunInIO \runIO -> pure do
@@ -434,15 +418,14 @@ makeClientStreamReader channel options = do
         liftIO $ runIO do
           Session.logDebug "client stream reader: read chunk" (show chunk)
         for chunk \bytes -> do
-          runExceptT (Message.fromWireEncoded options bytes) >>= \case
+          runExceptT (Message.mapDecodeOptions options bytes) >>= \case
             Left err -> throwError (Message.toRemoteError err)
             Right rx -> pure rx
 
 makeClientStreamSender ::
-  Message a =>
   TChan LByteString ->
   ProtoOptions ->
-  StreamSend a ->
+  StreamSend ByteString ->
   Session ()
 makeClientStreamSender channel options sender = do
   let encodeOptions = Serial.makeRemoteEncodeOptions options

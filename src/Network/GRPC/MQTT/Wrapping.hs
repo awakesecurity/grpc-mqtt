@@ -15,10 +15,6 @@ module Network.GRPC.MQTT.Wrapping
     toGRPCIOError,
     toMetadataMap,
     fromMetadataMap,
-    wrapUnaryClientHandler,
-    wrapClientStreamingClientHandler,
-    wrapServerStreamingClientHandler,
-    wrapBiDiStreamingClientHandler,
     toStatusCode,
     fromStatusCode,
     toStatusDetails,
@@ -33,15 +29,7 @@ import Control.Monad.Except (MonadError, throwError)
 
 import Relude
 
-import Network.GRPC.MQTT.Types
-  ( ClientHandler
-      ( ClientBiDiStreamHandler,
-        ClientClientStreamHandler,
-        ClientServerStreamHandler,
-        ClientUnaryHandler
-      ),
-    MQTTResult (..),
-  )
+import Network.GRPC.MQTT.Types (MQTTResult (..))
 
 import Proto.Mqtt as Proto
   ( MetadataMap (MetadataMap),
@@ -63,11 +51,9 @@ import Network.GRPC.HighLevel as HL
   )
 import Network.GRPC.HighLevel.Client
   ( ClientError (..),
-    ClientRequest (ClientBiDiRequest, ClientNormalRequest, ClientReaderRequest, ClientWriterRequest),
     ClientResult
       ( ClientErrorResponse
       ),
-    GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
 import Network.GRPC.Unsafe (CallError (..))
 import Proto3.Suite
@@ -78,44 +64,6 @@ import Proto3.Suite
 import Proto3.Wire.Decode (ParseError (..))
 
 ---------------------------------------------------------------------------------
-
-
--- Client Handler Wrappers
-wrapUnaryClientHandler ::
-  (Message request, Message response) =>
-  (ClientRequest 'Normal request response -> IO (ClientResult 'Normal response)) ->
-  ClientHandler
-wrapUnaryClientHandler handler =
-  ClientUnaryHandler $ \raw timeout metadata ->
-    case fromByteString raw of
-      Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
-      Right msg -> handler (ClientNormalRequest msg timeout metadata)
-
-wrapServerStreamingClientHandler ::
-  (Message request, Message response) =>
-  (ClientRequest 'ServerStreaming request response -> IO (ClientResult 'ServerStreaming response)) ->
-  ClientHandler
-wrapServerStreamingClientHandler handler =
-  ClientServerStreamHandler \rawRequest timeout metadata recv ->
-    case fromByteString rawRequest of
-      Left err -> pure $ ClientErrorResponse (ClientErrorNoParse err)
-      Right req -> handler (ClientReaderRequest req timeout metadata recv)
-
-wrapClientStreamingClientHandler ::
-  (Message request, Message response) =>
-  (ClientRequest 'ClientStreaming request response -> IO (ClientResult 'ClientStreaming response)) ->
-  ClientHandler
-wrapClientStreamingClientHandler handler =
-  ClientClientStreamHandler $ \timeout metadata send -> do
-    handler (ClientWriterRequest timeout metadata send)
-
-wrapBiDiStreamingClientHandler ::
-  (Message request, Message response) =>
-  (ClientRequest 'BiDiStreaming request response -> IO (ClientResult 'BiDiStreaming response)) ->
-  ClientHandler
-wrapBiDiStreamingClientHandler handler =
-  ClientBiDiStreamHandler \timeout metadata bidi -> do
-    handler (ClientBiDiRequest timeout metadata bidi)
 
 -- Utilities
 remoteError :: LText -> RemoteError
@@ -175,9 +123,8 @@ fromStatusDetails :: StatusDetails -> LText
 fromStatusDetails = decodeUtf8 . unStatusDetails
 
 -- Error conversions
-toRemoteError :: ClientError -> RemoteError
-toRemoteError (ClientErrorNoParse pe) = parseErrorToRCE pe
-toRemoteError (ClientIOError ge) =
+toRemoteError :: GRPCIOError -> RemoteError
+toRemoteError ge =
   case ge of
     GRPCIOCallError ce ->
       case ce of

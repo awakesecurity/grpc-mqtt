@@ -155,16 +155,6 @@ testCallLongBytes = do
       methods <- testServiceRemoteClientMethodMap grpcClient
       results <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
 
-        _ <- Async.async do
-          withMQTTGRPCClient logger clientConfig \client ->
-            Async.replicateConcurrently 8 do
-              uuid <- UUID.nextRandom
-
-              let msg = Message.OneInt 8
-              let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
-
-              testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
-
         withMQTTGRPCClient logger clientConfig \client ->
           Async.replicateConcurrently 8 do
 

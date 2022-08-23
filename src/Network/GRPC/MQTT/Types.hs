@@ -20,6 +20,7 @@ module Network.GRPC.MQTT.Types
     requestMetadata,
     MQTTResult (..),
     MethodMap,
+    RemoteResult (..),
     ClientHandler (..),
   )
 where
@@ -35,9 +36,16 @@ import Network.GRPC.HighLevel.Client
     TimeoutSeconds,
     WritesDone,
   )
-import Network.GRPC.LowLevel (ClientCall)
-
-import Proto3.Suite (Message)
+import Network.GRPC.LowLevel (GRPCIOError)
+import Network.GRPC.LowLevel.Client
+  ( ClientRWHandler,
+    ClientRWResult,
+    ClientReaderHandler,
+    ClientReaderResult,
+    ClientWriterHandler,
+    ClientWriterResult,
+    NormalRequestResult,
+  )
 
 import Relude
 
@@ -115,21 +123,17 @@ data MQTTResult streamtype response
 -- | A map from gRPC method names to their corresponding handler
 type MethodMap = HashMap ByteString ClientHandler
 
+-- | Response received from a remote gRPC service
+data RemoteResult (streamType :: GRPCMethodType) where
+  RemoteNormalResult :: NormalRequestResult -> RemoteResult 'Normal
+  RemoteWriterResult :: ClientWriterResult -> RemoteResult 'ClientStreaming
+  RemoteReaderResult :: ClientReaderResult -> RemoteResult 'ServerStreaming
+  RemoteBiDiResult :: ClientRWResult -> RemoteResult 'BiDiStreaming
+  RemoteErrorResult :: GRPCIOError -> RemoteResult streamType
+
 -- | Client gRPC handlers used by the remote gRPC client to make requests
-data ClientHandler where
-  ClientUnaryHandler ::
-    (Message response) =>
-    (ByteString -> TimeoutSeconds -> MetadataMap -> IO (ClientResult 'Normal response)) ->
-    ClientHandler
-  ClientClientStreamHandler ::
-    (Message request, Message response) =>
-    (TimeoutSeconds -> MetadataMap -> (StreamSend request -> IO ()) -> IO (ClientResult 'ClientStreaming response)) ->
-    ClientHandler
-  ClientServerStreamHandler ::
-    (Message response) =>
-    (ByteString -> TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> IO ()) -> IO (ClientResult 'ServerStreaming response)) ->
-    ClientHandler
-  ClientBiDiStreamHandler ::
-    (Message request, Message response) =>
-    (TimeoutSeconds -> MetadataMap -> (ClientCall -> MetadataMap -> StreamRecv response -> StreamSend request -> WritesDone -> IO ()) -> IO (ClientResult 'BiDiStreaming response)) ->
-    ClientHandler
+data ClientHandler
+  = ClientUnaryHandler (ByteString -> TimeoutSeconds -> MetadataMap -> IO (RemoteResult 'Normal))
+  | ClientClientStreamHandler (TimeoutSeconds -> MetadataMap -> ClientWriterHandler -> IO (RemoteResult 'ClientStreaming))
+  | ClientServerStreamHandler (ByteString -> TimeoutSeconds -> MetadataMap -> ClientReaderHandler -> IO (RemoteResult 'ServerStreaming))
+  | ClientBiDiStreamHandler (TimeoutSeconds -> MetadataMap -> ClientRWHandler -> IO (RemoteResult 'BiDiStreaming))

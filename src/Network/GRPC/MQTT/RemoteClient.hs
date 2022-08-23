@@ -239,9 +239,9 @@ handleRequest handle = do
           result <- withRunInIO \runIO -> do
             k timeout metadata \_ getMetadata recv send done ->
               liftIO getMetadata >>= either throwIO \ms -> runIO do
-                publishPackets encodeOptions (toStrict $ wireEncodeMetadataMap ms)
+                publishPackets (toStrict $ wireEncodeMetadataMap ms)
                 let reader = makeServerStreamReader encodeOptions recv
-                    sender = makeServerStreamSender channel encodeOptions decodeOptions send done
+                    sender = makeServerStreamSender queue encodeOptions decodeOptions send done
                  in concurrently_ sender reader
           publishClientResponse encodeOptions result
 
@@ -424,7 +424,7 @@ makeClientStreamReader queue options = do
             Right rx -> pure rx
 
 makeClientStreamSender ::
-  TChan ByteString ->
+  TQueue ByteString ->
   ProtoOptions ->
   StreamSend ByteString ->
   Session ()

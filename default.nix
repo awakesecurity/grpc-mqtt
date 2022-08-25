@@ -22,12 +22,18 @@ let
                 gpr = self.grpc;
               };
               grpc-haskell = self.haskell.lib.dontCheck (haskellPackagesNew.callPackage nix/packages/grpc-haskell.nix { });
-              grpc-mqtt = haskellPackagesNew.callCabal2nix "grpc-mqtt" (gitignoreSource ./.) { };
+              net-mqtt = self.haskell.lib.dontCheck (haskellPackagesNew.callPackage nix/packages/net-mqtt.nix { });
               range-set-list = self.haskell.lib.overrideCabal haskellPackagesOld.range-set-list (_: {
                 broken = false;
                 jailbreak = true;
               });
               word-compat = haskellPackagesNew.callPackage nix/packages/word-compat.nix { };
+
+              grpc-mqtt = (haskellPackagesNew.callCabal2nix "grpc-mqtt" (gitignoreSource ./.) { }).overrideAttrs (old: {
+                buildInputs = (old.buildInputs or []) ++ [ self.mosquitto ];
+                preCheck = "./scripts/host-mosquitto.sh -d &";
+                postCheck = "xargs --arg-file=test-files/mqtt-broker.pid kill";
+              });
             })
           ];
         });

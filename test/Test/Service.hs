@@ -163,7 +163,7 @@ testCallLongBytes = do
             -- requests that send responses which, when sent back by the
             -- server trigger a GRPCIOTimeout error in some of the clients.
             let msg = Message.OneInt 8
-            let rqt = GRPC.MQTT.MQTTNormalRequest msg 8 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+            let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
             testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
@@ -182,7 +182,7 @@ testCallLongBytes = do
 testNormalCall :: Fixture ()
 testNormalCall = do
   let msg = Message.TwoInts 5 10
-  let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+  let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 mempty
   rsp <- makeMethodCall testServicenormalCall rqt
 
   checkNormalResponse msg rsp
@@ -307,7 +307,7 @@ testClientTimeout = do
 
   rsp <- liftIO $ withMQTTGRPCClient logger clientConfig \client -> do
     let msg = Message.TwoInts 5 10
-    let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+    let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 mempty
     testServicenormalCall (testServiceMqttClient client baseTopic) rqt
 
   liftIO case rsp of
@@ -342,7 +342,7 @@ testMissingClientMethod = do
         sleep 1
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           let msg = Message.TwoInts 5 10
-          let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+          let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 mempty
           testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
 
   liftIO case rsp of
@@ -367,7 +367,7 @@ testMalformedMessage = do
   baseTopic <- asks Suite.testConfigBaseTopic
 
   let msg = Message.TwoInts 5 10
-  let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+  let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 mempty
 
   rsp <- withTestService \_ -> do
     withGRPCClient configGRPC \clientGRPC -> do

@@ -12,12 +12,12 @@ final: prev: {
             });
             net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });
             proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
-            proto3-wire = hfinal.callPackage ../packages/proto3-wire.nix  { };
+            proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             range-set-list = final.haskell.lib.overrideCabal hprev.range-set-list (_: {
               broken = false;
               jailbreak = true;
             });
-            word-compat = hfinal.callPackage ../packages/word-compat.nix { };
+            word-compat = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/word-compat.nix { });
 
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {
               buildInputs = (old.buildInputs or []) ++ [ final.mosquitto ];

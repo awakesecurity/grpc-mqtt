@@ -63,7 +63,7 @@ import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
-import Text.Printf qualified as Text 
+import Text.Printf qualified as Text
 
 import UnliftIO (MonadUnliftIO, throwIO)
 import UnliftIO.Async (replicateConcurrently_)
@@ -164,32 +164,39 @@ makePacketReader queue = do
 
 -- Packet - Packet Senders -----------------------------------------------------
 
-newtype PacketSizeError = PacketSizeError 
+newtype PacketSizeError = PacketSizeError
   {getPacketSizeError :: Integer}
-  deriving (Data, Eq, Generic, Ord, Show, Typeable) 
+  deriving (Data, Eq, Generic, Ord, Show, Typeable)
 
-instance Exception PacketSizeError where 
-  displayException (PacketSizeError n) = 
-    Text.printf 
+-- | @since 1.0.0
+instance Exception PacketSizeError where
+  displayException (PacketSizeError n) =
+    Text.printf
       "%s: maximum packet payload size must be between %d and %d bytes."
       (show (PacketSizeError n) :: String)
       minPacketSize
       maxPacketSize
   {-# INLINE displayException #-}
 
--- | TODO 
+-- | The predicate 'isValidPacketSize' tests if the 'Word32' can be used as the
+-- maximum packet payload size in 'makePacketSender'. This is any 'Word32' value
+-- that is:
+--
+-- * Greater than or equal to 'minPacketSize'.
+--
+-- * Strictly less than 'maxPacketSize'.
 --
 -- @since 1.0.0
 isValidPacketSize :: Word32 -> Bool
-isValidPacketSize x = 14 <= x && x < maxPacketSize
+isValidPacketSize x = minPacketSize <= x && x < maxPacketSize
 
--- | TODO 
+-- | The minimum packet payload size, 16 bytes.
 --
 -- @since 1.0.0
 minPacketSize :: Word32
 minPacketSize = 16
 
--- | TODO 
+-- | The maximum packet payload size, 256mB.
 --
 -- @since 1.0.0
 maxPacketSize :: Word32
@@ -202,12 +209,15 @@ maxPacketSize = 256 * 2 ^ (20 :: Int)
 -- @since 0.1.0.0
 makePacketSender ::
   MonadUnliftIO m =>
+  -- | The maximum packet payload size. This must be a 'Word32' value greater 
+  -- than or equal to 'minPacketSize' and less than 'maxPacketSize'. Otherwise,
+  -- a 'PacketSizeError' exception will be thrown.
   Word32 ->
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit publish message = do 
-  unless (isValidPacketSize limit) do 
+makePacketSender limit publish message = do
+  unless (isValidPacketSize limit) do
     throwIO (PacketSizeError $ toInteger limit)
 
   if fromIntegral (ByteString.length message) <= payloadSize
@@ -229,7 +239,7 @@ makePacketSender limit publish message = do
             publish (wireWrapPacket' packet)
             next
   where
-    payloadSize :: Word32 
+    payloadSize :: Word32
     payloadSize = max (limit - minPacketSize) 1
 
     njobs :: Word32

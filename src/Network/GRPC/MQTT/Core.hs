@@ -79,7 +79,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
   , -- | Maximum size for an MQTT message in bytes
-    mqttMsgSizeLimit :: Int
+    mqttMsgSizeLimit :: Word32
   , -- | Proxy to use to connect to the MQTT broker
     brokerProxy :: Maybe ProxySettings
   , _cleanSession :: Bool

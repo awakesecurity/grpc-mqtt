@@ -23,6 +23,10 @@ module Network.GRPC.MQTT.Message.Packet
     makePacketReader,
 
     -- * Packet Senders
+    PacketSizeError (PacketSizeError),
+    isValidPacketSize,
+    minPacketSize,
+    maxPacketSize,
     makePacketSender,
 
     -- * Query
@@ -59,26 +63,28 @@ import Proto3.Wire.Encode qualified as Encode
 
 import Relude
 
-import UnliftIO (MonadUnliftIO)
+import Text.Printf qualified as Text 
+
+import UnliftIO (MonadUnliftIO, throwIO)
 import UnliftIO.Async (replicateConcurrently_)
 
 -- Packet ----------------------------------------------------------------------
 
--- | 'Packet' is a MQTT packet.  
+-- | 'Packet' is a MQTT packet.
 --
 -- @since 0.1.0.0
 data Packet msg = Packet
-  { -- | 'payload' is the packets payload. For a @'Packet' 'ByteString'@, this 
-    -- is typically a serialized protobuf message. 
+  { -- | 'payload' is the packets payload. For a @'Packet' 'ByteString'@, this
+    -- is typically a serialized protobuf message.
     payload :: msg
   , -- | 'position' is an index referring to a packets location within a stream
-    -- of packets. A packets 'position' should always be strictly less than the 
+    -- of packets. A packets 'position' should always be strictly less than the
     -- value for 'npackets'.
-    position :: {-# UNPACK #-} !Int
-  , -- | 'npackets' is the number of packets expected in this packets stream. 
-    -- The last or terminal packet within a stream of packets should always 
+    position :: {-# UNPACK #-} !Word32
+  , -- | 'npackets' is the number of packets expected in this packets stream.
+    -- The last or terminal packet within a stream of packets should always
     -- have a 'position' equal to @'npackets' - 1@.
-    npackets :: {-# UNPACK #-} !Int
+    npackets :: {-# UNPACK #-} !Word32
   }
   deriving stock (Eq, Ord, Show)
   deriving stock (Data, Generic, Typeable)
@@ -105,8 +111,8 @@ wireWrapPacket' = toStrict . wireWrapPacket
 wireBuildPacket :: Packet ByteString -> MessageBuilder
 wireBuildPacket (Packet bxs i n) =
   Encode.byteString 1 bxs
-    <> Encode.sint64 2 (fromIntegral i)
-    <> Encode.sint64 3 (fromIntegral n)
+    <> Encode.fixed32 2 i
+    <> Encode.fixed32 3 n
 {-# INLINE wireBuildPacket #-}
 
 -- Packet - Wire Format - Decoding ----------------------------------------------
@@ -128,8 +134,8 @@ wireParsePacket :: Parser RawMessage (Packet ByteString)
 wireParsePacket =
   Packet
     <$> Decode.at (Decode.one Decode.byteString ByteString.empty) 1
-    <*> Decode.at (fromIntegral <$> Decode.one Decode.sint64 0) 2
-    <*> Decode.at (fromIntegral <$> Decode.one Decode.sint64 1) 3
+    <*> Decode.at (Decode.one Decode.fixed32 0) 2
+    <*> Decode.at (Decode.one Decode.fixed32 1) 3
 {-# INLINE wireParsePacket #-}
 
 -- Packet - Packet Readers ----------------------------------------------------
@@ -158,6 +164,37 @@ makePacketReader queue = do
 
 -- Packet - Packet Senders -----------------------------------------------------
 
+newtype PacketSizeError = PacketSizeError 
+  {getPacketSizeError :: Integer}
+  deriving (Data, Eq, Generic, Ord, Show, Typeable) 
+
+instance Exception PacketSizeError where 
+  displayException (PacketSizeError n) = 
+    Text.printf 
+      "%s: maximum packet payload size must be between %d and %d bytes."
+      (show (PacketSizeError n) :: String)
+      minPacketSize
+      maxPacketSize
+  {-# INLINE displayException #-}
+
+-- | TODO 
+--
+-- @since 1.0.0
+isValidPacketSize :: Word32 -> Bool
+isValidPacketSize x = 14 <= x && x < maxPacketSize
+
+-- | TODO 
+--
+-- @since 1.0.0
+minPacketSize :: Word32
+minPacketSize = 16
+
+-- | TODO 
+--
+-- @since 1.0.0
+maxPacketSize :: Word32
+maxPacketSize = 256 * 2 ^ (20 :: Int)
+
 -- | Construct a packetized message sender given the maximum size for each
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish
 -- function.
@@ -165,35 +202,40 @@ makePacketReader queue = do
 -- @since 0.1.0.0
 makePacketSender ::
   MonadUnliftIO m =>
-  Int ->
+  Word32 ->
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit publish message
-  | limit <= 0 || ByteString.length message < limit =
-    -- In the case that the maximum packet payload length @size@ is not at least
-    -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
-    -- terminal packet.
-    let packet :: Packet ByteString
-        packet = Packet message 0 1
-     in publish (wireWrapPacket' packet)
-  | otherwise = do
-    caps <- liftIO getNumCapabilities
-    jobs <- newTVarIO 0
+makePacketSender limit publish message = do 
+  unless (isValidPacketSize limit) do 
+    throwIO (PacketSizeError $ toInteger limit)
 
-    replicateConcurrently_ caps $ fix \next ->
-      atomically (takeJobId jobs) >>= \case
-        Nothing -> pure ()
-        Just jobid -> do
-          let packet :: Packet ByteString
-              packet = makePacket jobid
-           in publish (wireWrapPacket' packet)
-          next
+  if fromIntegral (ByteString.length message) <= payloadSize
+    then do
+      -- In the case that the maximum packet payload length @size@ is not at least
+      -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
+      -- terminal packet.
+      let packet = Packet message 0 1
+      publish (wireWrapPacket' packet)
+    else do
+      caps <- liftIO getNumCapabilities
+      jobs <- newTVarIO 0
+
+      replicateConcurrently_ caps $ fix \next ->
+        atomically (takeJobId jobs) >>= \case
+          Nothing -> pure ()
+          Just jobid -> do
+            let packet = makePacket jobid
+            publish (wireWrapPacket' packet)
+            next
   where
-    njobs :: Int
-    njobs = (ByteString.length message + (limit - 1)) `quot` limit
+    payloadSize :: Word32 
+    payloadSize = max (limit - minPacketSize) 1
 
-    takeJobId :: TVar Int -> STM (Maybe Int)
+    njobs :: Word32
+    njobs = quotInf (fromIntegral $ ByteString.length message) payloadSize
+
+    takeJobId :: TVar Word32 -> STM (Maybe Word32)
     takeJobId jobs = do
       jobid <- readTVar jobs
       if jobid < njobs
@@ -201,11 +243,20 @@ makePacketSender limit publish message
         else pure Nothing
 
     -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
-    sliceBytes :: Int -> ByteString
-    sliceBytes i = ByteString.take limit (ByteString.drop (i * limit) message)
+    sliceBytes :: Word32 -> ByteString
+    sliceBytes i = takePayload payloadSize (dropPayload (i * payloadSize) message)
 
-    makePacket :: Int -> Packet ByteString
+    makePacket :: Word32 -> Packet ByteString
     makePacket jobid = Packet (sliceBytes jobid) jobid njobs
+
+quotInf :: Integral a => a -> a -> a
+quotInf x y = quot (x + (y - 1)) y
+
+takePayload :: Word32 -> ByteString -> ByteString
+takePayload n = ByteString.take (fromIntegral n)
+
+dropPayload :: Word32 -> ByteString -> ByteString
+dropPayload n = ByteString.drop (fromIntegral n)
 
 -- PacketInfo - Query ----------------------------------------------------------
 
@@ -222,7 +273,7 @@ isLastPacket (Packet _ i n) = i == n - 1
 --
 -- @since 0.1.0.0
 newtype PacketSet a = PacketSet
-  {getPacketSet :: TMap Int a}
+  {getPacketSet :: TMap Word32 a}
 
 -- | Constructs an empty 'PacketSet' in 'IO'.
 --
@@ -276,7 +327,7 @@ newtype PacketReader a = PacketReader
 data PacketReaderEnv = PacketReaderEnv
   { queue :: {-# UNPACK #-} !(TQueue ByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)
-  , npacket :: {-# UNPACK #-} !(TMVar Int)
+  , npacket :: {-# UNPACK #-} !(TMVar Word32)
   }
 
 runPacketReader ::
@@ -312,4 +363,4 @@ isMissingPackets = do
       Nothing -> pure True
       Just ct -> do
         len <- lengthPacketSet pxs
-        pure (len - 1 < ct)
+        pure (fromIntegral len - 1 < ct)

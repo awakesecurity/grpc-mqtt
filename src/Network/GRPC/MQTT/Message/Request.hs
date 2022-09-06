@@ -333,7 +333,7 @@ makeRequestReader queue = do
 
 makeRequestSender ::
   MonadUnliftIO m =>
-  Int ->
+  Word32 ->
   (ByteString -> m ()) ->
   (Request ByteString -> m ())
 makeRequestSender limit publish x =

@@ -317,7 +317,7 @@ data SessionConfig = SessionConfig
   , cfgSessions :: TMap Topic SessionHandle
   , cfgLogger :: Logger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
-  , cfgMsgSize :: {-# UNPACK #-} !Int
+  , cfgMsgSize :: {-# UNPACK #-} !Word32
   , cfgMethods :: MethodMap
   }
   deriving (Generic)

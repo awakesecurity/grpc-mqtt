@@ -240,7 +240,7 @@ makeResponseSender ::
   MonadUnliftIO m =>
   MQTTClient ->
   Topic ->
-  Int ->
+  Word32 ->
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
@@ -256,7 +256,7 @@ makeErrorResponseSender ::
   MonadUnliftIO m =>
   MQTTClient ->
   Topic ->
-  Int ->
+  Word32 ->
   WireEncodeOptions ->
   RemoteError ->
   m ()

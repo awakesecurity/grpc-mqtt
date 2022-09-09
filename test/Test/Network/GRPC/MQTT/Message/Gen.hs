@@ -84,8 +84,8 @@ packet =
   Gen.sized \size ->
     Packet.Packet
       <$> Gen.bytes (Range.constant 0 (fromIntegral size))
-      <*> Gen.int Range.constantBounded
-      <*> Gen.int Range.constantBounded
+      <*> Gen.word32 Range.constantBounded
+      <*> Gen.word32 Range.constantBounded
 
 -- | Generates a new packets vector that is a random permutation of the vector
 -- provided.
@@ -97,11 +97,11 @@ shufflePackets = fmap Vector.fromList . Gen.shuffle . Vector.toList
 
 -- | Randomly generates a maximum payload size to use when packetizing a
 -- 'ByteString', bounded by the size of the 'ByteString' provided.
-packetSplitLength :: MonadGen m => ByteString -> m Int
+packetSplitLength :: MonadGen m => ByteString -> m Word32
 packetSplitLength bytes =
-  let range :: Range Int
-      range = Range.constant 0 (ByteString.length bytes)
-   in Gen.int range
+  let range :: Range Word32
+      range = Range.constant Packet.minPacketSize (max Packet.minPacketSize $ fromIntegral $ ByteString.length bytes)
+   in Gen.word32 range
 
 -- | Randomly generates a 'ByteString' suitable for packetization.
 packetBytes :: MonadGen m => m ByteString
@@ -125,10 +125,10 @@ streamChunk = Gen.maybe do
      in Gen.list range packetBytes
   pure (Vector.fromList chunks)
 
-streamChunkLength :: MonadGen m => Maybe (Vector ByteString) -> m Int
+streamChunkLength :: MonadGen m => Maybe (Vector ByteString) -> m Word32
 streamChunkLength Nothing = do 
-  Gen.int Range.constantBounded 
+  Gen.word32 (Range.constant Packet.minPacketSize Packet.maxPacketSize)
 streamChunkLength (Just xs) = do 
-  let limit :: Int 
-      limit = foldr ((+) . ByteString.length) 0 xs
-   in Gen.int (Range.constant 0 limit)
+  let limit :: Word32 
+      limit = foldr ((+) . fromIntegral . ByteString.length) 0 xs
+   in Gen.word32 (Range.constant Packet.minPacketSize $ max Packet.minPacketSize limit)

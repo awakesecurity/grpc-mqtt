@@ -164,7 +164,7 @@ runStreamChunkRead channel options = do
 makeStreamBatchSender ::
   forall io m.
   (MonadIO io, MonadUnliftIO m) =>
-  Int ->
+  Word32 ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   io (ByteString -> m (), m ())
@@ -208,7 +208,7 @@ makeStreamBatchSender limit options publish
 
 makeStreamChunkSender ::
   MonadUnliftIO m =>
-  Int ->
+  Word32 ->
   WireEncodeOptions ->
   Vector ByteString ->
   (ByteString -> m ()) ->
@@ -220,7 +220,7 @@ makeStreamChunkSender limit options chunks publish = do
 
 makeStreamFinalSender ::
   MonadUnliftIO m =>
-  Int ->
+  Word32 ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   m ()

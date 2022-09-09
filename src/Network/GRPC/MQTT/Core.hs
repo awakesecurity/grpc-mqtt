@@ -78,8 +78,10 @@ import Relude
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
-  , -- | Maximum size for an MQTT message in bytes
-    mqttMsgSizeLimit :: Int
+  , -- | Maximum size for an MQTT message in bytes. This value must be greater 
+    -- than or equal to 16 bytes and less than 256mB, see:
+    -- 'Network.GRPC.MQTT.Message.Packet.makePacketSender'.
+    mqttMsgSizeLimit :: Word32
   , -- | Proxy to use to connect to the MQTT broker
     brokerProxy :: Maybe ProxySettings
   , _cleanSession :: Bool

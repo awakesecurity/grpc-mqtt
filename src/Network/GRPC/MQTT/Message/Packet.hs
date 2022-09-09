@@ -196,11 +196,11 @@ isValidPacketSize x = minPacketSize <= x && x < maxPacketSize
 minPacketSize :: Word32
 minPacketSize = 16
 
--- | The maximum packet payload size, 256mB.
+-- | The maximum packet payload size, @256mB - 65kB@.
 --
 -- @since 1.0.0
 maxPacketSize :: Word32
-maxPacketSize = 256 * 2 ^ (20 :: Int)
+maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int) 
 
 -- | Construct a packetized message sender given the maximum size for each
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish

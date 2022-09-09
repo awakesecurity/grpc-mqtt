@@ -9,7 +9,7 @@ where
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
-import Hedgehog (Property, forAll, property, tripping, withTests, (===))
+import Hedgehog (Property, forAll, property, tripping, (===))
 import Hedgehog qualified
 
 import Test.Tasty (TestTree, testGroup)

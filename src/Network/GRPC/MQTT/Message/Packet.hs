@@ -86,8 +86,7 @@ data Packet msg = Packet
     -- have a 'position' equal to @'npackets' - 1@.
     npackets :: {-# UNPACK #-} !Word32
   }
-  deriving stock (Eq, Ord, Show)
-  deriving stock (Data, Generic, Typeable)
+  deriving stock (Data, Eq, Generic, Ord, Show)
 
 -- Packet - Wire Format - Encoding ----------------------------------------------
 
@@ -166,14 +165,14 @@ makePacketReader queue = do
 
 newtype PacketSizeError = PacketSizeError
   {getPacketSizeError :: Integer}
-  deriving (Data, Eq, Generic, Ord, Show, Typeable)
+  deriving stock (Data, Eq, Generic, Ord, Show)
 
 -- | @since 1.0.0
 instance Exception PacketSizeError where
-  displayException (PacketSizeError n) =
+  displayException exn =
     Text.printf
       "%s: maximum packet payload size must be between %d and %d bytes."
-      (show (PacketSizeError n) :: String)
+      (show exn :: String)
       minPacketSize
       maxPacketSize
   {-# INLINE displayException #-}
@@ -196,11 +195,11 @@ isValidPacketSize x = minPacketSize <= x && x < maxPacketSize
 minPacketSize :: Word32
 minPacketSize = 16
 
--- | The maximum packet payload size, 256mB.
+-- | The maximum packet payload size, @256mB - 128kB@.
 --
 -- @since 1.0.0
 maxPacketSize :: Word32
-maxPacketSize = 256 * 2 ^ (20 :: Int)
+maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int) 
 
 -- | Construct a packetized message sender given the maximum size for each
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish
@@ -220,11 +219,10 @@ makePacketSender limit publish message = do
   unless (isValidPacketSize limit) do
     throwIO (PacketSizeError $ toInteger limit)
 
-  if fromIntegral (ByteString.length message) <= payloadSize
+  if fromIntegral (ByteString.length message) <= maxPayloadSize
     then do
-      -- In the case that the maximum packet payload length @size@ is not at least
-      -- 1 byte or the provided 'ByteString' @bytes@ is empty, then yield one
-      -- terminal packet.
+      -- Perform a single publish on the current thread in case that the 
+      -- @message@ length is less than the maximum payload size.
       let packet = Packet message 0 1
       publish (wireWrapPacket' packet)
     else do
@@ -239,11 +237,11 @@ makePacketSender limit publish message = do
             publish (wireWrapPacket' packet)
             next
   where
-    payloadSize :: Word32
-    payloadSize = max (limit - minPacketSize) 1
+    maxPayloadSize :: Word32
+    maxPayloadSize = max (limit - minPacketSize) 1
 
     njobs :: Word32
-    njobs = quotInf (fromIntegral $ ByteString.length message) payloadSize
+    njobs = quotInf (fromIntegral $ ByteString.length message) maxPayloadSize
 
     takeJobId :: TVar Word32 -> STM (Maybe Word32)
     takeJobId jobs = do
@@ -254,7 +252,7 @@ makePacketSender limit publish message = do
 
     -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
     sliceBytes :: Word32 -> ByteString
-    sliceBytes i = takePayload payloadSize (dropPayload (i * payloadSize) message)
+    sliceBytes i = takePayload maxPayloadSize (dropPayload (i * maxPayloadSize) message)
 
     makePacket :: Word32 -> Packet ByteString
     makePacket jobid = Packet (sliceBytes jobid) jobid njobs

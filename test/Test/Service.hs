@@ -27,11 +27,11 @@ import Data.Sequence qualified as Seq
 
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
-  ( MetadataMap,
+  ( ClientResult (..),
+    MetadataMap,
     StreamRecv,
     StreamSend,
     WritesDone,
-    ClientResult (..),
   )
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
 import Network.GRPC.HighLevel.Generated
@@ -57,6 +57,7 @@ import Test.Suite.Fixture qualified as Suite
 
 import Network.GRPC.MQTT.Client (MQTTGRPCClient, withMQTTGRPCClient)
 import Network.GRPC.MQTT.Client qualified as GRPC.MQTT.Client
+import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..))
 import Network.GRPC.MQTT.Logging (Logger (Logger))
 import Network.GRPC.MQTT.Logging qualified as GRPC.MQTT.Logging
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
@@ -65,12 +66,12 @@ import Network.GRPC.MQTT.Types
     MQTTResult (GRPCResult, MQTTError),
   )
 import Network.GRPC.MQTT.Types qualified as GRPC.MQTT
-import Network.GRPC.MQTT.Core (MQTTGRPCConfig(..))
 
 import Test.Proto.Clients (testServiceMqttClient)
 import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
 import Test.Proto.Service (newTestService)
 
+import Data.ByteString qualified as ByteString
 import Proto.Message (BiDiRequestReply, OneInt, StreamReply, TwoInts)
 import Proto.Message qualified as Message
 import Proto.Service
@@ -80,16 +81,16 @@ import Proto.Service
         testServiceBatchServerStreamCall,
         testServiceBiDiStreamCall,
         testServiceClientStreamCall,
-        testServicenormalCall,
-        testServiceServerStreamCall
-      ), testServicecallLongBytes
+        testServiceServerStreamCall,
+        testServicenormalCall
+      ),
+    testServicecallLongBytes,
   )
-import qualified Data.ByteString as ByteString
 
-import qualified Data.UUID as UUID
-import qualified Data.UUID.V4 as UUID
+import Data.UUID qualified as UUID
+import Data.UUID.V4 qualified as UUID
 
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 
 --------------------------------------------------------------------------------
 
@@ -121,22 +122,22 @@ withServiceFixture k = do
     withGRPCClient configGRPC \client -> do
       methods <- testServiceRemoteClientMethodMap client
       Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
-        sleep 0.5
+        sleep 2
         Async.link2 server remote
         withMQTTGRPCClient logger clientConfig (k clientConfig)
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent 
+    logger = Logger print GRPC.MQTT.Logging.Silent
 
 --------------------------------------------------------------------------------
 
 testTreeNormal :: TestTree
-testTreeNormal = 
-  testGroup 
+testTreeNormal =
+  testGroup
     "Normal"
     [ Suite.testFixture "LongBytes" testCallLongBytes
     , after
-        Test.AllSucceed 
+        Test.AllSucceed
         "LongBytes"
         (Suite.testFixture "Call" testNormalCall)
     ]
@@ -152,10 +153,8 @@ testCallLongBytes = do
     withGRPCClient configGRPC \grpcClient -> do
       methods <- testServiceRemoteClientMethodMap grpcClient
       results <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
-
         withMQTTGRPCClient logger clientConfig \client ->
           Async.replicateConcurrently 8 do
-
             -- For uniquely identifying requests to the server.
             uuid <- UUID.nextRandom
 
@@ -169,7 +168,7 @@ testCallLongBytes = do
 
       liftIO do
         forM_ results $ \case
-          GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do 
+          GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do
             print (ByteString.length x)
           GRPCResult (ClientErrorResponse err) -> do
             assertFailure (show err)
@@ -177,7 +176,7 @@ testCallLongBytes = do
             error err
   where
     logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent 
+    logger = Logger print GRPC.MQTT.Logging.Silent
 
 testNormalCall :: Fixture ()
 testNormalCall = do
@@ -426,7 +425,7 @@ checkClientStreamResponse ints rsp =
 
 checkServerStreamResponse ::
   MQTTResult 'ServerStreaming StreamReply ->
-  Seq StreamReply -> 
+  Seq StreamReply ->
   IORef (Seq StreamReply) ->
   Fixture ()
 checkServerStreamResponse rsp expected buffer =
@@ -474,8 +473,8 @@ clientStreamHandler ints send =
 
 serverStreamHandler ::
   IORef (Seq StreamReply) ->
-  MetadataMap -> 
-  StreamRecv StreamReply -> 
+  MetadataMap ->
+  StreamRecv StreamReply ->
   IO ()
 serverStreamHandler buffer _ recv =
   fix \loop -> do
@@ -483,7 +482,7 @@ serverStreamHandler buffer _ recv =
     case recieved of
       Left err -> error (show err)
       Right Nothing -> pure ()
-      Right (Just reply) -> do 
+      Right (Just reply) -> do
         modifyIORef buffer (Seq.|> reply)
         loop
 

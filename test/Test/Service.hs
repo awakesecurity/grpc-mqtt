@@ -45,7 +45,7 @@ import Network.MQTT.Client (QoS (QoS1), publishq)
 
 import Relude hiding (reader)
 
-import Turtle (sleep)
+import Turtle (NominalDiffTime, sleep)
 
 --------------------------------------------------------------------------------
 
@@ -111,6 +111,10 @@ withTestService k = do
   -- liftIO (print $ GRPC.optMaxReceiveMessageLength svcOptions)
   liftIO (Async.withAsync (newTestService svcOptions) k)
 
+-- | Interval to wait for the remote client to be fully ready
+remoteClientWaitSecs :: NominalDiffTime
+remoteClientWaitSecs = 1
+
 withServiceFixture :: (MQTTGRPCConfig -> MQTTGRPCClient -> IO a) -> Fixture a
 withServiceFixture k = do
   configGRPC <- Suite.askConfigClientGRPC
@@ -122,8 +126,8 @@ withServiceFixture k = do
     withGRPCClient configGRPC \client -> do
       methods <- testServiceRemoteClientMethodMap client
       Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
-        sleep 2
         Async.link2 server remote
+        sleep remoteClientWaitSecs
         withMQTTGRPCClient logger clientConfig (k clientConfig)
   where
     logger :: Logger
@@ -338,7 +342,7 @@ testMissingClientMethod = do
       -- the non-existent request.
       let remoteClient = runRemoteClient logger remoteConfig baseTopic mempty
       Async.withAsync remoteClient \_ -> do
-        sleep 1
+        sleep remoteClientWaitSecs
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           let msg = Message.TwoInts 5 10
           let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty

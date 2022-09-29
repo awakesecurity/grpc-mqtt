@@ -31,7 +31,7 @@ final: prev: {
       };
   };
 
-  grpc-mqtt-devShell =
+  grpc-mqtt-dev-shell =
     let
       hsPkgs = final.haskell.packages.${ghcVersion};
     in
@@ -49,7 +49,6 @@ final: prev: {
           hsPkgs.threadscope
         ];
 
-        src = null;
         packages = pkgs: [pkgs.grpc-mqtt];
       };
 }

@@ -23,6 +23,6 @@
         };
       in {
         packages.default = pkgs.haskell.packages.${ghcVersion}.grpc-mqtt;
-        devShells.default = pkgs.grpc-mqtt-devShell;
+        devShells.default = pkgs.grpc-mqtt-dev-shell;
       });
 }

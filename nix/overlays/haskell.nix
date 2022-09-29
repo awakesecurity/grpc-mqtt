@@ -21,6 +21,8 @@ final: prev: {
 
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {
               buildInputs = (old.buildInputs or []) ++ [ final.mosquitto ];
+
+              # The tests require a running mosquitto server
               preCheck = "bash ./scripts/host-mosquitto.sh -d &";
               postCheck = "xargs --arg-file=test-files/mqtt-broker.pid kill";
             });

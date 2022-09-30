@@ -14,7 +14,7 @@ echo_err () {
 
 if [ conf ]; then
   echo_dbg "using (${conf}) as the mosquitto config."
-  $(mosquitto -v -c $conf)
+  $(mosquitto -v -c $conf $@)
 else
   echo_err "error: (${conf}) not found: cannot start mosquitto."
 fi

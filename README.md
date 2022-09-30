@@ -96,3 +96,23 @@ publish. Some messages accumulated in memory could get lost if the sender encoun
 messages are flushed. Also, the sender will hold these accumulated messages in memory for a long time if the messages
 are produced at a very low rate. The receiver will experience a delay in such cases because the sender does not publish
 anything till the limit is reached. It is not recommended to enable batching in such cases.
+
+**Building**
+
+This package uses [Nix flakes](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html) to manage
+dependencies and provide a reproducible build environment.
+
+To build the package:
+
+```shell
+nix build
+```
+
+To start a development environment:
+
+```shell
+nix develop
+```
+
+This starts a shell with required development tools - such as ghc and cabal - in the PATH. You can build and test the
+code with cabal.

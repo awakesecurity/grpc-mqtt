@@ -54,6 +54,7 @@ common common
     , deepseq == 1.4.*
     , grpc-haskell >= 0.3.0 && < 0.4
     , grpc-haskell-core >= 0.2.0 && < 0.4
+    , large-records
     , net-mqtt >= 0.8.2 && < 0.9
     , proto3-suite >= 0.5.2 && < 0.6
     , proto3-wire >= 1.2.2 && < 1.5

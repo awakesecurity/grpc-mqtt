@@ -121,10 +121,10 @@ instance ProtoEnum CLevel where
 
 -- | @since 0.1.0.0
 instance Finite CLevel where
-  enumerate _ = map makeEnum [0 .. 21]
+  enumerate _ = map makeEnum [1 .. 22]
     where
       makeEnum :: IsString s => Int32 -> (s, Int32)
-      makeEnum x = (show (CLevel (1 + x)), x)
+      makeEnum x = (show (CLevel x), x)
 
 -- | @'nameOf' ('proxy#' :: 'Proxy#' 'CLevel') == \"CLevel\"@
 --

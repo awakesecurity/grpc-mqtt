@@ -55,6 +55,7 @@ import Proto3.Suite.Class
   ( Finite (enumerate),
     Named (nameOf),
     Primitive (decodePrimitive, encodePrimitive, primType),
+    Message,
   )
 import Proto3.Suite.DotProto (DotProtoPrimType, DotProtoValue, Path)
 import Proto3.Suite.DotProto qualified as DotProto
@@ -89,9 +90,9 @@ import Proto3.Wire.Decode.Extra qualified as Decode
 -- 'Int' value is known to always be between @1@ and @22@ (inclusively).
 --
 -- @since 0.1.0.0
-newtype CLevel = CLevel {getCLevel :: Int}
-  deriving newtype (Eq, Ord, Typeable)
-  deriving stock (Data, Generic, Lift)
+newtype CLevel = CLevel {getCLevel :: Int32}
+  deriving stock (Data, Eq, Generic, Lift, Ord)
+  deriving anyclass (Message)
 
 -- |
 -- @'minBound' == 'CLevel' 1@
@@ -101,7 +102,7 @@ newtype CLevel = CLevel {getCLevel :: Int}
 -- @since 0.1.0.0
 instance Bounded CLevel where
   minBound = CLevel 1
-  maxBound = CLevel Zstd.maxCLevel
+  maxBound = CLevel (fromIntegral @Int @Int32 Zstd.maxCLevel)
 
 -- | @'show' ('CLevel' 10) == "CLEVEL_10"@
 --
@@ -120,10 +121,10 @@ instance ProtoEnum CLevel where
 
 -- | @since 0.1.0.0
 instance Finite CLevel where
-  enumerate _ = map (mkenum . CLevel) [1 .. Zstd.maxCLevel]
+  enumerate _ = map makeEnum [0 .. 21]
     where
-      mkenum :: IsString s => CLevel -> (s, Int32)
-      mkenum x = (show x, fromCLevel x)
+      makeEnum :: IsString s => Int32 -> (s, Int32)
+      makeEnum x = (show (CLevel (1 + x)), x)
 
 -- | @'nameOf' ('proxy#' :: 'Proxy#' 'CLevel') == \"CLevel\"@
 --

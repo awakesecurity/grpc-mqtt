@@ -76,7 +76,7 @@ import Proto3.Suite.DotProto qualified as DotProto
 
 import Relude
 
-import Proto3.Suite.Class (HasDefault, Primitive, def)
+import Proto3.Suite.Class (HasDefault, Primitive, Message, def)
 
 import Proto3.Wire.Class (ProtoEnum)
 
@@ -93,9 +93,9 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 --
 -- @since 0.1.0.0
 newtype Batched = Batch {getBatched :: Bool}
-  deriving newtype (Eq, Ord, Primitive, ProtoDatum)
-  deriving stock (Data, Generic, Lift, Typeable)
-  deriving anyclass (ProtoEnum)
+  deriving newtype (Primitive, ProtoDatum)
+  deriving stock (Data, Eq, Ord, Generic, Lift, Typeable)
+  deriving anyclass (Message, ProtoEnum)
 
 -- | Pattern synonym for enabled batching.
 --

@@ -236,7 +236,7 @@ testServerStreamCall = do
   buffer <- liftIO $ newIORef Seq.empty
 
   let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
+  let rqt = MQTTReaderRequest msg 100 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceServerStreamCall rqt
 
   let expected :: Seq StreamReply
@@ -248,7 +248,7 @@ testBatchServerStreamCall = do
   buffer <- liftIO $ newIORef Seq.empty
 
   let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
+  let rqt = MQTTReaderRequest msg 300 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
 
   let expected :: Seq StreamReply

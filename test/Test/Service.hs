@@ -156,22 +156,20 @@ testCallLongBytes = do
   withTestService \_ -> do
     withGRPCClient configGRPC \grpcClient -> do
       methods <- testServiceRemoteClientMethodMap grpcClient
-      results <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
-        withMQTTGRPCClient logger clientConfig \client ->
-          Async.replicateConcurrently 8 do
+      result <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
+        withMQTTGRPCClient logger clientConfig \client -> do
             -- For uniquely identifying requests to the server.
             uuid <- UUID.nextRandom
 
             -- NB: 2022-08-02 we discovered a bug with concurrent client
             -- requests that send responses which, when sent back by the
             -- server trigger a GRPCIOTimeout error in some of the clients.
-            let msg = Message.OneInt 8
+            let msg = Message.OneInt 64
             let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
             testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
-      liftIO do
-        forM_ results $ \case
+      liftIO case result of
           GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do
             print (ByteString.length x)
           GRPCResult (ClientErrorResponse err) -> do
@@ -238,7 +236,7 @@ testServerStreamCall = do
   buffer <- liftIO $ newIORef Seq.empty
 
   let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
+  let rqt = MQTTReaderRequest msg 100 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceServerStreamCall rqt
 
   let expected :: Seq StreamReply
@@ -250,7 +248,7 @@ testBatchServerStreamCall = do
   buffer <- liftIO $ newIORef Seq.empty
 
   let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
+  let rqt = MQTTReaderRequest msg 300 mempty (serverStreamHandler buffer)
   rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
 
   let expected :: Seq StreamReply

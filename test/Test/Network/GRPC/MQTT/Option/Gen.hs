@@ -40,4 +40,4 @@ batched = Batched.Batch <$> Gen.bool
 
 -- | TODO
 clevel :: MonadGen m => m CLevel
-clevel = CLevel.CLevel <$> Gen.int (Range.constant 1 22)
+clevel = CLevel.CLevel <$> Gen.int32 (Range.constant 1 22)

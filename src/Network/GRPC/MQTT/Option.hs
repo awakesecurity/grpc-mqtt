@@ -46,11 +46,7 @@ where
 --------------------------------------------------------------------------------
 
 import Data.Data (Data)
-
 import Data.List qualified as List
-import Data.Vector (Vector)
-import Data.Vector qualified as Vector
-import Data.Vector.Mutable qualified as MVector
 
 import GHC.Prim (Proxy#, proxy#)
 
@@ -107,13 +103,15 @@ data ProtoOptions = ProtoOptions
   , -- | TODO
     rpcClientCLevel :: Maybe CLevel
   }
-  deriving stock (Eq, Data, Generic, Lift, Ord, Show, Typeable)
+  deriving stock (Eq, Data, Generic, Lift, Ord, Show)
   deriving anyclass (Named)
 
 -- | @since 0.1.0.0
 instance Message ProtoOptions where
   encodeMessage = wireBuildProtoOptions
+
   decodeMessage = Decode.at wireParseProtoOptions
+
   dotProto = toProtoType
 
 -- Construction ----------------------------------------------------------------
@@ -186,14 +184,13 @@ wireEncodeProtoOptions' = toStrict . wireEncodeProtoOptions
 -- @since 0.1.0.0
 wireBuildProtoOptions :: FieldNumber -> ProtoOptions -> MessageBuilder
 wireBuildProtoOptions n ProtoOptions{..} =
-  let varints :: Vector Int
-      varints = Vector.create do
-        mvec <- MVector.new 3
-        MVector.write mvec 0 (fromEnum rpcBatchStream)
-        MVector.write mvec 1 (maybe 0 fromCLevel rpcServerCLevel)
-        MVector.write mvec 2 (maybe 0 fromCLevel rpcClientCLevel)
-        pure mvec
-   in Encode.packedVarintsV fromIntegral n varints
+  let varints :: [Word64]
+      varints = 
+        [ fromIntegral (fromEnum rpcBatchStream)
+        , maybe 0 fromCLevel rpcServerCLevel
+        , maybe 0 fromCLevel rpcClientCLevel
+        ]
+   in Encode.packedVarints n varints
 
 -- ProtoOptions - Wire Decoding ------------------------------------------------
 

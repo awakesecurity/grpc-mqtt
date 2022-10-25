@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 -- | Generators for 'Request' messages.
 module Test.Network.GRPC.MQTT.Message.Gen
   ( -- * Request Generators
@@ -52,7 +54,7 @@ import Network.GRPC.MQTT.Message.Request qualified as Request
 request :: MonadGen m => m (Request ByteString)
 request = do
   Request.Request
-    <$> requestMessage
+    <$> packetBytes
     <*> Gen.protoOptions
     <*> requestTimeout
     <*> Gen.metadataMap
@@ -98,36 +100,29 @@ shufflePackets = fmap Vector.fromList . Gen.shuffle . Vector.toList
 -- | Randomly generates a maximum payload size to use when packetizing a
 -- 'ByteString', bounded by the size of the 'ByteString' provided.
 packetSplitLength :: MonadGen m => ByteString -> m Word32
-packetSplitLength bytes =
-  let range :: Range Word32
-      range = Range.constant Packet.minPacketSize (max Packet.minPacketSize $ fromIntegral $ ByteString.length bytes)
-   in Gen.word32 range
+packetSplitLength bxs =
+  let upper = fromIntegral (ByteString.length bxs) 
+      lower = Packet.minPacketSize
+   in Gen.word32 (Range.linear lower upper)
 
 -- | Randomly generates a 'ByteString' suitable for packetization.
 packetBytes :: MonadGen m => m ByteString
-packetBytes =
-  Gen.sized \size -> do
-    -- @lim@ the maximum length of a packet's payload in bytes.
-    -- @num@ the maximum number of packets.
-    lim <- Gen.int (Range.constant 0 (fromIntegral size))
-    num <- Gen.int (Range.constant 0 (fromIntegral size))
-    let range :: Range Int
-        range = Range.constant 0 (lim * num)
-     in Gen.bytes range
+packetBytes = 
+  let lower :: Int 
+      lower = fromIntegral Packet.minPacketSize
+   in Gen.bytes (Range.linear lower 1_000)
 
 -- Stream Chunk Generators -----------------------------------------------------
 
 streamChunk :: MonadGen m => m (Maybe (Vector ByteString))
 streamChunk = Gen.maybe do
-  chunks <- Gen.sized \size ->
-    let range :: Range Int
-        range = Range.constant 1 (max 1 (fromIntegral size))
-     in Gen.list range packetBytes
+  chunks <- Gen.list (Range.linear 1 50) do 
+    let lower = fromIntegral Packet.minPacketSize
+    Gen.bytes (Range.linear lower 256)
   pure (Vector.fromList chunks)
 
 streamChunkLength :: MonadGen m => Maybe (Vector ByteString) -> m Word32
-streamChunkLength Nothing = do 
-  Gen.word32 (Range.constant Packet.minPacketSize Packet.maxPacketSize)
+streamChunkLength Nothing = Gen.word32 (Range.constant Packet.minPacketSize 1_000)
 streamChunkLength (Just xs) = do 
   let limit :: Word32 
       limit = foldr ((+) . fromIntegral . ByteString.length) 0 xs

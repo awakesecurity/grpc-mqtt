@@ -6,39 +6,28 @@ module Test.Network.GRPC.MQTT.Message.Stream
   )
 where
 
---------------------------------------------------------------------------------
-
-import Hedgehog (Property, PropertyT, forAll, property, (===))
-import Hedgehog qualified
-
-import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Hedgehog (testProperty)
-
---------------------------------------------------------------------------------
-
-import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
-import qualified Test.Network.GRPC.MQTT.Option.Gen as Option.Gen
-
-import Test.Suite.Wire qualified as Test.Wire
-
---------------------------------------------------------------------------------
-
-import Control.Concurrent.Async (concurrently)
-import Control.Concurrent.STM.TQueue (newTQueueIO, writeTQueue)
+import Control.Concurrent.STM.TQueue (newTQueueIO)
 
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 
-import Relude hiding (reader)
-
---------------------------------------------------------------------------------
+import Hedgehog (Property, PropertyT, forAll, property, withTests, (===))
+import Hedgehog qualified
 
 import Network.GRPC.MQTT.Message (RemoteError)
 import Network.GRPC.MQTT.Message.Stream qualified as Stream
 import Network.GRPC.MQTT.Message.Stream (makeStreamBatchSender, makeStreamReader)
-
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import qualified Network.GRPC.MQTT.Serial as Serial
+
+import Relude hiding (reader)
+
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.Hedgehog (testProperty)
+import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
+import qualified Test.Network.GRPC.MQTT.Option.Gen as Option.Gen
+import Test.Suite.Wire qualified as Test.Wire
+import Test.Core (mockPublish)
 
 --------------------------------------------------------------------------------
 
@@ -46,63 +35,24 @@ tests :: TestTree
 tests =
   testGroup
     "Network.GRPC.MQTT.Message.Stream"
-    [ testTreeStreamWire
-    , testTreeStreamHandle
+    [ testProperty "Stream.Wire" propStreamWire
+    , testProperty "Stream.Handle" $ withTests 10 propStreamHandle
     ]
 
--- Stream.Wire -----------------------------------------------------------------
-
-testTreeStreamWire :: TestTree
-testTreeStreamWire =
-  testGroup
-    "Stream.Wire"
-    [ testProperty "Stream.Wire.Client" propPacketWireClient
-    , testProperty "Stream.Wire.Remote" propPacketWireRemote
-    ]
-
-propPacketWireClient :: Property
-propPacketWireClient = property do
+propStreamWire :: Property
+propStreamWire = property do
   chunk <- forAll Message.Gen.streamChunk
   Test.Wire.testWireClientRoundtrip
     chunk
     Stream.wireEncodeStreamChunk
     Stream.wireUnwrapStreamChunk
 
-propPacketWireRemote :: Property
-propPacketWireRemote = property do
-  chunk <- forAll Message.Gen.streamChunk
-  Test.Wire.testWireRemoteRoundtrip
-    chunk
-    Stream.wireEncodeStreamChunk
-    Stream.wireUnwrapStreamChunk
-
--- Stream.Handle ---------------------------------------------------------------
-
-testTreeStreamHandle :: TestTree
-testTreeStreamHandle =
-  testGroup
-    "Stream.Handle"
-    [ testProperty "Stream.Handle.ClientToRemote" propHandleClientToRemote
-    , testProperty "Stream.Handle.RemoteToClient" propHandleRemoteToClient
-    ]
-
-propHandleClientToRemote :: Property
-propHandleClientToRemote = property do
+propStreamHandle :: Property
+propStreamHandle = property do
   options <- forAll Option.Gen.protoOptions
   mockHandleStream
     (Serial.makeClientEncodeOptions options)
     (Serial.makeClientDecodeOptions options)
-
-propHandleRemoteToClient :: Property
-propHandleRemoteToClient = property do
-  options <- forAll Option.Gen.protoOptions
-  mockHandleStream
-    (Serial.makeRemoteEncodeOptions options)
-    (Serial.makeRemoteDecodeOptions options)
-
---------------------------------------------------------------------------------
-
--- TODO: test for 0 batching limit flushes, 
 
 mockHandleStream :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandleStream encodeOptions decodeOptions = do
@@ -110,15 +60,13 @@ mockHandleStream encodeOptions decodeOptions = do
   limit <- forAll (Message.Gen.streamChunkLength chunks)
   queue <- Hedgehog.evalIO (newTQueueIO @ByteString)
 
-  (sender, done) <- makeStreamBatchSender @_ @IO limit encodeOptions \x -> do
-    atomically (writeTQueue queue x)
+  (sender, done) <- makeStreamBatchSender @_ @IO limit encodeOptions (mockPublish queue)
 
   reader <- makeStreamReader queue decodeOptions
 
-  ((), result) <- Hedgehog.evalIO do
-    concurrently
-      (runSendStream sender done chunks)
-      (runExceptT (runReadStream reader))
+  result <- Hedgehog.evalIO do
+    runSendStream sender done chunks
+    runExceptT (runReadStream reader)
 
   Right chunks === result
   where

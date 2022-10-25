@@ -2,6 +2,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UnboxedTuples #-}
 
 -- | This module exports definitions for the 'Packet' message type.
 --
@@ -38,6 +39,10 @@ module Network.GRPC.MQTT.Message.Packet
     mergePacketSet,
     insertPacketSet,
     lengthPacketSet,
+
+    -- * Unsafe
+    encodeBufferOffPacket,
+    withEncodeBuffer,
   )
 where
 
@@ -49,23 +54,47 @@ import Control.Concurrent.TMap as TMap
 
 import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
 
+import Control.Exception (assert)
+
 import Control.Monad.Except (MonadError, liftEither)
 
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Builder qualified as ByteString (Builder)
 import Data.ByteString.Builder qualified as ByteString.Builder
+import Data.ByteString.Unsafe qualified as ByteString.Unsafe
 import Data.Data (Data)
+import Data.Primitive.ByteArray
+  ( MutableByteArray,
+    getSizeofMutableByteArray,
+    mutableByteArrayContents,
+    newAlignedPinnedByteArray,
+  )
+
+import Foreign.Ptr (Ptr)
+import Foreign.StablePtr (StablePtr, freeStablePtr, newStablePtr)
+
+import GHC.Exts (RealWorld)
+import GHC.Ptr (castPtr, nullPtr, plusPtr)
 
 import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
 import Proto3.Wire.Decode qualified as Decode
 import Proto3.Wire.Encode (MessageBuilder)
 import Proto3.Wire.Encode qualified as Encode
+import Proto3.Wire.Reverse.Internal
+  ( BuildRState (..),
+    fromBuildR,
+    metaDataAlign,
+    metaDataSize,
+    readTotal,
+    writeSpace,
+    writeState,
+  )
 
 import Relude
 
 import Text.Printf qualified as Text
 
-import UnliftIO (MonadUnliftIO, throwIO)
+import UnliftIO (MonadUnliftIO, bracket, throwIO)
 import UnliftIO.Async (replicateConcurrently_)
 
 -- Packet ----------------------------------------------------------------------
@@ -199,7 +228,7 @@ minPacketSize = 16
 --
 -- @since 1.0.0
 maxPacketSize :: Word32
-maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int) 
+maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int)
 
 -- | Construct a packetized message sender given the maximum size for each
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish
@@ -208,7 +237,7 @@ maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int)
 -- @since 0.1.0.0
 makePacketSender ::
   MonadUnliftIO m =>
-  -- | The maximum packet payload size. This must be a 'Word32' value greater 
+  -- | The maximum packet payload size. This must be a 'Word32' value greater
   -- than or equal to 'minPacketSize' and less than 'maxPacketSize'. Otherwise,
   -- a 'PacketSizeError' exception will be thrown.
   Word32 ->
@@ -221,7 +250,7 @@ makePacketSender limit publish message = do
 
   if fromIntegral (ByteString.length message) <= maxPayloadSize
     then do
-      -- Perform a single publish on the current thread in case that the 
+      -- Perform a single publish on the current thread in case that the
       -- @message@ length is less than the maximum payload size.
       let packet = Packet message 0 1
       publish (wireWrapPacket' packet)
@@ -229,13 +258,18 @@ makePacketSender limit publish message = do
       caps <- liftIO getNumCapabilities
       jobs <- newTVarIO 0
 
-      replicateConcurrently_ caps $ fix \next ->
-        atomically (takeJobId jobs) >>= \case
-          Nothing -> pure ()
-          Just jobid -> do
-            let packet = makePacket jobid
-            publish (wireWrapPacket' packet)
-            next
+      replicateConcurrently_ caps do
+        let bufferSize :: Int
+            bufferSize = fromIntegral limit + metaDataSize
+         in withEncodeBuffer bufferSize \ptr -> do
+              fix \next -> do
+                atomically (takeJobId jobs) >>= \case
+                  Nothing -> pure ()
+                  Just jobid -> do
+                    let packet = makePacket jobid
+                    serialized <- encodeBufferOffPacket ptr bufferSize packet
+                    publish serialized
+                    next
   where
     maxPayloadSize :: Word32
     maxPayloadSize = max (limit - minPacketSize) 1
@@ -372,3 +406,85 @@ isMissingPackets = do
       Just ct -> do
         len <- lengthPacketSet pxs
         pure (fromIntegral len - 1 < ct)
+
+-- Unsafe ----------------------------------------------------------------------
+
+fromPacketBuildR ::
+  MonadIO m =>
+  Ptr Word8 ->
+  Int ->
+  Packet ByteString ->
+  m (Ptr Word8, Int)
+fromPacketBuildR buffer unused packet = do
+  let build = Encode.reverseMessageBuilder (wireBuildPacket packet)
+  liftIO (fromBuildR build buffer unused)
+
+encodeBufferOffPacket ::
+  MonadIO m =>
+  Ptr Word8 ->
+  Int ->
+  Packet ByteString ->
+  m ByteString
+encodeBufferOffPacket ptr unused packet = do
+  (ptr', unused') <- fromPacketBuildR ptr unused packet
+  size <- liftIO (readTotal ptr' unused')
+  liftIO (unsafePackCStringLen ptr' size)
+
+withEncodeBuffer :: MonadUnliftIO m => Int -> (Ptr Word8 -> m a) -> m a
+withEncodeBuffer packetSizeLimit k = do
+  let bufferSize = metaDataSize + packetSizeLimit
+  buf <- liftIO (newAlignedPinnedByteArray bufferSize metaDataAlign)
+  stateVar <- newIORef BuildRState{currentBuffer = buf, sealedBuffers = mempty}
+  withStablePtr stateVar \statePtr -> do
+    k =<< liftIO (resetEncodeBuffer buf statePtr)
+
+resetEncodeBuffer ::
+  MutableByteArray RealWorld ->
+  StablePtr (IORef BuildRState) ->
+  IO (Ptr Word8)
+resetEncodeBuffer buf statePtr = do
+  allocationSize <- getSizeofMutableByteArray buf
+  let !p = mutableByteArrayContents buf
+  let !v = plusPtr p allocationSize
+  let !m = plusPtr p metaDataSize
+  writeState m statePtr
+  writeSpace m (allocationSize - metaDataSize)
+  pure v
+
+-- Unsafe - Helpers ------------------------------------------------------------
+
+-- | Similar to 'bracket', @'withStablePtr' x io@ constructs a managed
+-- 'StablePtr' referring to the value @x@ and provides it to the context that
+-- executes the 'IO' action @io@.
+withStablePtr :: MonadUnliftIO m => a -> (StablePtr a -> m b) -> m b
+withStablePtr x = bracket (liftIO (newStablePtr x)) (liftIO . freeStablePtr)
+
+-- | @unsafePackCStringLen ptr len@ constructs a 'ByteString' from a 'Word8'
+-- array pointer and the length of that array in bytes.
+--
+-- * If the argument to @len@ is less than the actual size of the allocation
+--   @ptr@ refers to, then difference will be dropped from the tail of the array
+--   in a best-case scenario. In the worst-case, the bytestring's foreign ptr
+--   is reclaimed by the garbage collector while it is still alive.
+--
+-- * This function asserts that @len@ be greater than or equal to 0, otherwise
+--   an 'ErrorCall' exception (i.e. an 'error' call) will be thrown that cannot
+--   be handled in pure code
+--
+-- * This function asserts that the argument @ptr@ is not equivalent to the null
+--   pointer.
+--
+-- This function is highly unsafe. 
+unsafePackCStringLen :: Ptr Word8 -> Int -> IO ByteString
+unsafePackCStringLen ptr len =
+  -- "bytestring" recommends using 'unsafePackCStringLen' for constructing
+  -- bytestrings given the pointer to the array in memory and the size of that
+  -- array.
+  --
+  -- The pointer cast below is only necessary since 'unsafePackCStringLen'
+  -- expects a 'CChar'@pointer. This cast is only safe in this context because
+  -- 'unsafePackCStringLen' casts this back to a 'Word8' pointer in order to
+  -- construct the bytestring's foreign pointer.
+  let !ptr' = assert (ptr /= nullPtr) (castPtr ptr)
+      !len' = assert (len >= 0) len
+   in ByteString.Unsafe.unsafePackCStringLen (ptr', len')

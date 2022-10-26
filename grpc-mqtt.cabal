@@ -127,6 +127,7 @@ library
     , mtl >= 2.2.2 && < 2.3
     , network-conduit-tls >= 1.3.2 && < 1.4
     , nonce >= 1.0.7 && < 1.1
+    , primitive >= 0.7.1 && < 0.8
     , safe-exceptions >= 0.1.7 && < 0.2
     , stm >= 2.5.0 && < 2.6
     , template-haskell >= 2.16.0 && < 2.17
@@ -155,6 +156,7 @@ test-suite test
   other-modules:
     Proto.Service
     Proto.Message
+    Test.Core
     Test.Network.GRPC.HighLevel.Extra
     Test.Network.GRPC.HighLevel.Extra.Gen
     Test.Network.GRPC.MQTT

@@ -260,7 +260,7 @@ makePacketSender limit publish message = do
 
       replicateConcurrently_ caps do
         let bufferSize :: Int
-            bufferSize = fromIntegral limit + metaDataSize
+            bufferSize = fromIntegral (limit + minPacketSize)
          in withEncodeBuffer bufferSize \ptr -> do
               fix \next -> do
                 atomically (takeJobId jobs) >>= \case
@@ -436,20 +436,12 @@ withEncodeBuffer packetSizeLimit k = do
   buf <- liftIO (newAlignedPinnedByteArray bufferSize metaDataAlign)
   stateVar <- newIORef BuildRState{currentBuffer = buf, sealedBuffers = mempty}
   withStablePtr stateVar \statePtr -> do
-    k =<< liftIO (resetEncodeBuffer buf statePtr)
-
-resetEncodeBuffer ::
-  MutableByteArray RealWorld ->
-  StablePtr (IORef BuildRState) ->
-  IO (Ptr Word8)
-resetEncodeBuffer buf statePtr = do
-  allocationSize <- getSizeofMutableByteArray buf
-  let !p = mutableByteArrayContents buf
-  let !v = plusPtr p allocationSize
-  let !m = plusPtr p metaDataSize
-  writeState m statePtr
-  writeSpace m (allocationSize - metaDataSize)
-  pure v
+    let !p = mutableByteArrayContents buf
+    let !v = plusPtr p bufferSize
+    let !m = plusPtr p metaDataSize
+    liftIO (writeState m statePtr)
+    liftIO (writeSpace m (bufferSize - metaDataSize))
+    k v
 
 -- Unsafe - Helpers ------------------------------------------------------------
 

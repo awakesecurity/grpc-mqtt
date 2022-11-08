@@ -11,6 +11,8 @@ final: prev: {
               gpr = final.grpc;
             });
             net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });
+            large-generics = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/large-generics.nix { });
+            large-records = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/large-records.nix { });
             proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             range-set-list = final.haskell.lib.overrideCabal hprev.range-set-list (_: {

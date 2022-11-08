@@ -76,7 +76,8 @@ import Proto.Message (BiDiRequestReply, OneInt, StreamReply, TwoInts)
 import Proto.Message qualified as Message
 import Proto.Service
   ( TestService
-      ( testServiceBatchBiDiStreamCall,
+      ( TestService,
+        testServiceBatchBiDiStreamCall,
         testServiceBatchClientStreamCall,
         testServiceBatchServerStreamCall,
         testServiceBiDiStreamCall,
@@ -168,7 +169,8 @@ testCallLongBytes = do
             let msg = Message.OneInt 8
             let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
-            testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+            let TestService{testServicecallLongBytes} = testServiceMqttClient client baseTopic
+            testServicecallLongBytes rqt
 
       liftIO do
         forM_ results $ \case
@@ -186,7 +188,7 @@ testNormalCall :: Fixture ()
 testNormalCall = do
   let msg = Message.TwoInts 5 10
   let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-  rsp <- makeMethodCall testServicenormalCall rqt
+  rsp <- makeMethodCall $ \TestService{testServicenormalCall} -> testServicenormalCall rqt
 
   checkNormalResponse msg rsp
 
@@ -208,7 +210,7 @@ testClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
   let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
 
-  rsp <- makeMethodCall testServiceClientStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceClientStreamCall} -> testServiceClientStreamCall rqt
 
   checkClientStreamResponse msg rsp
 
@@ -216,7 +218,7 @@ testBatchClientStreamCall :: Fixture ()
 testBatchClientStreamCall = do
   let msg = map Message.OneInt [1 .. 5]
   let rqt = GRPC.MQTT.MQTTWriterRequest 10 mempty (clientStreamHandler msg)
-  rsp <- makeMethodCall testServiceBatchClientStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceBatchClientStreamCall} -> testServiceBatchClientStreamCall rqt
 
   checkClientStreamResponse msg rsp
 
@@ -239,7 +241,7 @@ testServerStreamCall = do
 
   let msg = Message.StreamRequest "Alice" 100
   let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
-  rsp <- makeMethodCall testServiceServerStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceServerStreamCall} -> testServiceServerStreamCall rqt
 
   let expected :: Seq StreamReply
       expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
@@ -251,7 +253,7 @@ testBatchServerStreamCall = do
 
   let msg = Message.StreamRequest "Alice" 100
   let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
-  rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceBatchServerStreamCall} -> testServiceBatchServerStreamCall rqt
 
   let expected :: Seq StreamReply
       expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
@@ -273,14 +275,14 @@ testTreeBiDiStream =
 testBiDiStreamCall :: Fixture ()
 testBiDiStreamCall = do
   let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall testServiceBiDiStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceBiDiStreamCall} -> testServiceBiDiStreamCall rqt
 
   checkBiDiStreamResponse rsp
 
 testBatchBiDiStreamCall :: Fixture ()
 testBatchBiDiStreamCall = do
   let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall testServiceBatchBiDiStreamCall rqt
+  rsp <- makeMethodCall $ \TestService{testServiceBatchBiDiStreamCall} -> testServiceBatchBiDiStreamCall rqt
 
   checkBiDiStreamResponse rsp
 
@@ -311,7 +313,8 @@ testClientTimeout = do
   rsp <- liftIO $ withMQTTGRPCClient logger clientConfig \client -> do
     let msg = Message.TwoInts 5 10
     let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-    testServicenormalCall (testServiceMqttClient client baseTopic) rqt
+    let TestService{testServicenormalCall} = testServiceMqttClient client baseTopic
+    testServicenormalCall rqt
 
   liftIO case rsp of
     MQTTError err -> do
@@ -346,7 +349,8 @@ testMissingClientMethod = do
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           let msg = Message.TwoInts 5 10
           let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-          testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+          let TestService{testServicenormalCall} = testServiceMqttClient clientMQTT baseTopic
+          testServicenormalCall rqt
 
   liftIO case rsp of
     MQTTError err -> do
@@ -384,7 +388,8 @@ testMalformedMessage = do
 
           -- Make a well-formed request to ensure the previous request did not
           -- take down the service
-          testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+          let TestService{testServicenormalCall} = testServiceMqttClient clientMQTT baseTopic
+          testServicenormalCall rqt
 
   checkNormalResponse msg rsp
   where
@@ -460,13 +465,12 @@ checkBiDiStreamResponse rsp =
 type Handler s rqt rsp = MQTTRequest s rqt rsp -> IO (MQTTResult s rsp)
 
 makeMethodCall ::
-  (TestService MQTTRequest MQTTResult -> Handler s rqt rsp) ->
-  MQTTRequest s rqt rsp ->
+  (TestService MQTTRequest MQTTResult -> IO (MQTTResult s rsp)) ->
   Fixture (MQTTResult s rsp)
-makeMethodCall method request = do
+makeMethodCall method = do
   baseTopic <- asks Suite.testConfigBaseTopic
   withServiceFixture \_ client -> do
-    method (testServiceMqttClient client baseTopic) request
+    method (testServiceMqttClient client baseTopic)
 
 --------------------------------------------------------------------------------
 

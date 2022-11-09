@@ -238,7 +238,12 @@ makePacketSender ::
   -- than or equal to 'minPacketSize' and less than 'maxPacketSize'. Otherwise,
   -- a 'PacketSizeError' exception will be thrown.
   Word32 ->
+  -- | The function to publish serialized packets. In practice, this function is 
+  -- always 'publishq' with QoS1. This is only exposed as an argument so that 
+  -- 'makePacketSender' can be given a mock publishing function and tested in 
+  -- the absence of a gRPC service.
   (ByteString -> m ()) ->
+  -- | A serialized protobuf message to packetize and publish over MQTT.
   ByteString ->
   m ()
 makePacketSender limit publish message = do

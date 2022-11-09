@@ -65,24 +65,13 @@ import Data.ByteString.Builder qualified as ByteString.Builder
 import Data.ByteString.Unsafe qualified as ByteString.Unsafe
 import Data.Data (Data)
 import Data.Primitive.ByteArray
-<<<<<<< HEAD
   ( mutableByteArrayContents, 
     newAlignedPinnedByteArray
-=======
-  ( MutableByteArray,
-    getSizeofMutableByteArray,
-    mutableByteArrayContents,
-    newAlignedPinnedByteArray,
->>>>>>> d5b6374481f0299d691ba690c4fead2f0e370d64
   )
 
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr (StablePtr, freeStablePtr, newStablePtr)
 
-<<<<<<< HEAD
-=======
-import GHC.Exts (RealWorld)
->>>>>>> d5b6374481f0299d691ba690c4fead2f0e370d64
 import GHC.Ptr (castPtr, nullPtr, plusPtr)
 
 import Proto3.Wire.Decode (ParseError, Parser, RawMessage)
@@ -275,21 +264,13 @@ makePacketSender limit publish message = do
       replicateConcurrently_ caps do
         let bufferSize :: Int
             bufferSize = fromIntegral (limit + minPacketSize)
-<<<<<<< HEAD
          in withEncodePacket bufferSize \encode -> do
-=======
-         in withEncodeBuffer bufferSize \ptr -> do
->>>>>>> d5b6374481f0299d691ba690c4fead2f0e370d64
               fix \next -> do
                 atomically (takeJobId jobs) >>= \case
                   Nothing -> pure ()
                   Just jobid -> do
                     let packet = makePacket jobid
-<<<<<<< HEAD
                     serialized <- encode packet 
-=======
-                    serialized <- encodeBufferOffPacket ptr bufferSize packet
->>>>>>> d5b6374481f0299d691ba690c4fead2f0e370d64
                     publish serialized
                     next
   where

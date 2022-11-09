@@ -64,16 +64,13 @@ import Data.ByteString.Builder qualified as ByteString.Builder
 import Data.ByteString.Unsafe qualified as ByteString.Unsafe
 import Data.Data (Data)
 import Data.Primitive.ByteArray
-  ( MutableByteArray,
-    getSizeofMutableByteArray,
-    mutableByteArrayContents,
-    newAlignedPinnedByteArray,
+  ( mutableByteArrayContents, 
+    newAlignedPinnedByteArray
   )
 
 import Foreign.Ptr (Ptr)
 import Foreign.StablePtr (StablePtr, freeStablePtr, newStablePtr)
 
-import GHC.Exts (RealWorld)
 import GHC.Ptr (castPtr, nullPtr, plusPtr)
 
 import Proto3.Wire.Decode (ParseError, Parser, RawMessage)

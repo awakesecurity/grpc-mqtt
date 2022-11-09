@@ -42,6 +42,7 @@ module Network.GRPC.MQTT.Message.Packet
 
     -- * Unsafe
     encodeBufferOffPacket,
+    withEncodePacket,
     withEncodeBuffer,
   )
 where
@@ -263,13 +264,13 @@ makePacketSender limit publish message = do
       replicateConcurrently_ caps do
         let bufferSize :: Int
             bufferSize = fromIntegral (limit + minPacketSize)
-         in withEncodeBuffer bufferSize \ptr -> do
+         in withEncodePacket bufferSize \encode -> do
               fix \next -> do
                 atomically (takeJobId jobs) >>= \case
                   Nothing -> pure ()
                   Just jobid -> do
                     let packet = makePacket jobid
-                    serialized <- encodeBufferOffPacket ptr bufferSize packet
+                    serialized <- encode packet 
                     publish serialized
                     next
   where
@@ -454,6 +455,16 @@ encodeBufferOffPacket ptr unused packet = do
   liftIO (unsafePackCStringLen ptr' size)
 {-# INLINE encodeBufferOffPacket #-}
 
+withEncodePacket :: 
+  MonadUnliftIO m => 
+  Int -> 
+  ((Packet ByteString -> m ByteString) -> m a) -> 
+  m a
+withEncodePacket n k = 
+  withEncodeBuffer n \ptr -> 
+    k (encodeBufferOffPacket ptr n)
+{-# INLINEABLE withEncodePacket #-}
+
 withEncodeBuffer :: MonadUnliftIO m => Int -> (Ptr Word8 -> m a) -> m a
 withEncodeBuffer packetSizeLimit k = do
   let bufferSize = metaDataSize + packetSizeLimit
@@ -466,6 +477,7 @@ withEncodeBuffer packetSizeLimit k = do
     liftIO (writeState m statePtr)
     liftIO (writeSpace m (bufferSize - metaDataSize))
     k v
+{-# INLINE withEncodeBuffer #-}
 
 -- Unsafe - Helpers ------------------------------------------------------------
 

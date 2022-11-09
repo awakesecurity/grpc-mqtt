@@ -419,16 +419,38 @@ fromPacketBuildR buffer unused packet = do
   let build = Encode.reverseMessageBuilder (wireBuildPacket packet)
   liftIO (fromBuildR build buffer unused)
 
+-- | Like 'wireWrapPacket', @'encodeBufferOffPacket' ptr len packet@ serializes 
+-- a 'Packet' wrapping a serialized proto message, but 'encodeBufferOffPacket'
+-- takes additional arguments for specifying the buffer that @packet@ gets 
+-- serialized to.
+--
+-- 'encodeBufferOffPacket' is used in situations where more granular control 
+-- over memory is desired. This function is significantly more unsafe when 
+-- compared to 'wireWrapPacket', which automatically handles allocation of the 
+-- serialization buffer internally, since it assumes that the @ptr@ refers to a 
+-- live allocation and the allocation size @len@ always equal to or larger than 
+-- the size of the serialized @packet@.
+--
+-- @since 1.0.0
 encodeBufferOffPacket ::
   MonadIO m =>
+  -- | The @ptr@ argument is pointer to the start of the proto serialization 
+  -- buffer. This pointer refer to a pinned 'MutableByteArray' aligned to 
+  -- 'metaDataAlign'.
   Ptr Word8 ->
+  -- | The @len@ argument is the size of the buffer @ptr@ points to. The value 
+  -- of length must exactly agree with the actual size of the allocation and 
+  -- must be large enough to store the serialized @packet@ plus 'metaDataSize'.
   Int ->
+  -- | The @packet@ argument is the packet that will be serialized to the given 
+  -- buffer.
   Packet ByteString ->
   m ByteString
 encodeBufferOffPacket ptr unused packet = do
   (ptr', unused') <- fromPacketBuildR ptr unused packet
   size <- liftIO (readTotal ptr' unused')
   liftIO (unsafePackCStringLen ptr' size)
+{-# INLINE encodeBufferOffPacket #-}
 
 withEncodeBuffer :: MonadUnliftIO m => Int -> (Ptr Word8 -> m a) -> m a
 withEncodeBuffer packetSizeLimit k = do

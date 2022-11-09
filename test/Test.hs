@@ -45,9 +45,9 @@ testTree :: TestTree
 testTree =
   testGroup
     "Test"
-    [ Test.Network.GRPC.HighLevel.Extra.tests
-    , Test.Network.GRPC.MQTT.tests
-    , Test.Service.tests
+    -- [ Test.Network.GRPC.HighLevel.Extra.tests
+    -- , Test.Network.GRPC.MQTT.tests
+    [ Test.Service.tests
     ]
 
 testIngredients :: [Ingredient]

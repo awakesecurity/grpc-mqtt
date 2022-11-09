@@ -1,5 +1,7 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TypeApplications #-}
 
 -- |
@@ -87,10 +89,10 @@ import Proto.Service
     testServicecallLongBytes,
   )
 
-import Data.UUID qualified as UUID
-import Data.UUID.V4 qualified as UUID
-
-import Data.Map.Strict qualified as Map
+import Hedgehog (evalIO, property, withTests, (===))
+import Hedgehog qualified
+import Test.Suite.MQTT (withTestMQTTGRPCClient)
+import Test.Tasty.Hedgehog (testProperty)
 
 --------------------------------------------------------------------------------
 
@@ -139,54 +141,56 @@ testTreeNormal :: TestTree
 testTreeNormal =
   testGroup
     "Normal"
-    [ Suite.testFixture "LongBytes" testCallLongBytes
-    , after
-        Test.AllSucceed
-        "LongBytes"
-        (Suite.testFixture "Call" testNormalCall)
+    [ testNormalCall
+    , testLongBytes
     ]
 
-testCallLongBytes :: Fixture ()
-testCallLongBytes = do
-  configGRPC <- Suite.askConfigClientGRPC
-  remoteConfig <- Suite.askRemoteConfigMQTT
-  clientConfig <- Suite.askClientConfigMQTT
-  baseTopic <- asks Suite.testConfigBaseTopic
+testNormalCall :: TestTree
+testNormalCall =
+  withTestMQTTGRPCClient \initClient topic ->
+    testProperty "Unary" $
+      withTests 1 $ property do
+        let msg = Message.TwoInts 5 10
+        let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
 
-  withTestService \_ -> do
-    withGRPCClient configGRPC \grpcClient -> do
-      methods <- testServiceRemoteClientMethodMap grpcClient
-      result <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
-        withMQTTGRPCClient logger clientConfig \client -> do
-            -- For uniquely identifying requests to the server.
-            uuid <- UUID.nextRandom
+        client <- Hedgehog.evalIO initClient
+        result <- Hedgehog.evalIO (testServicenormalCall (testServiceMqttClient client topic) rqt)
 
-            -- NB: 2022-08-02 we discovered a bug with concurrent client
-            -- requests that send responses which, when sent back by the
-            -- server trigger a GRPCIOTimeout error in some of the clients.
-            let msg = Message.OneInt 64
-            let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+        case result of
+          MQTTError exn -> do
+            Hedgehog.footnoteShow exn
+            Hedgehog.failure
+          GRPCResult (ClientErrorResponse exn) -> do
+            Hedgehog.footnoteShow exn
+            Hedgehog.failure
+          GRPCResult (ClientNormalResponse oneInt _ _ status _) -> do
+            status === StatusOk
+            oneInt === Message.OneInt 15
 
-            testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+testLongBytes :: TestTree
+testLongBytes =
+  withTestMQTTGRPCClient \initClient topic ->
+    testProperty "LongBytes" $
+      -- withTests 1 $ property do
+      property do
+        let msg = Message.OneInt 64
+        let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 []
 
-      liftIO case result of
-          GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do
-            print (ByteString.length x)
-          GRPCResult (ClientErrorResponse err) -> do
-            assertFailure (show err)
-          MQTTError err -> do
-            error err
-  where
-    logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent
+        client <- Hedgehog.evalIO initClient
+        result <- Hedgehog.evalIO (testServicecallLongBytes (testServiceMqttClient client topic) rqt)
 
-testNormalCall :: Fixture ()
-testNormalCall = do
-  let msg = Message.TwoInts 5 10
-  let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-  rsp <- makeMethodCall testServicenormalCall rqt
+        case result of
+          MQTTError exn -> do
+            Hedgehog.footnoteShow exn
+            Hedgehog.failure
+          GRPCResult (ClientErrorResponse exn) -> do
+            Hedgehog.footnoteShow exn
+            Hedgehog.failure
+          GRPCResult (ClientNormalResponse rsp _ _ status _) -> do
+            status === StatusOk
+            rsp === Message.BytesResponse (ByteString.replicate (1_000_000 * 64) 1)
 
-  checkNormalResponse msg rsp
+-- oneInt === Message.OneInt 15
 
 --------------------------------------------------------------------------------
 
@@ -501,6 +505,7 @@ bidiStreamHandler _ recv send done = do
     sender = do
       results <-
         sequence
+          @[]
           [ send (Message.BiDiRequestReply "Alice1Alice1Alice1")
           , send (Message.BiDiRequestReply "Alice2")
           , send (Message.BiDiRequestReply "Alice3Alice3Alice3")

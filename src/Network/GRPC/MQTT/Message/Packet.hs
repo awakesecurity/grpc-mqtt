@@ -42,10 +42,7 @@ module Network.GRPC.MQTT.Message.Packet
 
     -- * Unsafe
     encodeBufferOffPacket,
-<<<<<<< HEAD
     withEncodePacket,
-=======
->>>>>>> d5b6374481f0299d691ba690c4fead2f0e370d64
     withEncodeBuffer,
   )
 where

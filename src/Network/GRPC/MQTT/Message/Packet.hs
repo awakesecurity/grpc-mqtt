@@ -243,6 +243,10 @@ makePacketSender ::
   -- always 'publishq' with QoS1. This is only exposed as an argument so that 
   -- 'makePacketSender' can be given a mock publishing function and tested in 
   -- the absence of a gRPC service.
+  --
+  -- No references to the 'ByteString' argument of this function can escape the
+  -- scope of the function because the contents of the 'ByteString' will be 
+  -- mutated after the call to each publish function is completed.  
   (ByteString -> m ()) ->
   -- | A serialized protobuf message to packetize and publish over MQTT.
   ByteString ->

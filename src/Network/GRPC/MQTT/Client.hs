@@ -210,16 +210,21 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     -- Process request
     timeoutGRPC timeout do
+      logDebug mqttLogger $ "client debug: publishing request to topic: " <> unTopic requestTopic
       Request.makeRequestSender
         limit
         (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
         (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
+      logDebug mqttLogger $ "client debug: request publish completed to topic: " <> unTopic requestTopic
 
       withControlSignals (publishControl controlTopic) . exceptToResult $ do
         case request of
           -- Unary Requests
-          MQTTNormalRequest {} ->
-            Response.makeNormalResponseReader responseQueue decodeOptions
+          MQTTNormalRequest {} -> do
+            logDebug mqttLogger $ "client debug: reading response topic: " <> unTopic requestTopic
+            rsp <- Response.makeNormalResponseReader responseQueue decodeOptions
+            logDebug mqttLogger $ "client debug: reading response completed topic: " <> unTopic requestTopic
+            pure rsp
           -- Client Streaming Requests
           MQTTWriterRequest _ _ streamHandler -> do
             liftIO $ do
@@ -344,7 +349,6 @@ connectMQTTGRPC logger cfg = do
               logDebug logger $ "no such response topic: " <> unTopic topic
             Just chan -> do 
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
-              logDebug logger $ " Raw: " <> decodeUtf8 msg
               atomically $ writeTQueue chan (toStrict msg)
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}

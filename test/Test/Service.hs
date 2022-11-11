@@ -100,11 +100,14 @@ tests :: TestTree
 tests =
   testGroup
     "Service"
-    [ after Test.AllSucceed "MQTT" testTreeNormal
-    , after Test.AllSucceed "Normal" testTreeClientStream
-    , after Test.AllSucceed "ClientStream" testTreeServerStream
-    , after Test.AllSucceed "ServerStream" testTreeBiDiStream
-    , after Test.AllSucceed "BiDiStream" testTreeErrors
+    [ testNormalCall
+    , after Test.AllSucceed "Unary.Normal" testLongBytes
+    , after Test.AllSucceed "Unary.LongBytes" testClientStreamCall
+    , after Test.AllSucceed "ClientStream.Unbatched" testBatchClientStreamCall
+    , after Test.AllSucceed "ClientStream.Batched" testServerStreamCall
+    , after Test.AllSucceed "ServerStream.Unbatched" testBatchServerStreamCall
+    , after Test.AllSucceed "ServerStream.Batched" testBiDiStreamCall
+    , after Test.AllSucceed "BiDiStream.Unbatched" testBatchBiDiStreamCall
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a
@@ -137,18 +140,10 @@ withServiceFixture k = do
 
 --------------------------------------------------------------------------------
 
-testTreeNormal :: TestTree
-testTreeNormal =
-  testGroup
-    "Normal"
-    [ testNormalCall
-    , testLongBytes
-    ]
-
 testNormalCall :: TestTree
 testNormalCall =
   withTestMQTTGRPCClient \initClient topic ->
-    testProperty "Unary" $
+    testProperty "Unary.Normal" $
       withTests 1 $ property do
         let msg = Message.TwoInts 5 10
         let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
@@ -170,9 +165,7 @@ testNormalCall =
 testLongBytes :: TestTree
 testLongBytes =
   withTestMQTTGRPCClient \initClient topic ->
-    testProperty "LongBytes" $
-      -- withTests 1 $ property do
-      property do
+    (testProperty "Unary.LongBytes" . withTests 1 . property) do 
         let msg = Message.OneInt 64
         let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 []
 
@@ -190,101 +183,161 @@ testLongBytes =
             status === StatusOk
             rsp === Message.BytesResponse (ByteString.replicate (1_000_000 * 64) 1)
 
--- oneInt === Message.OneInt 15
-
 --------------------------------------------------------------------------------
 
-testTreeClientStream :: TestTree
-testTreeClientStream =
-  testGroup
-    "ClientStream"
-    [ Suite.testFixture "Test.Service.ClientStream.Unbatched" testClientStreamCall
-    , after
-        Test.AllSucceed
-        "Test.Service.ClientStream.Unbatched"
-        (Suite.testFixture "Batched" testBatchClientStreamCall)
-    ]
+testClientStreamCall :: TestTree
+testClientStreamCall = 
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "ClientStream.Unbatched" . withTests 1 . property) do 
+      let rqt = GRPC.MQTT.MQTTWriterRequest 30 mempty (clientStreamHandler ints)
 
-testClientStreamCall :: Fixture ()
-testClientStreamCall = do
-  let msg = map Message.OneInt [1 .. 5]
-  let rqt = GRPC.MQTT.MQTTWriterRequest 5 mempty (clientStreamHandler msg)
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceClientStreamCall (testServiceMqttClient client topic) rqt)
 
-  rsp <- makeMethodCall testServiceClientStreamCall rqt
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientWriterResponse rsp _ _ status _) -> do
+          status === StatusOk
+          rsp === expectation
+  where 
+    expectation :: Maybe OneInt
+    expectation = Just (foldr plusOneInt (Message.OneInt 0) ints)
+    
+    plusOneInt :: OneInt -> OneInt -> OneInt
+    plusOneInt (Message.OneInt x) (Message.OneInt y) = Message.OneInt (x + y)
 
-  checkClientStreamResponse msg rsp
+    ints :: [OneInt]
+    ints = map Message.OneInt [1 .. 5]
 
-testBatchClientStreamCall :: Fixture ()
+testBatchClientStreamCall :: TestTree
 testBatchClientStreamCall = do
-  let msg = map Message.OneInt [1 .. 5]
-  let rqt = GRPC.MQTT.MQTTWriterRequest 10 mempty (clientStreamHandler msg)
-  rsp <- makeMethodCall testServiceBatchClientStreamCall rqt
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "ClientStream.Batched" . withTests 1 . property) do 
+      let rqt = GRPC.MQTT.MQTTWriterRequest 10 mempty (clientStreamHandler ints)
 
-  checkClientStreamResponse msg rsp
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceBatchClientStreamCall (testServiceMqttClient client topic) rqt)
+
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientWriterResponse rsp _ _ status _) -> do
+          status === StatusOk
+          rsp === expectation
+  where 
+    expectation :: Maybe OneInt
+    expectation = Just (foldr plusOneInt (Message.OneInt 0) ints)
+    
+    plusOneInt :: OneInt -> OneInt -> OneInt
+    plusOneInt (Message.OneInt x) (Message.OneInt y) = Message.OneInt (x + y)
+
+    ints :: [OneInt]
+    ints = map Message.OneInt [1 .. 5]
 
 --------------------------------------------------------------------------------
 
-testTreeServerStream :: TestTree
-testTreeServerStream =
-  testGroup
-    "ServerStream"
-    [ Suite.testFixture "Test.Service.ServerStream.Unbatched" testServerStreamCall
-    , after
-        Test.AllSucceed
-        "Test.Service.ServerStream.Unbatched"
-        (Suite.testFixture "Test.Service.ServerStream.Batched" testBatchServerStreamCall)
-    ]
+testServerStreamCall :: TestTree
+testServerStreamCall = 
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "ServerStream.Unbatched" . withTests 1 . property) do 
+      buffer <- liftIO $ newIORef Seq.empty
 
-testServerStreamCall :: Fixture ()
-testServerStreamCall = do
-  buffer <- liftIO $ newIORef Seq.empty
+      let msg = Message.StreamRequest "Alice" 100
+      let rqt = MQTTReaderRequest msg 100 mempty (serverStreamHandler buffer)
 
-  let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 100 mempty (serverStreamHandler buffer)
-  rsp <- makeMethodCall testServiceServerStreamCall rqt
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceServerStreamCall (testServiceMqttClient client topic) rqt)
 
-  let expected :: Seq StreamReply
-      expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
-   in checkServerStreamResponse rsp expected buffer
+      case result of 
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientReaderResponse _ status _) -> do
+          actual <- readIORef buffer
+          actual === expected
+          status === StatusOk
+  where 
+    expected :: Seq StreamReply
+    expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
 
-testBatchServerStreamCall :: Fixture ()
+testBatchServerStreamCall :: TestTree
 testBatchServerStreamCall = do
-  buffer <- liftIO $ newIORef Seq.empty
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "ServerStream.Batched" . withTests 1 . property) do 
+      buffer <- liftIO $ newIORef Seq.empty
 
-  let msg = Message.StreamRequest "Alice" 100
-  let rqt = MQTTReaderRequest msg 300 mempty (serverStreamHandler buffer)
-  rsp <- makeMethodCall testServiceBatchServerStreamCall rqt
+      let msg = Message.StreamRequest "Alice" 100
+      let rqt = MQTTReaderRequest msg 300 mempty (serverStreamHandler buffer)
 
-  let expected :: Seq StreamReply
-      expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
-   in checkServerStreamResponse rsp expected buffer
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceBatchServerStreamCall (testServiceMqttClient client topic) rqt)
+
+      case result of 
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientReaderResponse _ status _) -> do
+          actual <- readIORef buffer
+          actual === expected
+          status === StatusOk
+  where 
+    expected :: Seq StreamReply
+    expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
 
 --------------------------------------------------------------------------------
 
-testTreeBiDiStream :: TestTree
-testTreeBiDiStream =
-  testGroup
-    "BiDiStream"
-    [ Suite.testFixture "Test.Service.BiDiStream.Unbatched" testBiDiStreamCall
-    , after
-        Test.AllSucceed
-        "Test.Service.BiDiStream.Unbatched"
-        (Suite.testFixture "Batched" testBatchBiDiStreamCall)
-    ]
+testBiDiStreamCall :: TestTree
+testBiDiStreamCall = 
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "BiDi.Unbatched" . withTests 1 . property) do 
+      let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
 
-testBiDiStreamCall :: Fixture ()
-testBiDiStreamCall = do
-  let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall testServiceBiDiStreamCall rqt
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceBiDiStreamCall (testServiceMqttClient client topic) rqt)
 
-  checkBiDiStreamResponse rsp
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientBiDiResponse _ status _) -> do
+          status === StatusOk
 
-testBatchBiDiStreamCall :: Fixture ()
-testBatchBiDiStreamCall = do
-  let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
-  rsp <- makeMethodCall testServiceBatchBiDiStreamCall rqt
+testBatchBiDiStreamCall :: TestTree
+testBatchBiDiStreamCall = 
+  withTestMQTTGRPCClient \initClient topic ->
+    (testProperty "BiDi.Batched" . withTests 1 . property) do 
+      let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
 
-  checkBiDiStreamResponse rsp
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServiceBatchBiDiStreamCall (testServiceMqttClient client topic) rqt)
+
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientBiDiResponse _ status _) -> do
+          status === StatusOk
 
 --------------------------------------------------------------------------------
 

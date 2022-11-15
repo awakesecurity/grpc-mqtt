@@ -324,7 +324,7 @@ testBatchBiDiStreamCall :: TestTree
 testBatchBiDiStreamCall = 
   withTestMQTTGRPCClient \initClient topic ->
     (testProperty "BiDi.Batched" . withTests 1 . property) do 
-      let rqt = MQTTBiDiRequest 10 mempty bidiStreamHandler
+      let rqt = MQTTBiDiRequest 15 mempty bidiStreamHandler
 
       client <- Hedgehog.evalIO initClient
       result <- Hedgehog.evalIO (testServiceBatchBiDiStreamCall (testServiceMqttClient client topic) rqt)

@@ -435,26 +435,8 @@ testPublishBadTopic = do
 
 --------------------------------------------------------------------------------
 
--- checkNormalResponse :: TwoInts -> MQTTResult 'Normal OneInt -> Fixture ()
--- checkNormalResponse (Message.TwoInts x y) rsp =
---   liftIO case rsp of
---     MQTTError err -> do
---       assertFailure (show err)
---     GRPCResult (ClientErrorResponse err) -> do
---       assertFailure (show err)
---     GRPCResult (ClientNormalResponse result _ _ status _) -> do
---       status @?= StatusOk
---       result @?= expectation
---   where
---     expectation :: OneInt
---     expectation = Message.OneInt (x + y)
-
---------------------------------------------------------------------------------
-
 clientStreamHandler :: [OneInt] -> GRPC.Client.StreamSend OneInt -> IO ()
-clientStreamHandler ints send =
-  forM_ ints \int -> do
-    send int
+clientStreamHandler ints send = traverse_ send ints
 
 serverStreamHandler ::
   IORef (Seq StreamReply) ->

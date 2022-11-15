@@ -4,6 +4,7 @@
 -- clients and remote clients within tasty tests.
 module Test.Suite.MQTT
   ( withTestMQTTGRPCClient,
+    withPartialTestMQTTGRPCClient,
     withTestRemoteClient,
   )
 where
@@ -58,6 +59,24 @@ withTestMQTTGRPCClient k =
     onDone :: MQTTGRPCClient -> IO ()
     onDone client = do
       printf "withTestMQTTGRPCClient: disconnecting gRPC-MQTT client.\n"
+      disconnectMQTTGRPC client
+
+-- | TODO
+withPartialTestMQTTGRPCClient :: (IO MQTTGRPCClient -> Topic -> TestTree) -> TestTree
+withPartialTestMQTTGRPCClient k = 
+  Test.Config.withTestConfig do
+    config <- Test.Config.askConfigMQTT
+    topic <- asks Test.Config.testConfigBaseTopic
+    pure (withResource (onInit config) onDone (`k` topic)) 
+  where 
+    onInit :: MQTTGRPCConfig -> IO MQTTGRPCClient
+    onInit config = do
+      printf "withTestMQTTGRPCClient: initializing partial gRPC-MQTT client.\n"
+      connectMQTTGRPC makeTestLogger config
+
+    onDone :: MQTTGRPCClient -> IO ()
+    onDone client = do
+      printf "withTestMQTTGRPCClient: disconnecting partial gRPC-MQTT client.\n"
       disconnectMQTTGRPC client
 
 -- | TODO

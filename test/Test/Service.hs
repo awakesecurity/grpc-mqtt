@@ -36,11 +36,7 @@ import Network.GRPC.HighLevel.Client
     WritesDone,
   )
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
-import Network.GRPC.HighLevel.Generated
-  ( GRPCMethodType (Normal),
-    StatusCode (StatusOk),
-    withGRPCClient,
-  )
+import Network.GRPC.HighLevel.Generated (StatusCode (StatusOk), withGRPCClient)
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
 
 import Network.MQTT.Client (QoS (QoS1), publishq, Topic)
@@ -74,7 +70,7 @@ import Test.Proto.RemoteClients (testServiceRemoteClientMethodMap)
 import Test.Proto.Service (newTestService)
 
 import Data.ByteString qualified as ByteString
-import Proto.Message (BiDiRequestReply, OneInt, StreamReply, TwoInts)
+import Proto.Message (BiDiRequestReply, OneInt, StreamReply)
 import Proto.Message qualified as Message
 import Proto.Service
   ( TestService
@@ -91,24 +87,32 @@ import Proto.Service
 
 import Hedgehog (evalIO, property, withTests, (===))
 import Hedgehog qualified
-import Test.Suite.MQTT (withTestMQTTGRPCClient)
+import Test.Suite.MQTT (withTestMQTTGRPCClient, withPartialTestMQTTGRPCClient)
 import Test.Tasty.Hedgehog (testProperty)
 
 --------------------------------------------------------------------------------
 
 tests :: TestTree
 tests =
-  withTestMQTTGRPCClient \initClient topic ->
   testGroup
     "Service"
-    [ testNormalCall initClient topic
-    , after Test.AllSucceed "Unary.Normal" (testLongBytes initClient topic)
-    , after Test.AllSucceed "Unary.LongBytes" (testClientStreamCall initClient topic)
-    , after Test.AllSucceed "ClientStream.Unbatched" (testBatchClientStreamCall initClient topic)
-    , after Test.AllSucceed "ClientStream.Batched" (testServerStreamCall initClient topic)
-    , after Test.AllSucceed "ServerStream.Unbatched" (testBatchServerStreamCall initClient topic)
-    , after Test.AllSucceed "ServerStream.Batched" (testBiDiStreamCall initClient topic)
-    , after Test.AllSucceed "BiDiStream.Unbatched" (testBatchBiDiStreamCall initClient topic)
+    [ withTestMQTTGRPCClient \initClient topic ->
+        testGroup 
+          "Pass"
+          [ testNormalCall initClient topic
+          , after Test.AllSucceed "Unary.Normal" (testLongBytes initClient topic)
+          , after Test.AllSucceed "Unary.LongBytes" (testClientStreamCall initClient topic)
+          , after Test.AllSucceed "Client.Unbatched" (testBatchClientStreamCall initClient topic)
+          , after Test.AllSucceed "Client.Batched" (testServerStreamCall initClient topic)
+          , after Test.AllSucceed "Server.Unbatched" (testBatchServerStreamCall initClient topic)
+          , after Test.AllSucceed "Server.Batched" (testBiDiStreamCall initClient topic)
+          , after Test.AllSucceed "BiDi.Unbatched" (testBatchBiDiStreamCall initClient topic)
+          ]
+    , testGroup 
+        "Fail" 
+        [ after Test.AllSucceed "Pass" testTimeoutClientNoGRPC 
+        , after Test.AllSucceed "Timeout" testPublishBadTopic
+        ]
     ]
 
 withTestService :: (Async () -> IO a) -> Fixture a
@@ -185,7 +189,7 @@ testLongBytes initClient topic =
 
 testClientStreamCall :: IO MQTTGRPCClient -> Topic -> TestTree
 testClientStreamCall initClient topic = 
-  (testProperty "ClientStream.Unbatched" . withTests 1 . property) do 
+  (testProperty "Client.Unbatched" . withTests 1 . property) do 
     let rqt = GRPC.MQTT.MQTTWriterRequest 30 mempty (clientStreamHandler ints)
 
     client <- Hedgehog.evalIO initClient
@@ -213,7 +217,7 @@ testClientStreamCall initClient topic =
 
 testBatchClientStreamCall :: IO MQTTGRPCClient -> Topic -> TestTree
 testBatchClientStreamCall initClient topic = 
-  (testProperty "ClientStream.Batched" . withTests 1 . property) do 
+  (testProperty "Client.Batched" . withTests 1 . property) do 
     let rqt = GRPC.MQTT.MQTTWriterRequest 10 mempty (clientStreamHandler ints)
 
     client <- Hedgehog.evalIO initClient
@@ -243,7 +247,7 @@ testBatchClientStreamCall initClient topic =
 
 testServerStreamCall :: IO MQTTGRPCClient -> Topic -> TestTree
 testServerStreamCall initClient topic = 
-  (testProperty "ServerStream.Unbatched" . withTests 1 . property) do 
+  (testProperty "Server.Unbatched" . withTests 1 . property) do 
     buffer <- liftIO $ newIORef Seq.empty
 
     let msg = Message.StreamRequest "Alice" 100
@@ -269,7 +273,7 @@ testServerStreamCall initClient topic =
 
 testBatchServerStreamCall :: IO MQTTGRPCClient -> Topic -> TestTree
 testBatchServerStreamCall initClient topic = 
-  (testProperty "ServerStream.Batched" . withTests 1 . property) do 
+  (testProperty "Server.Batched" . withTests 1 . property) do 
     buffer <- liftIO $ newIORef Seq.empty
 
     let msg = Message.StreamRequest "Alice" 100
@@ -335,42 +339,35 @@ testBatchBiDiStreamCall initClient topic =
 
 testTreeErrors :: TestTree
 testTreeErrors =
-  let timeout :: TestTree
-      timeout = Suite.testFixture "Test.Service.Errors.Timeout" testClientTimeout
-
-      missing :: TestTree
+  let missing :: TestTree
       missing = Suite.testFixture "Test.Service.Errors.Missing" testMissingClientMethod
-
-      malform :: TestTree
-      malform = Suite.testFixture "Test.Service.Errors.Malform" testMalformedMessage
    in testGroup
         "Test.Service.Errors"
-        [ timeout
-        , after Test.AllSucceed "Errors.Timeout" missing
-        , after Test.AllSucceed "Errors.Missing" malform
+        [ 
+          after Test.AllSucceed "Errors.Timeout" missing
         ]
 
-testClientTimeout :: Fixture ()
-testClientTimeout = do
-  clientConfig <- Suite.askClientConfigMQTT
-  baseTopic <- asks Suite.testConfigBaseTopic
+testTimeoutClientNoGRPC :: TestTree
+testTimeoutClientNoGRPC = 
+  withPartialTestMQTTGRPCClient \initClient topic -> 
+    (testProperty "Timeout.gRPC" . withTests 1 . property) do 
+      let msg = Message.TwoInts 5 10
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
 
-  rsp <- liftIO $ withMQTTGRPCClient logger clientConfig \client -> do
-    let msg = Message.TwoInts 5 10
-    let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
-    testServicenormalCall (testServiceMqttClient client baseTopic) rqt
+      client <- Hedgehog.evalIO initClient
+      result <- Hedgehog.evalIO (testServicenormalCall (testServiceMqttClient client topic) rqt)
 
-  liftIO case rsp of
-    MQTTError err -> do
-      assertFailure (show err)
-    GRPCResult (ClientNormalResponse result _ _ _ _) -> do
-      assertFailure (show result)
-    GRPCResult (ClientErrorResponse err) -> do
-      err @?= expectation
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          exn === expectation
+        GRPCResult (ClientNormalResponse rsp _ _ _ _) -> do
+          Hedgehog.footnoteShow rsp
+          Hedgehog.failure
   where
-    logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Silent
-
     expectation :: GRPC.Client.ClientError
     expectation = GRPC.Client.ClientIOError GRPC.GRPCIOTimeout
 
@@ -409,50 +406,48 @@ testMissingClientMethod = do
     expectation :: GRPC.Client.ClientError
     expectation = GRPC.Client.ClientIOError (GRPC.GRPCIOCallError GRPC.Unsafe.CallError)
 
-testMalformedMessage :: Fixture ()
-testMalformedMessage = do
-  configGRPC <- Suite.askConfigClientGRPC
-  remoteConfig <- Suite.askRemoteConfigMQTT
-  clientConfig <- Suite.askClientConfigMQTT
-  baseTopic <- asks Suite.testConfigBaseTopic
+testPublishBadTopic :: TestTree 
+testPublishBadTopic = do
+  withTestMQTTGRPCClient \initClient topic -> 
+    (testProperty "Bad-Topic" . withTests 1 . property) do 
+      let msg = Message.TwoInts 5 10
+      let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
 
-  let msg = Message.TwoInts 5 10
-  let rqt = GRPC.MQTT.MQTTNormalRequest msg 5 mempty
+      client <- Hedgehog.evalIO initClient
 
-  rsp <- withTestService \_ -> do
-    withGRPCClient configGRPC \clientGRPC -> do
-      methods <- testServiceRemoteClientMethodMap clientGRPC
-      let remoteClient = runRemoteClient logger remoteConfig baseTopic methods
-      Async.withAsync remoteClient \_ -> do
-        withMQTTGRPCClient logger clientConfig \clientMQTT -> do
-          -- Send a malformed message to an unknown topic
-          publishq (GRPC.MQTT.Client.mqttClient clientMQTT) (baseTopic <> "bad") "blah" False QoS1 []
-          sleep 1
+      -- Send a malformed message to an unknown topic
+      Hedgehog.evalIO (publishq (GRPC.MQTT.Client.mqttClient client) (topic <> "bad") "blah" False QoS1 [])
 
-          -- Make a well-formed request to ensure the previous request did not
-          -- take down the service
-          testServicenormalCall (testServiceMqttClient clientMQTT baseTopic) rqt
+      -- Make a well-formed request to ensure the previous request did not
+      -- take down the service
+      result <- Hedgehog.evalIO (testServicenormalCall (testServiceMqttClient client topic) rqt)
 
-  checkNormalResponse msg rsp
-  where
-    logger :: Logger
-    logger = Logger print GRPC.MQTT.Logging.Debug
+      case result of
+        MQTTError exn -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientErrorResponse exn) -> do
+          Hedgehog.footnoteShow exn
+          Hedgehog.failure
+        GRPCResult (ClientNormalResponse rsp _ _ _ _) -> do
+          Hedgehog.footnoteShow rsp
+          rsp === Message.OneInt 15
 
 --------------------------------------------------------------------------------
 
-checkNormalResponse :: TwoInts -> MQTTResult 'Normal OneInt -> Fixture ()
-checkNormalResponse (Message.TwoInts x y) rsp =
-  liftIO case rsp of
-    MQTTError err -> do
-      assertFailure (show err)
-    GRPCResult (ClientErrorResponse err) -> do
-      assertFailure (show err)
-    GRPCResult (ClientNormalResponse result _ _ status _) -> do
-      status @?= StatusOk
-      result @?= expectation
-  where
-    expectation :: OneInt
-    expectation = Message.OneInt (x + y)
+-- checkNormalResponse :: TwoInts -> MQTTResult 'Normal OneInt -> Fixture ()
+-- checkNormalResponse (Message.TwoInts x y) rsp =
+--   liftIO case rsp of
+--     MQTTError err -> do
+--       assertFailure (show err)
+--     GRPCResult (ClientErrorResponse err) -> do
+--       assertFailure (show err)
+--     GRPCResult (ClientNormalResponse result _ _ status _) -> do
+--       status @?= StatusOk
+--       result @?= expectation
+--   where
+--     expectation :: OneInt
+--     expectation = Message.OneInt (x + y)
 
 --------------------------------------------------------------------------------
 

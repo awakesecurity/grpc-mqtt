@@ -5,7 +5,7 @@
 module Test.Suite.GRPC
   ( withServer, 
     -- withTestService,
-    -- withTestClient,
+    withTestClient,
     -- withTestGRPC,
   )
 where

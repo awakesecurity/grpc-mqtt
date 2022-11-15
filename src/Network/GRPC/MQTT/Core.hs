@@ -59,7 +59,7 @@ import Network.MQTT.Client
       ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
-    QoS (QoS1),
+    QoS (QoS0),
     SubOptions (_subQoS),
     runMQTTConduit,
     subOptions,
@@ -155,7 +155,7 @@ heartbeatPeriodSeconds = 10
 
 subscribeOrThrow :: MQTTClient -> [Filter] -> IO ()
 subscribeOrThrow client topics = do
-  let subTopics = zip topics (repeat subOptions{_subQoS = QoS1})
+  let subTopics = zip topics (repeat subOptions{_subQoS = QoS0})
   (subResults, _) <- subscribe client subTopics []
   let taggedResults = zipWith (\t -> first (t,)) topics subResults
   let subFailures = lefts taggedResults

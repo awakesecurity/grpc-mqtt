@@ -36,7 +36,7 @@ import Network.GRPC.LowLevel.Op (WritesDone)
 import Network.MQTT.Client
   ( MQTTClient,
     MessageCallback (SimpleCallback),
-    QoS (QoS1),
+    QoS (QoS0),
     normalDisconnect,
     publishq,
     waitForClient,
@@ -293,7 +293,7 @@ publishPackets message = do
   Session.logDebug "...to the response topic" (Topic.unTopic topic)
 
   let publish :: ByteString -> IO ()
-      publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+      publish bytes = publishq client topic (fromStrict bytes) False QoS0 []
    in Packet.makePacketSender limit (liftIO . publish) message
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
@@ -397,7 +397,7 @@ makeServerStreamReader options recv = do
       limit <- asks cfgMsgSize
       Stream.makeStreamBatchSender limit options \chunk -> do
         Session.logDebug "publish server stream chunk as bytes" (show chunk)
-        liftIO (publishq client topic (fromStrict chunk) False QoS1 [])
+        liftIO (publishq client topic (fromStrict chunk) False QoS0 [])
 
 ---------------------------------------------------------------------------------
 

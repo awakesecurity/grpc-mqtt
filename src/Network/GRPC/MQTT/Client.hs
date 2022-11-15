@@ -73,7 +73,7 @@ import Network.MQTT.Client
   ( MQTTClient,
     MQTTException,
     MessageCallback (SimpleCallback),
-    QoS (QoS1),
+    QoS (QoS0),
     normalDisconnect,
     publishq,
   )
@@ -196,7 +196,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender limit encodeOptions \message -> do
         logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
-        publishq mqttClient requestTopic (fromStrict message) False QoS1 []
+        publishq mqttClient requestTopic (fromStrict message) False QoS0 []
 
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream x =
@@ -213,7 +213,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
       logDebug mqttLogger $ "client debug: publishing request to topic: " <> unTopic requestTopic
       Request.makeRequestSender
         limit
-        (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
+        (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS0 [])
         (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
       logDebug mqttLogger $ "client debug: request publish completed to topic: " <> unTopic requestTopic
 
@@ -298,7 +298,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
       logDebug mqttLogger $ "Publishing control message " <> show ctrl <> " to topic: " <> unTopic ctrlTopic
       let encoded :: LByteString
           encoded = Proto3.toLazyByteString (AuxControlMessage (Enumerated (Right ctrl)))
-       in publishq mqttClient ctrlTopic encoded False QoS1 []
+       in publishq mqttClient ctrlTopic encoded False QoS0 []
 
     handleMQTTException :: MQTTException -> IO (MQTTResult streamtype response)
     handleMQTTException e = do

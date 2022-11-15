@@ -41,7 +41,7 @@ import Network.GRPC.HighLevel.Generated
   )
 import Network.GRPC.Unsafe qualified as GRPC.Unsafe
 
-import Network.MQTT.Client (QoS (QoS1), publishq)
+import Network.MQTT.Client (QoS (QoS0), publishq)
 
 import Relude hiding (reader)
 
@@ -377,7 +377,7 @@ testMalformedMessage = do
       Async.withAsync remoteClient \_ -> do
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           -- Send a malformed message to an unknown topic
-          publishq (GRPC.MQTT.Client.mqttClient clientMQTT) (baseTopic <> "bad") "blah" False QoS1 []
+          publishq (GRPC.MQTT.Client.mqttClient clientMQTT) (baseTopic <> "bad") "blah" False QoS0 []
           sleep 1
 
           -- Make a well-formed request to ensure the previous request did not

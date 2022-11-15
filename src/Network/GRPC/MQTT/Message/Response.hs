@@ -42,7 +42,7 @@ import Network.GRPC.HighLevel.Client
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
 
-import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
+import Network.MQTT.Client (MQTTClient, QoS (QoS0), publishq)
 import Network.MQTT.Topic (Topic)
 
 import Proto3.Suite.Class (Message)
@@ -250,7 +250,7 @@ makeResponseSender client topic limit options response =
    in Packet.makePacketSender limit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
-    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+    publish bytes = publishq client topic (fromStrict bytes) False QoS0 []
 
 makeErrorResponseSender ::
   MonadUnliftIO m =>
@@ -266,7 +266,7 @@ makeErrorResponseSender client topic limit options err = do
    in Packet.makePacketSender limit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
-    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+    publish bytes = publishq client topic (fromStrict bytes) False QoS0 []
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>

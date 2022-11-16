@@ -6,32 +6,23 @@ module Test.Network.GRPC.MQTT.Message.Request
   )
 where
 
---------------------------------------------------------------------------------
+import Control.Concurrent.STM.TQueue (newTQueueIO)
 
 import Hedgehog (Property, forAll, property, tripping, (===))
 import Hedgehog qualified as Hedgehog
-
-import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Hedgehog (testProperty)
-
---------------------------------------------------------------------------------
-
-import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
-
---------------------------------------------------------------------------------
-
-import Control.Concurrent.Async (concurrently)
-
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, writeTQueue)
-
-import Relude hiding (reader)
-
---------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.Message (Request, WireDecodeError)
 import Network.GRPC.MQTT.Message.Request qualified as Request
 
 import Proto3.Wire.Decode qualified as Decode
+
+import Test.Core (mockPublish)
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.Hedgehog (testProperty)
+
+import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
+
+import Relude hiding (reader)
 
 --------------------------------------------------------------------------------
 
@@ -65,12 +56,8 @@ propRequestHandle = property do
   let sender :: Request ByteString -> IO ()
       sender = Request.makeRequestSender maxsize (mockPublish queue)
 
-  ((), result) <- Hedgehog.evalIO do
-    concurrently (sender request) (runExceptT reader)
+  result <- Hedgehog.evalIO do
+    sender request
+    runExceptT reader
 
   Right request === result
-
---------------------------------------------------------------------------------
-
-mockPublish :: TQueue ByteString -> ByteString -> IO ()
-mockPublish queue message = atomically (writeTQueue queue message)

@@ -6,39 +6,23 @@ module Test.Network.GRPC.MQTT.Message.Packet
   )
 where
 
---------------------------------------------------------------------------------
+import Control.Concurrent.STM.TQueue (flushTQueue, newTQueueIO, writeTQueue)
 
---------------------------------------------------------------------------------
+import Data.ByteString qualified as ByteString
 
 import Hedgehog (Property, forAll, property, tripping, (===))
 import Hedgehog qualified
 
-import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Hedgehog (testProperty)
+import Network.GRPC.MQTT.Message.Packet qualified as Packet
 
---------------------------------------------------------------------------------
-
-import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
-
---------------------------------------------------------------------------------
-
-import Control.Concurrent.Async (concurrently)
-
-import Control.Concurrent.STM.TQueue
-  ( TQueue,
-    flushTQueue,
-    newTQueueIO,
-    writeTQueue,
-  )
+import Proto3.Wire.Decode (ParseError)
 
 import Relude hiding (reader)
 
---------------------------------------------------------------------------------
-
-import Network.GRPC.MQTT.Message.Packet qualified as Packet
-
-import Data.ByteString qualified as ByteString
-import Proto3.Wire.Decode (ParseError)
+import Test.Tasty (TestTree, testGroup)
+import Test.Tasty.Hedgehog (testProperty)
+import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
+import Test.Core (mockPublish)
 
 --------------------------------------------------------------------------------
 
@@ -76,13 +60,11 @@ propPacketHandle = property do
   let sender :: ByteString -> IO ()
       sender = Packet.makePacketSender maxsize (mockPublish queue)
 
-  ((), result) <- Hedgehog.evalIO do
-    concurrently (sender message) (runExceptT reader)
+  result <- Hedgehog.evalIO do
+    sender message 
+    runExceptT reader
 
   Right message === result
-
-mockPublish :: TQueue ByteString -> ByteString -> IO ()
-mockPublish queue message = atomically (writeTQueue queue message)
 
 propPacketMaxSize :: Property
 propPacketMaxSize = property do

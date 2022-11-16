@@ -434,9 +434,9 @@ fromPacketBuildR buffer unused packet = do
 -- 'encodeBufferOffPacket' is used in situations where more granular control 
 -- over memory is desired. This function is significantly more unsafe when 
 -- compared to 'wireWrapPacket', which automatically handles allocation of the 
--- serialization buffer internally, since it assumes that the @ptr@ refers to a 
--- live allocation and the allocation size @len@ always equal to or larger than 
--- the size of the serialized @packet@.
+-- serialization buffer internally, since 'encodeBufferOffPacket' assumes that
+-- the @ptr@ refers to a live allocation and the allocation size @len@ always 
+-- equal to or larger than the size of the serialized @packet@.
 --
 -- @since 1.0.0
 encodeBufferOffPacket ::
@@ -452,6 +452,12 @@ encodeBufferOffPacket ::
   -- | The @packet@ argument is the packet that will be serialized to the given 
   -- buffer.
   Packet ByteString ->
+  -- | The returned 'ByteString' is the original serialization buffer @ptr@ with
+  -- after all bytes of the serialized @packet@ have been written. The returned 
+  -- 'ByteString' has no finalizers and does not prevent the garbage collector 
+  -- from reclaiming the 'MutableByteArray' that @ptr@ refers to. All references
+  -- to the returned 'ByteString' must be discarded before serialization buffer
+  -- can be reclaimed by the garbage collector. 
   m ByteString
 encodeBufferOffPacket ptr unused packet = do
   (ptr', unused') <- fromPacketBuildR ptr unused packet
@@ -472,10 +478,13 @@ withEncodePacket n k =
 withEncodeBuffer :: MonadUnliftIO m => Int -> (Ptr Word8 -> m a) -> m a
 withEncodeBuffer packetSizeLimit k = do
   let bufferSize = metaDataSize + packetSizeLimit
-  buf <- liftIO (newAlignedPinnedByteArray bufferSize metaDataAlign)
+  buffer <- liftIO (newAlignedPinnedByteArray bufferSize metaDataAlign)
   stateVar <- newIORef BuildRState{currentBuffer = buf, sealedBuffers = mempty}
+  -- The 'MutableByteArray' @buffer@ will become unreachable when 
+  -- 'withStablePtr' frees it's 'StablePtr'. References to the point passed to
+  -- must not @k@ escape the scope of the 'withStablePtr' below.
   withStablePtr stateVar \statePtr -> do
-    let !p = mutableByteArrayContents buf
+    let !p = mutableByteArrayContents buffer
     let !v = plusPtr p bufferSize
     let !m = plusPtr p metaDataSize
     liftIO (writeState m statePtr)
@@ -495,9 +504,8 @@ withStablePtr x = bracket (liftIO (newStablePtr x)) (liftIO . freeStablePtr)
 -- array pointer and the length of that array in bytes.
 --
 -- * If the argument to @len@ is less than the actual size of the allocation
---   @ptr@ refers to, then difference will be dropped from the tail of the array
---   in a best-case scenario. In the worst-case, the bytestring's foreign ptr
---   is reclaimed by the garbage collector while it is still alive.
+--   @ptr@ refers to, then difference will be dropped from the tail of the
+--   array.
 --
 -- * This function asserts that @len@ be greater than or equal to 0, otherwise
 --   an 'ErrorCall' exception (i.e. an 'error' call) will be thrown that cannot

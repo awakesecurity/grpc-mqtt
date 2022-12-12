@@ -92,7 +92,8 @@ import Relude
 
 import Text.Printf qualified as Text
 
-import UnliftIO (MonadUnliftIO, bracket, throwIO)
+import UnliftIO (MonadUnliftIO, bracket, throwIO, concurrently_)
+import UnliftIO.Concurrent (threadDelay)
 -- import UnliftIO.Async (replicateConcurrently_)
 
 -- Packet ----------------------------------------------------------------------
@@ -269,13 +270,14 @@ makePacketSender limit publish message = do
       
       withEncodePacket bufferSize \encode -> do
         fix \next -> do
-          atomically (takeJobId jobs) >>= \case
-            Nothing -> pure ()
-            Just jobid -> do
-              let packet = makePacket jobid
-              serialized <- encode packet 
-              publish serialized
-              next
+          concurrently_ (threadDelay 250000) do
+            atomically (takeJobId jobs) >>= \case
+              Nothing -> pure ()
+              Just jobid -> do
+                let packet = makePacket jobid
+                serialized <- encode packet 
+                publish serialized
+                next
   where
     maxPayloadSize :: Word32
     maxPayloadSize = max (limit - minPacketSize) 1

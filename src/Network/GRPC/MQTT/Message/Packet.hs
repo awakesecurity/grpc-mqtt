@@ -262,21 +262,20 @@ makePacketSender limit publish message = do
       let packet = Packet message 0 1
       publish (wireWrapPacket' packet)
     else do
-      caps <- liftIO getNumCapabilities
       jobs <- newTVarIO 0
 
-      replicateConcurrently_ caps do
-        let bufferSize :: Int
-            bufferSize = fromIntegral (limit + minPacketSize)
-         in withEncodePacket bufferSize \encode -> do
-              fix \next -> do
-                atomically (takeJobId jobs) >>= \case
-                  Nothing -> pure ()
-                  Just jobid -> do
-                    let packet = makePacket jobid
-                    serialized <- encode packet 
-                    publish serialized
-                    next
+      let bufferSize :: Int
+          bufferSize = fromIntegral (limit + minPacketSize)
+      
+      withEncodePacket bufferSize \encode -> do
+        fix \next -> do
+          atomically (takeJobId jobs) >>= \case
+            Nothing -> pure ()
+            Just jobid -> do
+              let packet = makePacket jobid
+              serialized <- encode packet 
+              publish serialized
+              next
   where
     maxPayloadSize :: Word32
     maxPayloadSize = max (limit - minPacketSize) 1

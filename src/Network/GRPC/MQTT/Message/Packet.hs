@@ -49,7 +49,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent (getNumCapabilities)
+-- import Control.Concurrent (getNumCapabilities)
 
 import Control.Concurrent.TMap as TMap
 
@@ -93,7 +93,7 @@ import Relude
 import Text.Printf qualified as Text
 
 import UnliftIO (MonadUnliftIO, bracket, throwIO)
-import UnliftIO.Async (replicateConcurrently_)
+-- import UnliftIO.Async (replicateConcurrently_)
 
 -- Packet ----------------------------------------------------------------------
 

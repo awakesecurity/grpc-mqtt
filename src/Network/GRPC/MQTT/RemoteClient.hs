@@ -63,6 +63,7 @@ import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
+    mqttPublishRateLimit,
     subscribeOrThrow,
   )
 
@@ -81,6 +82,24 @@ import Network.GRPC.MQTT.Message.Stream qualified as Stream
 import Network.GRPC.MQTT.Option (ProtoOptions)
 
 import Network.GRPC.MQTT.RemoteClient.Session
+  ( Session,
+    SessionConfig
+      ( SessionConfig,
+        cfgClient,
+        cfgLogger,
+        cfgMsgSize,
+        cfgRateLimit
+      ),
+    SessionHandle (hdlHeartbeat, hdlRqtQueue, hdlThread),
+    SessionTopic (topicBase, topicSid),
+    askMethod,
+    askMethodTopic,
+    askResponseTopic,
+    fromRqtTopic,
+    newWatchdogIO,
+    runSessionIO,
+    withSession,
+  )
 import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
@@ -143,7 +162,8 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
               when (topicBase topics == baseTopic) do
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
-                let config = SessionConfig client sessions logger topics msglim methods
+                let rateLimit = mqttPublishRateLimit cfg
+                let config = SessionConfig client sessions logger topics msglim rateLimit methods
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
@@ -276,25 +296,27 @@ publishClientResponse ::
 publishClientResponse options result = do
   client <- asks cfgClient
   topic <- askResponseTopic
-  limit <- asks cfgMsgSize
+  packetSizeLimit <- asks cfgMsgSize
+  rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing response as packets to client" (Topic.unTopic topic)
-  Session.logDebug "...with packet size" (show limit)
+  Session.logDebug "...with packet size" (show packetSizeLimit)
 
-  Response.makeResponseSender client topic limit options result
+  Response.makeResponseSender client topic packetSizeLimit rateLimit options result
 
 publishPackets :: ByteString -> Session ()
 publishPackets message = do
   client <- asks cfgClient
   topic <- askResponseTopic
-  limit <- asks cfgMsgSize
+  packetSizeLimit <- asks cfgMsgSize
+  rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing message as packets" (show message)
   Session.logDebug "...to the response topic" (Topic.unTopic topic)
 
   let publish :: ByteString -> IO ()
       publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
-   in Packet.makePacketSender limit (liftIO . publish) message
+   in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
 publishGRPCIOError options err =
@@ -309,12 +331,13 @@ publishRemoteError options err = do
   let response = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError err
   client <- asks cfgClient
   topic <- askResponseTopic
-  limit <- asks cfgMsgSize
+  packetSizeLimit <- asks cfgMsgSize
+  rateLimit <- asks cfgRateLimit
 
   Session.logError "publishing remote error as packets" (show response)
   Session.logError "...to the response topic" (Topic.unTopic topic)
 
-  Response.makeErrorResponseSender client topic limit options err
+  Response.makeErrorResponseSender client topic packetSizeLimit rateLimit options err
 
 ---------------------------------------------------------------------------------
 
@@ -394,8 +417,9 @@ makeServerStreamReader options recv = do
     makeStreamSender = do
       client <- asks cfgClient
       topic <- askResponseTopic
-      limit <- asks cfgMsgSize
-      Stream.makeStreamBatchSender limit options \chunk -> do
+      packetSizeLimit <- asks cfgMsgSize
+      rateLimit <- asks cfgRateLimit
+      Stream.makeStreamBatchSender packetSizeLimit rateLimit options \chunk -> do
         Session.logDebug "publish server stream chunk as bytes" (show chunk)
         liftIO (publishq client topic (fromStrict chunk) False QoS1 [])
 

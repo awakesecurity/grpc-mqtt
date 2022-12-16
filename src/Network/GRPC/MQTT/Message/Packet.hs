@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | This module exports definitions for the 'Packet' message type.
@@ -45,7 +46,8 @@ where
 
 import Control.Concurrent (getNumCapabilities)
 
-import Control.Concurrent.TMap as TMap
+import Control.Concurrent.TMap (TMap)
+import Control.Concurrent.TMap qualified as TMap
 
 import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
 
@@ -66,7 +68,8 @@ import Relude
 import Text.Printf qualified as Text
 
 import UnliftIO (MonadUnliftIO, throwIO)
-import UnliftIO.Async (replicateConcurrently_)
+import UnliftIO.Async (async, replicateConcurrently_, wait)
+import UnliftIO.Concurrent (threadDelay)
 
 -- Packet ----------------------------------------------------------------------
 
@@ -199,7 +202,7 @@ minPacketSize = 16
 --
 -- @since 1.0.0
 maxPacketSize :: Word32
-maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int) 
+maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int)
 
 -- | Construct a packetized message sender given the maximum size for each
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish
@@ -208,37 +211,58 @@ maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int)
 -- @since 0.1.0.0
 makePacketSender ::
   MonadUnliftIO m =>
-  -- | The maximum packet payload size. This must be a 'Word32' value greater 
+  -- | The maximum packet payload size. This must be a 'Word32' value greater
   -- than or equal to 'minPacketSize' and less than 'maxPacketSize'. Otherwise,
   -- a 'PacketSizeError' exception will be thrown.
   Word32 ->
+  -- | Optional rate limit for publishing as bytes per second.
+  Maybe Word32 ->
   (ByteString -> m ()) ->
   ByteString ->
   m ()
-makePacketSender limit publish message = do
-  unless (isValidPacketSize limit) do
-    throwIO (PacketSizeError $ toInteger limit)
+makePacketSender packetSizeLimit mRateLimit publish message = do
+  unless (isValidPacketSize packetSizeLimit) do
+    throwIO (PacketSizeError $ toInteger packetSizeLimit)
 
   if fromIntegral (ByteString.length message) <= maxPayloadSize
     then do
-      -- Perform a single publish on the current thread in case that the 
+      -- Perform a single publish on the current thread in case that the
       -- @message@ length is less than the maximum payload size.
       let packet = Packet message 0 1
       publish (wireWrapPacket' packet)
-    else do
-      caps <- liftIO getNumCapabilities
-      jobs <- newTVarIO 0
+    else case mRateLimit of
+      Nothing -> do
+        caps <- liftIO getNumCapabilities
+        jobs <- newTVarIO 0
 
-      replicateConcurrently_ caps $ fix \next ->
-        atomically (takeJobId jobs) >>= \case
-          Nothing -> pure ()
-          Just jobid -> do
-            let packet = makePacket jobid
-            publish (wireWrapPacket' packet)
-            next
+        replicateConcurrently_ caps $ fix \next ->
+          atomically (takeJobId jobs) >>= \case
+            Nothing -> pure ()
+            Just jobid -> do
+              let packet = makePacket jobid
+              publish (wireWrapPacket' packet)
+              next
+      Just rateLimit -> do
+        -- Throughput is rate limited on a 1 second interval and we don't subdivide packets to comply
+        -- with the rate limit, so the payload size must be less than or equal to the rate limit.
+        -- NB: Since `maxPayloadSize` is already at least 1, this ensures that `rateLimit` is not 0.
+        unless (maxPayloadSize <= rateLimit) $
+          throwIO (PacketSizeError $ toInteger packetSizeLimit)
+
+        -- Convert `maxPayloadSize` and `rateLimit` to Integer first to avoid overflow. Also,
+        -- the above condition that `maxPayloadSize` <= `rateLimit` ensures that the period is
+        -- between 0 and 1,000,000 microseconds, so the final conversion Integer -> Int is always safe.
+        let packetSendPeriod :: Int
+            packetSendPeriod = fromIntegral @Integer @Int $ fromIntegral maxPayloadSize * 1_000_000 `div` fromIntegral rateLimit
+
+        forM_ [0 .. njobs] $ \jobid -> do
+          timer <- async $ threadDelay packetSendPeriod
+          let packet = makePacket jobid
+          publish (wireWrapPacket' packet)
+          wait timer
   where
     maxPayloadSize :: Word32
-    maxPayloadSize = max (limit - minPacketSize) 1
+    maxPayloadSize = max (packetSizeLimit - minPacketSize) 1
 
     njobs :: Word32
     njobs = quotInf (fromIntegral $ ByteString.length message) maxPayloadSize

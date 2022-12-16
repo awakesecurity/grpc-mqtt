@@ -241,13 +241,14 @@ makeResponseSender ::
   MQTTClient ->
   Topic ->
   Word32 ->
+  Maybe Word32 ->
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
-makeResponseSender client topic limit options response =
+makeResponseSender client topic packetSizeLimit rateLimit options response =
   let message :: ByteString
       message = wireEncodeResponse options response
-   in Packet.makePacketSender limit (liftIO . publish) message
+   in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
     publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
@@ -257,13 +258,14 @@ makeErrorResponseSender ::
   MQTTClient ->
   Topic ->
   Word32 ->
+  Maybe Word32 -> 
   WireEncodeOptions ->
   RemoteError ->
   m ()
-makeErrorResponseSender client topic limit options err = do
+makeErrorResponseSender client topic packetSizeLimit rateLimit options err = do
   let message :: ByteString
       message = wireEncodeErrorResponse options err
-   in Packet.makePacketSender limit (liftIO . publish) message
+   in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
     publish bytes = publishq client topic (fromStrict bytes) False QoS1 []

@@ -74,7 +74,7 @@ propPacketHandle = property do
       reader = Packet.makePacketReader queue
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize (mockPublish queue)
+      sender = Packet.makePacketSender maxsize Nothing (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender message) (runExceptT reader)
@@ -91,7 +91,7 @@ propPacketMaxSize = property do
   queue <- Hedgehog.evalIO newTQueueIO
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize (atomically . writeTQueue queue)
+      sender = Packet.makePacketSender maxsize Nothing (atomically . writeTQueue queue)
 
   packets <- Hedgehog.evalIO do
     sender message

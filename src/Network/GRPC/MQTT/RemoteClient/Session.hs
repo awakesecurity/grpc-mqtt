@@ -51,6 +51,7 @@ module Network.GRPC.MQTT.RemoteClient.Session
         cfgLogger,
         cfgTopics,
         cfgMsgSize,
+        cfgRateLimit,
         cfgMethods
       ),
     insertSessionM,
@@ -318,6 +319,7 @@ data SessionConfig = SessionConfig
   , cfgLogger :: Logger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
   , cfgMsgSize :: {-# UNPACK #-} !Word32
+  , cfgRateLimit :: Maybe Word32
   , cfgMethods :: MethodMap
   }
   deriving (Generic)

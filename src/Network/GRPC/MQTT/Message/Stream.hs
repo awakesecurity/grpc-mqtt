@@ -165,10 +165,11 @@ makeStreamBatchSender ::
   forall io m.
   (MonadIO io, MonadUnliftIO m) =>
   Word32 ->
+  Maybe Word32 ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   io (ByteString -> m (), m ())
-makeStreamBatchSender limit options publish
+makeStreamBatchSender packetSizeLimit rateLimit options publish
   | Serial.encodeBatched options == Batched.Batched = do
     chunksRef <- newIORef ((Vector.empty, 0) :: (Vector ByteString, Int64))
     let send :: ByteString -> m ()
@@ -176,12 +177,12 @@ makeStreamBatchSender limit options publish
           (accChunks, accSize) <- readIORef chunksRef
           let size :: Int64
               size = fromIntegral (ByteString.length chunk)
-          if accSize + size < fromIntegral limit
+          if accSize + size < fromIntegral packetSizeLimit
             then atomicWriteIORef chunksRef (Vector.snoc accChunks chunk, accSize + size)
             else do
               (chunks, _) <- readIORef chunksRef
               unless (Vector.null accChunks) $
-                makeStreamChunkSender limit options chunks publish
+                makeStreamChunkSender packetSizeLimit rateLimit options chunks publish
               atomicWriteIORef chunksRef (Vector.singleton chunk, size)
 
         done :: m ()
@@ -189,42 +190,44 @@ makeStreamBatchSender limit options publish
           (accChunks, _) <- readIORef chunksRef
 
           unless (Vector.null accChunks) $
-            makeStreamChunkSender limit options accChunks publish
+            makeStreamChunkSender packetSizeLimit rateLimit options accChunks publish
 
           -- Send end of stream indicator
           atomicWriteIORef chunksRef (Vector.empty, 0)
-          makeStreamFinalSender limit options publish
+          makeStreamFinalSender packetSizeLimit rateLimit options publish
      in pure (send, done)
   | otherwise =
     let send :: ByteString -> m ()
         send chunk =
           let chunks :: Vector ByteString
               chunks = Vector.singleton chunk
-           in makeStreamChunkSender limit options chunks publish
+           in makeStreamChunkSender packetSizeLimit rateLimit options chunks publish
 
         done :: m ()
-        done = makeStreamFinalSender limit options publish
+        done = makeStreamFinalSender packetSizeLimit rateLimit options publish
      in pure (send, done)
 
 makeStreamChunkSender ::
   MonadUnliftIO m =>
   Word32 ->
+  Maybe Word32 ->
   WireEncodeOptions ->
   Vector ByteString ->
   (ByteString -> m ()) ->
   m ()
-makeStreamChunkSender limit options chunks publish = do
+makeStreamChunkSender packetSizeLimit rateLimit options chunks publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options (Just chunks)
-   in Packet.makePacketSender limit publish message
+   in Packet.makePacketSender packetSizeLimit rateLimit publish message
 
 makeStreamFinalSender ::
   MonadUnliftIO m =>
   Word32 ->
+  Maybe Word32 ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   m ()
-makeStreamFinalSender limit options publish = do
+makeStreamFinalSender packetSizeLimit rateLimit options publish = do
   let message :: ByteString
       message = wireEncodeStreamChunk options Nothing
-   in Packet.makePacketSender limit publish message
+   in Packet.makePacketSender packetSizeLimit rateLimit publish message

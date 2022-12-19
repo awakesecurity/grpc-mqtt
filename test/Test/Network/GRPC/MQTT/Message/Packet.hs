@@ -115,9 +115,6 @@ propPacketRateLimit = property do
   let rateLimitRange :: Range.Range Natural
       rateLimitRange = Range.linear (fromIntegral maxsize) (fromIntegral maxsize * 100)
   rateLimit <- forAll (Gen.integral_ rateLimitRange)
- 
-  let messageSize = ByteString.length message
-  Hedgehog.collect (messageSize, maxsize, rateLimit)
 
   queue <- Hedgehog.evalIO newTQueueIO
 
@@ -136,7 +133,7 @@ propPacketRateLimit = property do
 
   Right message === result
 
-  let jobs = fromIntegral messageSize `div` fromIntegral maxsize
+  let jobs = fromIntegral (ByteString.length message) `div` fromIntegral maxsize
   let period = fromIntegral maxsize * 1_000_000_000_000 `div` fromIntegral rateLimit
   let minTime :: Pico
       minTime = MkFixed $ jobs * period

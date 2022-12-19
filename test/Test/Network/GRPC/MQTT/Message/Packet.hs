@@ -1,3 +1,4 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 
 module Test.Network.GRPC.MQTT.Message.Packet
@@ -40,6 +41,11 @@ import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Data.ByteString qualified as ByteString
 import Proto3.Wire.Decode (ParseError)
 
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+import Data.Time.Clock (getCurrentTime, diffUTCTime, nominalDiffTimeToSeconds)
+import Data.Fixed (Pico, Fixed (MkFixed))
+
 --------------------------------------------------------------------------------
 
 data TestLabels
@@ -54,6 +60,7 @@ tests =
     [ testProperty "Packet.Wire" propPacketWire
     , testProperty "Packet.Handle" propPacketHandle
     , testProperty "Packet.MaxSize" propPacketMaxSize
+    , testProperty "Packet.RateLimit" propPacketRateLimit
     ]
 
 propPacketWire :: Property
@@ -101,3 +108,37 @@ propPacketMaxSize = property do
     let size :: Word32
         size = fromIntegral (ByteString.length packet)
      in Hedgehog.assert (size <= maxsize)
+
+propPacketRateLimit :: Property
+propPacketRateLimit = property do
+  message <- forAll Message.Gen.packetBytes
+  maxsize <- forAll (Message.Gen.packetSplitLength message)
+  let rateLimitRange :: Range.Range Natural
+      rateLimitRange = Range.linear (fromIntegral maxsize) (fromIntegral maxsize * 100)
+  rateLimit <- forAll (Gen.integral_ rateLimitRange)
+ 
+  let messageSize = ByteString.length message
+  Hedgehog.collect (messageSize, maxsize, rateLimit)
+
+  queue <- Hedgehog.evalIO newTQueueIO
+
+  let reader :: ExceptT ParseError IO ByteString
+      reader = Packet.makePacketReader queue
+
+  let sender :: ByteString -> IO ()
+      sender = Packet.makePacketSender maxsize (Just rateLimit) (atomically . writeTQueue queue)
+
+  (result, sendTime) <- Hedgehog.evalIO $ do
+    t1 <- getCurrentTime
+    sender message
+    t2 <- getCurrentTime
+    result <- runExceptT reader
+    pure (result, nominalDiffTimeToSeconds $ diffUTCTime t2 t1)
+
+  Right message === result
+
+  let jobs = fromIntegral messageSize `div` fromIntegral maxsize
+  let period = fromIntegral maxsize * 1_000_000_000_000 `div` fromIntegral rateLimit
+  let minTime :: Pico
+      minTime = MkFixed $ jobs * period
+  Hedgehog.diff sendTime (>=) minTime

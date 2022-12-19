@@ -2,7 +2,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 
 module Test.Network.GRPC.MQTT.Message.Packet

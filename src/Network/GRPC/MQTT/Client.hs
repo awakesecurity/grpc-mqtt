@@ -147,7 +147,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   , -- | Maximum size for an MQTT message in bytes
     msgSizeLimit :: Int64
   , -- | Limit the rate of publishing data in bytes per second.
-    publishRateLimit :: Maybe Word32
+    publishRateLimit :: Maybe Natural
   }
 
 -- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the

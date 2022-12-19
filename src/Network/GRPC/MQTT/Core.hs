@@ -86,7 +86,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
     brokerProxy :: Maybe ProxySettings
   , -- | Limit the rate of publishing data to the MQTT broker in bytes per second.
     -- If this option is not supplied, no rate limit is applied.
-    mqttPublishRateLimit :: Maybe Word32
+    mqttPublishRateLimit :: Maybe Natural
   , _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback

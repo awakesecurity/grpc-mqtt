@@ -216,7 +216,7 @@ makePacketSender ::
   -- a 'PacketSizeError' exception will be thrown.
   Word32 ->
   -- | Optional rate limit for publishing as bytes per second.
-  Maybe Word32 ->
+  Maybe Natural ->
   (ByteString -> m ()) ->
   ByteString ->
   m ()
@@ -245,8 +245,7 @@ makePacketSender packetSizeLimit mRateLimit publish message = do
       Just rateLimit -> do
         -- Throughput is rate limited on a 1 second interval and we don't subdivide packets to comply
         -- with the rate limit, so the payload size must be less than or equal to the rate limit.
-        -- NB: Since `maxPayloadSize` is already at least 1, this ensures that `rateLimit` is not 0.
-        unless (maxPayloadSize <= rateLimit) $
+        unless (fromIntegral @Word32 @Integer maxPayloadSize <= fromIntegral @Natural @Integer rateLimit) $
           throwIO (PacketSizeError $ toInteger packetSizeLimit)
 
         -- Convert `maxPayloadSize` and `rateLimit` to Integer first to avoid overflow. Also,

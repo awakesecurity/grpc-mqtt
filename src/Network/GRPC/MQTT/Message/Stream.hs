@@ -165,7 +165,7 @@ makeStreamBatchSender ::
   forall io m.
   (MonadIO io, MonadUnliftIO m) =>
   Word32 ->
-  Maybe Word32 ->
+  Maybe Natural ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   io (ByteString -> m (), m ())
@@ -210,7 +210,7 @@ makeStreamBatchSender packetSizeLimit rateLimit options publish
 makeStreamChunkSender ::
   MonadUnliftIO m =>
   Word32 ->
-  Maybe Word32 ->
+  Maybe Natural ->
   WireEncodeOptions ->
   Vector ByteString ->
   (ByteString -> m ()) ->
@@ -223,7 +223,7 @@ makeStreamChunkSender packetSizeLimit rateLimit options chunks publish = do
 makeStreamFinalSender ::
   MonadUnliftIO m =>
   Word32 ->
-  Maybe Word32 ->
+  Maybe Natural ->
   WireEncodeOptions ->
   (ByteString -> m ()) ->
   m ()

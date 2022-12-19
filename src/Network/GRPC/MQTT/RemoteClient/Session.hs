@@ -319,7 +319,7 @@ data SessionConfig = SessionConfig
   , cfgLogger :: Logger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
   , cfgMsgSize :: {-# UNPACK #-} !Word32
-  , cfgRateLimit :: Maybe Word32
+  , cfgRateLimit :: Maybe Natural
   , cfgMethods :: MethodMap
   }
   deriving (Generic)

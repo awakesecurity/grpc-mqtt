@@ -241,7 +241,7 @@ makeResponseSender ::
   MQTTClient ->
   Topic ->
   Word32 ->
-  Maybe Word32 ->
+  Maybe Natural ->
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
@@ -258,7 +258,7 @@ makeErrorResponseSender ::
   MQTTClient ->
   Topic ->
   Word32 ->
-  Maybe Word32 -> 
+  Maybe Natural -> 
   WireEncodeOptions ->
   RemoteError ->
   m ()

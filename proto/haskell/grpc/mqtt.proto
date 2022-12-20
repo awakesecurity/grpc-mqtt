@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-import public "haskell/grpc/mqtt/clevel.proto";
-import public "haskell/grpc/mqtt/option.proto";
-
-package haskell.grpc.mqtt;

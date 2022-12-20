@@ -3,6 +3,9 @@ syntax = "proto3";
 
 package haskell.grpc.mqtt;
 
+option java_package = "com.awakenetworks.haskell.grpc.mqtt.protos";
+option java_outer_classname = "Zstd";
+
 enum CLevel {
   option allow_alias = true;
   CLEVEL_DISABLE = 0;

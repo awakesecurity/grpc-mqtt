@@ -2,6 +2,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | This module exports definitions for the 'Packet' message type.
 --
@@ -66,8 +67,10 @@ import Relude
 
 import Text.Printf qualified as Text
 
+import Control.Concurrent.STM (check)
+import Data.Bits (Bits)
 import UnliftIO (MonadUnliftIO, throwIO)
-import UnliftIO.Async (concurrently_, replicateConcurrently_)
+import UnliftIO.Async (race_, replicateConcurrently_)
 import UnliftIO.Concurrent (threadDelay)
 
 -- Packet ----------------------------------------------------------------------
@@ -231,40 +234,43 @@ makePacketSender packetSizeLimit mRateLimit publish message = do
       let packet = Packet message 0 1
       publish (wireWrapPacket' packet)
     else do
-      jobIds <- newEmptyTMVarIO
-      concurrently_ (produceJobs jobIds) (publishPackets jobIds)
+      jobIds <- newTVarIO 0
+      bytesAvailable <- newTVarIO 0
+
+      let produceBytes :: m ()
+          produceBytes =
+            case mRateLimit of
+              Nothing -> forever $ threadDelay maxBound
+              Just (naturalToBounded -> rateLimit) -> forever do
+                atomically $ modifyTVar' bytesAvailable (+ rateLimit)
+                threadDelay 1_000_000
+
+      let publishPackets :: m ()
+          publishPackets = do
+            caps <- liftIO getNumCapabilities
+            replicateConcurrently_ caps $ fix \next -> do
+              atomically (takeJobId bytesAvailable jobIds) >>= \case
+                Nothing -> pure ()
+                Just jobid -> do
+                  let packet = makePacket jobid
+                  publish (wireWrapPacket' packet)
+                  next
+
+      race_ produceBytes publishPackets
   where
-    produceJobs :: TMVar (Maybe Word32) -> m ()
-    produceJobs jobIds = do
-      packetSendPeriod <-
-        case mRateLimit of
-          Nothing -> pure 0
-          Just rateLimit -> do
-            -- Throughput is rate limited on a 1 second interval and we don't subdivide packets to comply
-            -- with the rate limit, so the payload size must be less than or equal to the rate limit.
-            unless (fromIntegral @Word32 @Integer maxPayloadSize <= fromIntegral @Natural @Integer rateLimit) $
-              throwIO (PacketSizeError $ toInteger packetSizeLimit)
+    takeJobId :: TVar Word32 -> TVar Word32 -> STM (Maybe Word32)
+    takeJobId bytesAvailable jobs = do
+      when (isJust mRateLimit) $ takeBytes bytesAvailable
+      jobid <- readTVar jobs
+      if jobid < njobs
+        then writeTVar jobs (1 + jobid) $> Just jobid
+        else pure Nothing
 
-            -- Convert `maxPayloadSize` and `rateLimit` to Integer first to avoid overflow. Also,
-            -- the above condition that `maxPayloadSize` <= `rateLimit` ensures that the period is
-            -- between 0 and 1,000,000 microseconds, so the final conversion Integer -> Int is always safe.
-            pure $ fromIntegral @Integer @Int $ fromIntegral maxPayloadSize * 1_000_000 `div` fromIntegral rateLimit
-
-      forM_ [0 .. njobs - 1] $ \jobid -> do
-        atomically $ putTMVar jobIds (Just jobid)
-        threadDelay packetSendPeriod
-      atomically $ putTMVar jobIds Nothing
-
-    publishPackets :: TMVar (Maybe Word32) -> m ()
-    publishPackets jobIds = do
-      caps <- liftIO getNumCapabilities
-      replicateConcurrently_ caps $ fix \next ->
-        atomically (takeTMVar jobIds) >>= \case
-          Nothing -> atomically $ putTMVar jobIds Nothing
-          Just jobid -> do
-            let packet = makePacket jobid
-            publish (wireWrapPacket' packet)
-            next
+    takeBytes :: TVar Word32 -> STM ()
+    takeBytes bytesAvailable = do
+      nBytes <- readTVar bytesAvailable
+      check $ nBytes >= maxPayloadSize
+      modifyTVar' bytesAvailable (subtract maxPayloadSize)
 
     maxPayloadSize :: Word32
     maxPayloadSize = max (packetSizeLimit - minPacketSize) 1
@@ -287,6 +293,9 @@ takePayload n = ByteString.take (fromIntegral n)
 
 dropPayload :: Word32 -> ByteString -> ByteString
 dropPayload n = ByteString.drop (fromIntegral n)
+
+naturalToBounded :: (Bounded a, Integral a, Bits a) => Natural -> a
+naturalToBounded = fromMaybe maxBound . toIntegralSized
 
 -- PacketInfo - Query ----------------------------------------------------------
 

@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:grpc-mqtt"
+    - path: "./test"
+      component: "test:test"

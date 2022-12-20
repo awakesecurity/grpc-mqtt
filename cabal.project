@@ -1,0 +1,18 @@
+with-compiler: ghc-8.10.4
+
+jobs: $ncpus
+
+packages: 
+  grpc-mqtt.cabal
+  
+package *
+  optimization: 2
+  
+  ghc-options: 
+    -fwrite-ide-info
+
+  haddock-html: true
+  haddock-hoogle: true
+  haddock-hyperlink-source: true
+  haddock-quickjump: true
+  haddock-internal: true

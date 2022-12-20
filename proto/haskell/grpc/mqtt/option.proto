@@ -5,6 +5,9 @@ import "haskell/grpc/mqtt/clevel.proto";
 
 package haskell.grpc.mqtt;
 
+option java_package = "com.awakenetworks.haskell.grpc.mqtt.protos";
+option java_outer_classname = "Option";
+
 extend google.protobuf.FileOptions {
   bool batched_stream_file = 50001;
   CLevel server_clevel_file = 50002;

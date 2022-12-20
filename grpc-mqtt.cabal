@@ -25,7 +25,7 @@ common common
   ghc-options:
     -Wall
     -Wcompat
-    -Werror
+    -- -Werror
     -Widentities
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
@@ -36,6 +36,7 @@ common common
     -Wunused-packages
     -Wno-unused-top-binds
     -fshow-warning-groups
+    -eventlog
 
   default-extensions:
     BangPatterns BlockArguments DataKinds DefaultSignatures DeriveDataTypeable
@@ -149,7 +150,7 @@ test-suite test
     -O2
     -threaded
     -rtsopts
-    "-with-rtsopts=-N4"
+    "-with-rtsopts=-N4 -hT -ls -l -i0.005"
     -fregs-iterative
 
   other-modules:
@@ -172,6 +173,8 @@ test-suite test
     Test.Service
     Test.Suite.Config
     Test.Suite.Fixture
+    Test.Suite.GRPC
+    Test.Suite.MQTT
     Test.Suite.Wire
     Test.Proto.Clients
     Test.Proto.RemoteClients
@@ -196,5 +199,7 @@ test-suite test
     , tasty-hedgehog < 1.1.0.0
     , tasty-hunit
     , tls
+    , unliftio >= 0.2.15 && < 0.3
+    , unliftio-core >= 0.2.0 && < 0.3
     , uuid
     , containers

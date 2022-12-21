@@ -63,7 +63,7 @@ propRequestHandle = property do
       reader = Request.makeRequestReader queue
 
   let sender :: Request ByteString -> IO ()
-      sender = Request.makeRequestSender maxsize (mockPublish queue)
+      sender = Request.makeRequestSender maxsize Nothing (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender request) (runExceptT reader)

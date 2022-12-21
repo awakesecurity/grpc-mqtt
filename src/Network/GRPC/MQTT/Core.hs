@@ -84,6 +84,11 @@ data MQTTGRPCConfig = MQTTGRPCConfig
     mqttMsgSizeLimit :: Word32
   , -- | Proxy to use to connect to the MQTT broker
     brokerProxy :: Maybe ProxySettings
+  , -- | Limit the rate of publishing data to the MQTT broker in bytes per second.
+    -- 4GiB/s is the maximum allowed rate. If a rate larger than 4GiB/s is supplied, 
+    -- publishing will still be limited to 4GiB/s
+    -- If this option is not supplied, no rate limit is applied.
+    mqttPublishRateLimit :: Maybe Natural
   , _cleanSession :: Bool
   , _lwt :: Maybe LastWill
   , _msgCB :: MessageCallback
@@ -107,6 +112,7 @@ defaultMGConfig =
     { useTLS = False
     , mqttMsgSizeLimit = 128000
     , brokerProxy = Nothing
+    , mqttPublishRateLimit = Nothing
     , _cleanSession = True
     , _lwt = Nothing
     , _msgCB = NoCallback

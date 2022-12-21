@@ -40,6 +40,11 @@ import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Data.ByteString qualified as ByteString
 import Proto3.Wire.Decode (ParseError)
 
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+import Data.Time.Clock (getCurrentTime, diffUTCTime, nominalDiffTimeToSeconds)
+import Data.Fixed (Pico, Fixed (MkFixed))
+
 --------------------------------------------------------------------------------
 
 data TestLabels
@@ -54,6 +59,7 @@ tests =
     [ testProperty "Packet.Wire" propPacketWire
     , testProperty "Packet.Handle" propPacketHandle
     , testProperty "Packet.MaxSize" propPacketMaxSize
+    , testProperty "Packet.RateLimit" propPacketRateLimit
     ]
 
 propPacketWire :: Property
@@ -74,7 +80,7 @@ propPacketHandle = property do
       reader = Packet.makePacketReader queue
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize (mockPublish queue)
+      sender = Packet.makePacketSender maxsize Nothing (mockPublish queue)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender message) (runExceptT reader)
@@ -91,7 +97,7 @@ propPacketMaxSize = property do
   queue <- Hedgehog.evalIO newTQueueIO
 
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize (atomically . writeTQueue queue)
+      sender = Packet.makePacketSender maxsize Nothing (atomically . writeTQueue queue)
 
   packets <- Hedgehog.evalIO do
     sender message
@@ -101,3 +107,33 @@ propPacketMaxSize = property do
     let size :: Word32
         size = fromIntegral (ByteString.length packet)
      in Hedgehog.assert (size <= maxsize)
+
+propPacketRateLimit :: Property
+propPacketRateLimit = Hedgehog.withTests 20 $ property do
+  message <- forAll Message.Gen.packetBytes
+  let messageLength = ByteString.length message
+  maxsize <- forAll (Message.Gen.packetSplitLength message)
+  let rateLimitRange :: Range.Range Natural
+      rateLimitRange = Range.linear (fromIntegral maxsize) (fromIntegral messageLength)
+  rateLimit <- forAll (Gen.integral_ rateLimitRange)
+
+  queue <- Hedgehog.evalIO newTQueueIO
+
+  let reader :: ExceptT ParseError IO ByteString
+      reader = Packet.makePacketReader queue
+
+  let sender :: ByteString -> IO ()
+      sender = Packet.makePacketSender maxsize (Just rateLimit) (atomically . writeTQueue queue)
+
+  (result, sendTime) <- Hedgehog.evalIO $ do
+    t1 <- getCurrentTime
+    sender message
+    t2 <- getCurrentTime
+    result <- runExceptT reader
+    pure (result, nominalDiffTimeToSeconds $ diffUTCTime t2 t1)
+
+  Right message === result
+
+  let minTime :: Pico
+      minTime = MkFixed $ 1_000_000_000_000 * (fromIntegral messageLength `div` fromIntegral rateLimit)
+  Hedgehog.diff sendTime (>=) minTime

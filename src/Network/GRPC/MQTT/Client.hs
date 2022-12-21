@@ -3,7 +3,6 @@
 -- that can be found in the COPYING file.
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
@@ -66,6 +65,7 @@ import Network.GRPC.MQTT.Core
     connectMQTT,
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
+    mqttPublishRateLimit,
     subscribeOrThrow,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
@@ -145,6 +145,8 @@ data MQTTGRPCClient = MQTTGRPCClient
     mqttLogger :: Logger
   , -- | Maximum size for an MQTT message in bytes
     msgSizeLimit :: Int64
+  , -- | Limit the rate of publishing data in bytes per second.
+    publishRateLimit :: Maybe Natural
   }
 
 -- | Connects to the MQTT broker using the supplied 'MQTTConfig' and passes the
@@ -182,19 +184,19 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
-    atomicModifyIORef' responseQueues \cxs -> 
+    atomicModifyIORef' responseQueues \cxs ->
       (Map.insert responseTopic responseQueue cxs, ())
 
     -- Message options
     let encodeOptions = Serial.makeClientEncodeOptions options
     let decodeOptions = Serial.makeRemoteDecodeOptions options
     let timeout = requestTimeout request
-    let limit = fromIntegral msgSizeLimit
+    let packetSizeLimit = fromIntegral msgSizeLimit
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
     (publishToStream, publishToStreamCompleted) <-
-      Stream.makeStreamBatchSender limit encodeOptions \message -> do
+      Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
         logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
         publishq mqttClient requestTopic (fromStrict message) False QoS1 []
 
@@ -211,14 +213,15 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
     -- Process request
     timeoutGRPC timeout do
       Request.makeRequestSender
-        limit
+        packetSizeLimit
+        publishRateLimit
         (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
         (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
       withControlSignals (publishControl controlTopic) . exceptToResult $ do
         case request of
           -- Unary Requests
-          MQTTNormalRequest {} ->
+          MQTTNormalRequest{} ->
             Response.makeNormalResponseReader responseQueue decodeOptions
           -- Client Streaming Requests
           MQTTWriterRequest _ _ streamHandler -> do
@@ -233,7 +236,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
           -- Server Streaming Requests
           MQTTReaderRequest _ _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseQueue 
+            metadata <- makeMetadataMapReader responseQueue
 
             reader <- Stream.makeStreamReader responseQueue decodeOptions
 
@@ -253,7 +256,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
           -- BiDirectional Server Streaming Requests
           MQTTBiDiRequest _ _ streamHandler -> do
             -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseQueue 
+            metadata <- makeMetadataMapReader responseQueue
 
             reader <- Stream.makeStreamReader responseQueue decodeOptions
 
@@ -338,18 +341,18 @@ connectMQTTGRPC logger cfg = do
   let clientCallback :: MessageCallback
       clientCallback =
         SimpleCallback \_ topic msg _ -> do
-          cxs <- readIORef queues 
-          case Map.lookup topic cxs of 
+          cxs <- readIORef queues
+          case Map.lookup topic cxs of
             Nothing -> do
               logDebug logger $ "no such response topic: " <> unTopic topic
-            Just chan -> do 
+            Just chan -> do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
               atomically $ writeTQueue chan (toStrict msg)
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 
-  pure (MQTTGRPCClient conn queues uuid logger (fromIntegral (mqttMsgSizeLimit cfg)))
+  pure (MQTTGRPCClient conn queues uuid logger (fromIntegral (mqttMsgSizeLimit cfg)) (mqttPublishRateLimit cfg))
 
 disconnectMQTTGRPC :: MonadIO io => MQTTGRPCClient -> io ()
 disconnectMQTTGRPC client = liftIO (normalDisconnect (mqttClient client))

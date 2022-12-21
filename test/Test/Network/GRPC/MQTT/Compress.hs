@@ -1,5 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Test.Network.GRPC.MQTT.Compress (tests) where
 
 --------------------------------------------------------------------------------

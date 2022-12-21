@@ -110,7 +110,7 @@ mockHandleStream encodeOptions decodeOptions = do
   limit <- forAll (Message.Gen.streamChunkLength chunks)
   queue <- Hedgehog.evalIO (newTQueueIO @ByteString)
 
-  (sender, done) <- makeStreamBatchSender @_ @IO limit encodeOptions \x -> do
+  (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions \x -> do
     atomically (writeTQueue queue x)
 
   reader <- makeStreamReader queue decodeOptions

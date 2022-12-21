@@ -42,7 +42,7 @@ common common
     DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable
     DerivingStrategies DerivingVia FlexibleContexts FlexibleInstances
     FunctionalDependencies GADTs ImportQualifiedPost InstanceSigs KindSignatures
-    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude
+    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude NumericUnderscores
     OverloadedStrings PatternSynonyms RankNTypes ScopedTypeVariables
     StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeOperators
 
@@ -195,6 +195,7 @@ test-suite test
     , tasty
     , tasty-hedgehog < 1.1.0.0
     , tasty-hunit
+    , time
     , tls
     , uuid
     , containers

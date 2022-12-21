@@ -334,10 +334,11 @@ makeRequestReader queue = do
 makeRequestSender ::
   MonadUnliftIO m =>
   Word32 ->
+  Maybe Natural ->
   (ByteString -> m ()) ->
   (Request ByteString -> m ())
-makeRequestSender limit publish x =
+makeRequestSender packetSizeLimit rateLimit publish x =
   -- TODO: explain 'Serial.defaultEncodeOptions'
   let message :: ByteString
       message = wireWrapRequest' x
-   in Packet.makePacketSender limit publish message
+   in Packet.makePacketSender packetSizeLimit rateLimit publish message

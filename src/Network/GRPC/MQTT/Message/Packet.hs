@@ -258,6 +258,12 @@ makePacketSender packetSizeLimit mRateLimit publish message = do
 
       race_ produceBytes publishPackets
   where
+    maxPayloadSize :: Word32
+    maxPayloadSize = max (packetSizeLimit - minPacketSize) 1
+
+    njobs :: Word32
+    njobs = quotInf (fromIntegral $ ByteString.length message) maxPayloadSize
+
     takeJobId :: TVar Word32 -> TVar Word32 -> STM (Maybe Word32)
     takeJobId bytesAvailable jobs = do
       when (isJust mRateLimit) $ takeBytes bytesAvailable
@@ -271,12 +277,6 @@ makePacketSender packetSizeLimit mRateLimit publish message = do
       nBytes <- readTVar bytesAvailable
       check $ nBytes >= maxPayloadSize
       modifyTVar' bytesAvailable (subtract maxPayloadSize)
-
-    maxPayloadSize :: Word32
-    maxPayloadSize = max (packetSizeLimit - minPacketSize) 1
-
-    njobs :: Word32
-    njobs = quotInf (fromIntegral $ ByteString.length message) maxPayloadSize
 
     -- Takes the i-th @size@ length chunk of the 'ByteString' @bytes@.
     sliceBytes :: Word32 -> ByteString

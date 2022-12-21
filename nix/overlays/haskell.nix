@@ -1,24 +1,32 @@
-{ gitignore, ghcVersion }:
+{ gitignore, ghc }:
 
 final: prev: {
   haskell = prev.haskell // {
-      packages = prev.haskell.packages // {
-        "${ghcVersion}" = prev.haskell.packages."${ghcVersion}".override {
-          overrides = hfinal: hprev: {
-            # Package Overrides
-            grpc-haskell = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { });
-            grpc-haskell-core = final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/grpc-haskell-core.nix { 
-              gpr = final.grpc;
-            });
-            net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });
-            proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
+    packages = prev.haskell.packages // {
+      "${ghc}" = prev.haskell.packages."${ghc}".override (old: {
+        overrides = prev.lib.fold prev.lib.composeExtensions (old.overrides or (_: _: { })) [
+          (hfinal: hprev: {
+            large-generics = hfinal.callPackage ../packages/large-generics.nix { };
+            large-records = hfinal.callPackage ../packages/large-records.nix { };
+          })
+          (hfinal: hprev: {
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
+            proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
+
             range-set-list = final.haskell.lib.overrideCabal hprev.range-set-list (_: {
               broken = false;
               jailbreak = true;
             });
-            word-compat = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/word-compat.nix { });
 
+            word-compat = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/word-compat.nix { });
+          })
+          (hfinal: hprev: {
+            grpc-haskell = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { });
+            grpc-haskell-core = final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/grpc-haskell-core.nix { 
+              gpr = final.grpc;
+            });
+          })
+          (hfinal: hprev: {
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {
               buildInputs = (old.buildInputs or []) ++ [ final.mosquitto ];
 
@@ -26,14 +34,15 @@ final: prev: {
               preCheck = "bash ./scripts/host-mosquitto.sh -d &";
               postCheck = "xargs --arg-file=test-files/mqtt-broker.pid kill";
             });
-          };
-        };
-      };
+          })
+        ];
+      });
+    };
   };
 
   grpc-mqtt-dev-shell =
     let
-      hsPkgs = final.haskell.packages.${ghcVersion};
+      hsPkgs = final.haskell.packages.${ghc};
     in
       hsPkgs.shellFor {
         name = "grpc-mqtt";

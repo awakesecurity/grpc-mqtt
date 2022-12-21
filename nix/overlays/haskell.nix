@@ -8,6 +8,7 @@ final: prev: {
           (hfinal: hprev: {
             large-generics = hfinal.callPackage ../packages/large-generics.nix { };
             large-records = hfinal.callPackage ../packages/large-records.nix { };
+            record-dot-preprocessor = hfinal.callPackage ../packages/record-dot-preprocessor.nix { };
           })
           (hfinal: hprev: {
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });

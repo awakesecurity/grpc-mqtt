@@ -11,10 +11,10 @@
   outputs = { self, nixpkgs, flake-utils, gitignore }:
     flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (system:
       let
-        ghcVersion = "ghc8104";
+        ghc = "ghc8104";
 
         haskellOverlay = import nix/overlays/haskell.nix {
-          inherit gitignore ghcVersion;
+          inherit gitignore ghc;
         };
 
         pkgs = import nixpkgs {
@@ -22,7 +22,7 @@
           overlays = [ haskellOverlay ];
         };
       in {
-        packages.default = pkgs.haskell.packages.${ghcVersion}.grpc-mqtt;
+        packages.default = pkgs.haskell.packages.${ghc}.grpc-mqtt;
         devShells.default = pkgs.grpc-mqtt-dev-shell;
       });
 }

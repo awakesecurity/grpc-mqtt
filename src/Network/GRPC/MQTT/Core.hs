@@ -14,12 +14,13 @@ module Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     defaultMGConfig,
     subscribeOrThrow,
+    withSubscription,
   )
 where
 
 --------------------------------------------------------------------------------
 
-import Control.Exception (throw)
+import Control.Exception (bracket_, throw)
 
 import Data.Conduit.Network (AppData, appSink, appSource)
 import Data.Conduit.Network.TLS
@@ -64,6 +65,7 @@ import Network.MQTT.Client
     runMQTTConduit,
     subOptions,
     subscribe,
+    unsubscribe,
   )
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
@@ -78,7 +80,7 @@ import Relude
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
-  , -- | Maximum size for an MQTT message in bytes. This value must be greater 
+  , -- | Maximum size for an MQTT message in bytes. This value must be greater
     -- than or equal to 16 bytes and less than 256mB, see:
     -- 'Network.GRPC.MQTT.Message.Packet.makePacketSender'.
     mqttMsgSizeLimit :: Word32
@@ -175,3 +177,9 @@ subscribeOrThrow client topics = do
         <> toString (unFilter topic)
         <> "Reason: "
         <> show subErr
+
+withSubscription :: MQTTClient -> [Filter] -> IO a -> IO a
+withSubscription client topics =
+  bracket_
+    (subscribeOrThrow client topics)
+    (unsubscribe client topics [])

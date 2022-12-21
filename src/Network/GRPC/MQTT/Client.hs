@@ -66,7 +66,7 @@ import Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     mqttMsgSizeLimit,
     mqttPublishRateLimit,
-    subscribeOrThrow,
+    withSubscription,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.MQTT.Client
@@ -208,79 +208,78 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
            in publishToStream message $> Right ()
 
     -- Subscribe to response topic
-    subscribeOrThrow mqttClient [toFilter responseTopic]
+    withSubscription mqttClient [toFilter responseTopic] $ do
+      -- Process request
+      timeoutGRPC timeout do
+        Request.makeRequestSender
+          packetSizeLimit
+          publishRateLimit
+          (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
+          (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
-    -- Process request
-    timeoutGRPC timeout do
-      Request.makeRequestSender
-        packetSizeLimit
-        publishRateLimit
-        (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
-        (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
+        withControlSignals (publishControl controlTopic) . exceptToResult $ do
+          case request of
+            -- Unary Requests
+            MQTTNormalRequest{} ->
+              Response.makeNormalResponseReader responseQueue decodeOptions
+            -- Client Streaming Requests
+            MQTTWriterRequest _ _ streamHandler -> do
+              liftIO $ do
+                -- do client streaming
+                streamHandler publishToRequestStream
+                -- Send end of stream indicator
+                publishToStreamCompleted
 
-      withControlSignals (publishControl controlTopic) . exceptToResult $ do
-        case request of
-          -- Unary Requests
-          MQTTNormalRequest{} ->
-            Response.makeNormalResponseReader responseQueue decodeOptions
-          -- Client Streaming Requests
-          MQTTWriterRequest _ _ streamHandler -> do
-            liftIO $ do
-              -- do client streaming
-              streamHandler publishToRequestStream
-              -- Send end of stream indicator
-              publishToStreamCompleted
+              Response.makeClientResponseReader responseQueue decodeOptions
 
-            Response.makeClientResponseReader responseQueue decodeOptions
+            -- Server Streaming Requests
+            MQTTReaderRequest _ _ _ streamHandler -> do
+              -- Wait for initial metadata
+              metadata <- makeMetadataMapReader responseQueue
 
-          -- Server Streaming Requests
-          MQTTReaderRequest _ _ _ streamHandler -> do
-            -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseQueue
+              reader <- Stream.makeStreamReader responseQueue decodeOptions
 
-            reader <- Stream.makeStreamReader responseQueue decodeOptions
+              let mqttSRecv :: StreamRecv response
+                  mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                    reader >>= \case
+                      Nothing -> pure Nothing
+                      Just bs -> withExceptT Message.toRemoteError do
+                        Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
 
-            let mqttSRecv :: StreamRecv response
-                mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                  reader >>= \case
-                    Nothing -> pure Nothing
-                    Just bs -> withExceptT Message.toRemoteError do
-                      Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
+              -- Run user-provided stream handler
+              liftIO (streamHandler metadata mqttSRecv)
 
-            -- Run user-provided stream handler
-            liftIO (streamHandler metadata mqttSRecv)
+              -- Return final result
+              Response.makeServerResponseReader responseQueue decodeOptions
 
-            -- Return final result
-            Response.makeServerResponseReader responseQueue decodeOptions
+            -- BiDirectional Server Streaming Requests
+            MQTTBiDiRequest _ _ streamHandler -> do
+              -- Wait for initial metadata
+              metadata <- makeMetadataMapReader responseQueue
 
-          -- BiDirectional Server Streaming Requests
-          MQTTBiDiRequest _ _ streamHandler -> do
-            -- Wait for initial metadata
-            metadata <- makeMetadataMapReader responseQueue
+              reader <- Stream.makeStreamReader responseQueue decodeOptions
 
-            reader <- Stream.makeStreamReader responseQueue decodeOptions
+              let mqttSRecv :: StreamRecv response
+                  mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                    chunk <- reader
+                    case chunk of
+                      Nothing -> pure Nothing
+                      Just bs -> withExceptT Message.toRemoteError do
+                        Just <$> Message.fromWireEncoded decodeOptions bs
 
-            let mqttSRecv :: StreamRecv response
-                mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                  chunk <- reader
-                  case chunk of
-                    Nothing -> pure Nothing
-                    Just bs -> withExceptT Message.toRemoteError do
-                      Just <$> Message.fromWireEncoded decodeOptions bs
+              let mqttSSend :: StreamSend request
+                  mqttSSend = publishToRequestStream
 
-            let mqttSSend :: StreamSend request
-                mqttSSend = publishToRequestStream
+              let mqttWritesDone :: WritesDone
+                  mqttWritesDone = do
+                    publishToStreamCompleted
+                    return $ Right ()
 
-            let mqttWritesDone :: WritesDone
-                mqttWritesDone = do
-                  publishToStreamCompleted
-                  return $ Right ()
+              -- Run user-provided stream handler
+              liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
-            -- Run user-provided stream handler
-            liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
-
-            -- Return final result
-            Response.makeBiDiResponseReader responseQueue decodeOptions
+              -- Return final result
+              Response.makeBiDiResponseReader responseQueue decodeOptions
   where
     makeMetadataMapReader ::
       TQueue ByteString ->

@@ -5,7 +5,7 @@ final: prev: {
     packages = prev.haskell.packages // {
       "${ghc}" = prev.haskell.packages."${ghc}".override (old: {
         overrides = prev.lib.fold prev.lib.composeExtensions (old.overrides or (_: _: { })) [
-          (hfinal: hprev: {
+          (hfinal: _: {
             large-generics = hfinal.callPackage ../packages/large-generics.nix { };
             large-records = hfinal.callPackage ../packages/large-records.nix { };
             record-dot-preprocessor = hfinal.callPackage ../packages/record-dot-preprocessor.nix { };
@@ -21,13 +21,13 @@ final: prev: {
 
             word-compat = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/word-compat.nix { });
           })
-          (hfinal: hprev: {
+          (hfinal: _: {
             grpc-haskell = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { });
             grpc-haskell-core = final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/grpc-haskell-core.nix { 
               gpr = final.grpc;
             });
           })
-          (hfinal: hprev: {
+          (hfinal: _: {
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {
               buildInputs = (old.buildInputs or []) ++ [ final.mosquitto ];
 

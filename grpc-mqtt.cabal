@@ -105,7 +105,6 @@ library
     Network.GRPC.HighLevel.Orphans
     Network.GRPC.MQTT.Message.Request.Core
     Proto.Mqtt
-    Proto3.Suite.Orphans
     Proto3.Suite.DotProto.Internal.Compat
     Proto3.Wire.Decode.Extra
     Proto3.Wire.Encode.Extra

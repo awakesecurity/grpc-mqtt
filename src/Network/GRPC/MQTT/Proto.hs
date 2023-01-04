@@ -123,11 +123,6 @@ import Text.Show qualified as Show
 
 import Turtle qualified
 
---------------------------------------------------------------------------------
-
--- Orphan instance @'Data' 'DotProtoValue'@
-import Proto3.Suite.Orphans ()
-
 -- Proto IO --------------------------------------------------------------------
 
 -- | Read the contents of a *.proto file into a 'DotProto' syntax tree.

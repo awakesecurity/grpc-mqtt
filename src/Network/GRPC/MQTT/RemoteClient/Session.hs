@@ -7,7 +7,7 @@
 -- |
 -- Module      :  Network.GRPC.MQTT.RemoteClient.Session
 -- Copyright   :  (c) Arista Networks, 2022-2023
--- License     :  Apache License 2.0, see LICENSE
+-- License     :  Apache License 2.0, see COPYING
 --
 -- Stability   :  stable
 -- Portability :  non-portable (GHC extensions)

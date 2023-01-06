@@ -2,7 +2,7 @@ cabal-version: 3.0
 
 name:        grpc-mqtt
 description: A library for making gRPC requests over an MQTT connection
-version:     0.1.0.0
+version:     1.0.0
 synopsis:    Run gRPC services over an MQTT connection
 license:     Apache-2.0
 author:      Arista Networks
@@ -42,25 +42,29 @@ common common
     DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable
     DerivingStrategies DerivingVia FlexibleContexts FlexibleInstances
     FunctionalDependencies GADTs ImportQualifiedPost InstanceSigs KindSignatures
-    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude NumericUnderscores
-    OverloadedStrings PatternSynonyms RankNTypes ScopedTypeVariables
-    StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeOperators
+    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude 
+    NumericUnderscores OverloadedStrings PatternSynonyms RankNTypes 
+    ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications 
+    TypeFamilies TypeOperators
 
   build-depends:
-    , async >= 2.2.3 && < 2.3
-    , base >= 4.14 && < 4.15
-    , bytestring >= 0.10.6.0 && < 0.12.0
-    , containers >= 0.5 && < 0.7
-    , deepseq == 1.4.*
-    , grpc-haskell >= 0.3.0 && < 0.4
-    , grpc-haskell-core >= 0.2.0 && < 0.4
-    , net-mqtt >= 0.8.2 && < 0.9
-    , proto3-suite >= 0.5.2 && < 0.7
-    , proto3-wire >= 1.2.2 && < 1.5
-    , relude >= 0.7.0 && < 0.8
-    , text >= 0.2 && < 1.3
-    , turtle < 1.6.0 || >= 1.6.1 && < 1.7.0
-    , vector >= 0.11 && < 0.13
+    , async                >= 2.2.3    && < 2.3
+    , base                 >= 4.14     && < 4.15
+    , bytestring           >= 0.10.6.0 && < 0.12.0
+    , containers           >= 0.5      && < 0.7
+    , deepseq              == 1.4.*
+    , grpc-haskell         >= 0.3.0    && < 0.4
+    , grpc-haskell-core    >= 0.2.0    && < 0.4
+    , mtl                  >= 2.2.2    && < 2.3
+    , net-mqtt             >= 0.8.2    && < 0.9
+    , proto3-suite         >= 0.5.2    && < 0.7
+    , proto3-wire          >= 1.2.2    && < 1.5
+    , relude               >= 0.7.0    && < 0.8
+    , stm                  >= 2.5.0    && < 2.6
+    , text                 >= 0.2      && < 1.3
+    , time                 >= 1.9.3    && < 1.10
+    , turtle    < 1.6.0 || >= 1.6.1    && < 1.7.0
+    , vector               >= 0.11     && < 0.13
 
 library
   import:      common
@@ -120,20 +124,17 @@ library
   --   proto3-suite:compile-proto-file
 
   build-depends:
-    , conduit-extra >= 1.3.5 && < 1.4
-    , connection >= 0.3.1 && < 0.4
-    , ghc-prim >= 0.6.1 && < 0.7
-    , mtl >= 2.2.2 && < 2.3
-    , network-conduit-tls >= 1.3.2 && < 1.4
-    , nonce >= 1.0.7 && < 1.1
-    , safe-exceptions >= 0.1.7 && < 0.2
-    , stm >= 2.5.0 && < 2.6
-    , template-haskell >= 2.16.0 && < 2.17
-    , time >= 1.9.3 && < 1.10
-    , unliftio >= 0.2.15 && < 0.3
-    , unliftio-core >= 0.2.0 && < 0.3
+    , conduit-extra        >= 1.3.5  && < 1.4
+    , connection           >= 0.3.1  && < 0.4
+    , ghc-prim             >= 0.6.1  && < 0.7
+    , network-conduit-tls  >= 1.3.2  && < 1.4
+    , nonce                >= 1.0.7  && < 1.1
+    , safe-exceptions      >= 0.1.7  && < 0.2
+    , template-haskell     >= 2.16.0 && < 2.17
+    , unliftio             >= 0.2.15 && < 0.3
+    , unliftio-core        >= 0.2.0  && < 0.3
     , unordered-containers >= 0.2.13 && < 0.3
-    , zstd >= 0.1.2 && < 0.2
+    , zstd                 >= 0.1.2  && < 0.2
 
 -- cabal v2-test +RTS -N4 -I2 -qb -qg -RTS
 test-suite test
@@ -189,12 +190,9 @@ test-suite test
     , data-default
     , grpc-mqtt
     , hedgehog
-    , mtl >= 2.2.2 && < 2.3
-    , stm
     , tasty
     , tasty-hedgehog < 1.1.0.0
     , tasty-hunit
-    , time
     , tls
     , uuid
     , containers

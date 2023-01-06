@@ -1,6 +1,14 @@
--- | This module exports definitions for the 'AuxControlMessage' message type.
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.AuxControl
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module exports definitions for the 'AuxControlMessage' message type.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.AuxControl
   ( -- * Aux Message
     AuxControlMessage

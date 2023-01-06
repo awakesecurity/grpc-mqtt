@@ -1,3 +1,12 @@
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.Stream
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.Stream
   ( -- * Stream Chunks
     WrappedStreamChunk (Chunk, Empty, Error),
@@ -77,7 +86,7 @@ pattern Empty = Proto.WrappedStreamChunk Nothing
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireEncodeStreamChunk ::
   WireEncodeOptions ->
   Maybe (Vector ByteString) ->
@@ -89,7 +98,7 @@ wireEncodeStreamChunk options chunks =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireWrapStreamChunk :: Maybe (Vector ByteString) -> WrappedStreamChunk
 wireWrapStreamChunk (Just cxs) = Chunk cxs
 wireWrapStreamChunk Nothing = Empty
@@ -98,7 +107,7 @@ wireWrapStreamChunk Nothing = Empty
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireUnwrapStreamChunk ::
   MonadError RemoteError m =>
   WireDecodeOptions ->

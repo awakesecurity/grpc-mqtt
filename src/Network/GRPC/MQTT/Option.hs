@@ -5,10 +5,18 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | This module defines the 'ProtoOptions' record and functions related to
+-- |
+-- Module      :  Network.GRPC.MQTT.Option
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module defines the 'ProtoOptions' record and functions related to
 -- protobuf options specific to gRPC-MQTT.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Option
   ( -- * ProtoOptions
     ProtoOptions
@@ -94,7 +102,7 @@ import Proto3.Wire.Decode.Extra qualified as Decode
 -- }
 -- @
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ProtoOptions = ProtoOptions
   { -- | TODO
     rpcBatchStream :: Batched
@@ -106,7 +114,7 @@ data ProtoOptions = ProtoOptions
   deriving stock (Eq, Data, Generic, Lift, Ord, Show)
   deriving anyclass (Named)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Message ProtoOptions where
   encodeMessage = wireBuildProtoOptions
 
@@ -119,7 +127,7 @@ instance Message ProtoOptions where
 -- | The default options used at the file, service, and method level if no
 -- options are set explicitly.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 defaultProtoOptions :: ProtoOptions
 defaultProtoOptions =
   ProtoOptions
@@ -132,13 +140,13 @@ defaultProtoOptions =
 
 -- | Is client-side message compression enabled?
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isClientCompressed :: ProtoOptions -> Bool
 isClientCompressed opts = isJust (rpcClientCLevel opts)
 
 -- | Is message compression enabled on the remote client?
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isRemoteCompressed :: ProtoOptions -> Bool
 isRemoteCompressed opts = isJust (rpcServerCLevel opts)
 
@@ -147,7 +155,7 @@ isRemoteCompressed opts = isJust (rpcServerCLevel opts)
 -- | The protobuf type repesenting the protocol buffer data representation of a
 -- 'CLevel' value.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toProtoType :: Proxy# ProtoOptions -> [DotProtoField]
 toProtoType _ =
   [ mkfield @Batched 1 "rpc_batch_stream"
@@ -165,13 +173,13 @@ toProtoType _ =
 
 -- | Serializes a 'ProtoOptions' to a 'LByteString' in the wire binary format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireEncodeProtoOptions :: ProtoOptions -> LByteString
 wireEncodeProtoOptions = Encode.toLazyByteString . wireBuildProtoOptions 0
 
 -- | Like 'wireEncodeProtoOptions', but returns a strict 'ByteString'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireEncodeProtoOptions' :: ProtoOptions -> ByteString
 wireEncodeProtoOptions' = toStrict . wireEncodeProtoOptions
 
@@ -181,7 +189,7 @@ wireEncodeProtoOptions' = toStrict . wireEncodeProtoOptions
 -- To serialize a 'ProtoOptions' as a standalone message (rather than a field
 -- embedded within a message), a 'FieldNumber' @0@ should be given.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireBuildProtoOptions :: FieldNumber -> ProtoOptions -> MessageBuilder
 wireBuildProtoOptions n ProtoOptions{..} =
   let varints :: [Word64]
@@ -196,13 +204,13 @@ wireBuildProtoOptions n ProtoOptions{..} =
 
 -- | Decodes 'ProtoOptions' record from a 'ByteString'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireDecodeProtoOptions :: ByteString -> Either ParseError ProtoOptions
 wireDecodeProtoOptions = Decode.parse (Decode.at wireParseProtoOptions 0)
 
 -- | Message field parser capable of deserializing a 'ProtoOptions' record.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireParseProtoOptions :: Parser RawField ProtoOptions
 wireParseProtoOptions =
   Decode.catchE parseProtoOptions \err ->

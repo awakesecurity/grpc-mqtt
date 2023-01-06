@@ -1,7 +1,16 @@
--- | This module exports the protobuf message types and wire serialization
+
+-- |
+-- Module      :  Network.GRPC.MQTT.Message
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module exports the protobuf message types and wire serialization
 -- functions used internally by the library.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message
   ( -- * Message Types
     Request,
@@ -57,7 +66,7 @@ import Proto.Mqtt (RemoteError)
 -- | Apply wire encoding transformations (such as compression) to a serialized
 -- 'ByteString'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 mapEncodeOptions :: WireEncodeOptions -> ByteString -> ByteString
 mapEncodeOptions options bytes =
   case Serial.encodeCLevel options of
@@ -67,7 +76,7 @@ mapEncodeOptions options bytes =
 -- | Serializes a protobuf message (an instance of 'Message') @a@ according to
 -- the 'WireEncodeOptions' provided.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toWireEncoded :: Message a => WireEncodeOptions -> a -> ByteString
 toWireEncoded options x =
   let bytes :: ByteString
@@ -79,7 +88,7 @@ toWireEncoded options x =
 -- | Apply wire decoding transformations (such as decompression) to a serialized
 -- 'ByteString'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 mapDecodeOptions ::
   MonadError WireDecodeError m =>
   WireDecodeOptions ->
@@ -95,7 +104,7 @@ mapDecodeOptions options bytes
 -- | Deserializes a wire encoded 'ByteString' into the expected protobuf message
 -- type @a@ according to the 'WireDecodeOptions' provided.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 fromWireEncoded ::
   (MonadError WireDecodeError m, Message a) =>
   WireDecodeOptions ->
@@ -113,7 +122,7 @@ fromWireEncoded options bytes = do
 -- deserializing a 'ByteString' (in wire format) according to a
 -- 'WireDecodeOptions' configuration.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data WireDecodeError
   = -- | 'DecodeWireError' is emitted when a wire parse error is encountered
     -- when parsing the 'ByteString'.
@@ -131,7 +140,7 @@ throwZstdError err = throwError (DecodeZstdError err)
 
 -- | Convert a 'WireDecodeError' into a 'RemoteError'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toRemoteError :: WireDecodeError -> RemoteError
 toRemoteError (DecodeWireError err) = parseErrorToRCE err
 toRemoteError (DecodeZstdError err) = Compress.toRemoteError err

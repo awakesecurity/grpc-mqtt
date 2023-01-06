@@ -1,7 +1,15 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | This module exports the 'Batched' datatype.
+-- |
+-- Module      :  Network.GRPC.MQTT.Option.Batched
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module exports the 'Batched' datatype.
 --
 -- == Batched Streaming
 --
@@ -51,7 +59,7 @@
 -- };
 -- @
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Option.Batched
   ( -- * Batched
     -- $option-batched
@@ -91,7 +99,7 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 -- | 'Batched' is a boolean indicating whether gRPC streams should batch packets
 -- before publishing over MQTT.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype Batched = Batch {getBatched :: Bool}
   deriving newtype (Primitive, ProtoDatum)
   deriving stock (Data, Eq, Ord, Generic, Lift, Typeable)
@@ -101,7 +109,7 @@ newtype Batched = Batch {getBatched :: Bool}
 --
 -- @'Batched' == 'Batch' 'True'@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 pattern Batched :: Batched
 pattern Batched = Batch True
 
@@ -109,7 +117,7 @@ pattern Batched = Batch True
 --
 -- @'Unbatched' == 'Batch' 'False'@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 pattern Unbatched :: Batched
 pattern Unbatched = Batch False
 
@@ -120,12 +128,12 @@ pattern Unbatched = Batch False
 --
 -- @'minBound' == 'Batched'@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance Bounded Batched where
   minBound = Unbatched
   maxBound = Batched
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Enum Batched where
   toEnum 1 = Batched
   toEnum _ = Unbatched
@@ -139,12 +147,12 @@ instance Enum Batched where
 -- 'show' 'Unbatched' == "Unbatched"
 -- @
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance Show Batched where
   show Unbatched = "Unbatched"
   show Batched = "Batched"
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Ppr Batched where
   ppr x = Ppr.text (show x)
 
@@ -154,7 +162,7 @@ instance Ppr Batched where
 -- 'def' == 'Batch' 'False'
 -- @
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance HasDefault Batched where
   def = Unbatched
 
@@ -170,6 +178,6 @@ instance HasDefault Batched where
 -- >>> toProtoValue Batched
 -- BoolLit True
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toProtoValue :: Batched -> DotProtoValue
 toProtoValue (Batch x) = DotProto.BoolLit x

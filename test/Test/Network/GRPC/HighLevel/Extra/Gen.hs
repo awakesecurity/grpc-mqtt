@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
 -- | Generators for @grpc-haskell@ types.
 module Test.Network.GRPC.HighLevel.Extra.Gen

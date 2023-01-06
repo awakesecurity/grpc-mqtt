@@ -1,9 +1,16 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | Type declarations extending the proto3-wire package.
+-- |
+-- Module      :  Proto3.Wire.Types.Extra
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Type declarations extending the proto3-wire package.
+--
+-- @since 1.0.0
 module Proto3.Wire.Types.Extra
   ( -- * RecordField
     RecordField
@@ -30,7 +37,7 @@ import Text.Show qualified as Show
 -- the record type containing the field, the name of the field, and a compatible
 -- 'FieldNumber' indexing the record field.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data RecordField = RecordField
   { -- | The name of a record type containing the record field, obtained by a
     -- template haskell quote:
@@ -46,7 +53,7 @@ data RecordField = RecordField
     recFieldNumber :: {-# UNPACK #-} !FieldNumber
   }
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Show RecordField where
   show (RecordField par sel num) =
     "field #"

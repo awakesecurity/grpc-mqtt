@@ -1,12 +1,19 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
--- | This module exports definitions for the 'Packet' message type.
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.Packet
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module exports definitions for the 'Packet' message type.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.Packet
   ( -- * Packet
     Packet (Packet, payload, position, npackets),
@@ -77,7 +84,7 @@ import UnliftIO.Concurrent (threadDelay)
 
 -- | 'Packet' is a MQTT packet.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data Packet msg = Packet
   { -- | 'payload' is the packets payload. For a @'Packet' 'ByteString'@, this
     -- is typically a serialized protobuf message.
@@ -97,21 +104,21 @@ data Packet msg = Packet
 
 -- | Encodes 'Packet' message in the wire binary format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireWrapPacket :: Packet ByteString -> LByteString
 wireWrapPacket = Encode.toLazyByteString . wireBuildPacket
 {-# INLINE wireWrapPacket #-}
 
 -- | Like 'wireWrapPacket', but the resulting 'ByteString' is strict.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireWrapPacket' :: Packet ByteString -> ByteString
 wireWrapPacket' = toStrict . wireWrapPacket
 {-# INLINE wireWrapPacket' #-}
 
 -- | 'MessageBuilder' combinator capable of serializing a 'Packet' message.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireBuildPacket :: Packet ByteString -> MessageBuilder
 wireBuildPacket (Packet bxs i n) =
   Encode.byteString 1 bxs
@@ -123,7 +130,7 @@ wireBuildPacket (Packet bxs i n) =
 
 -- | Parses a 'ByteString' encoding 'Packet' in the wire binary format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireUnwrapPacket ::
   MonadError ParseError m =>
   ByteString ->
@@ -133,7 +140,7 @@ wireUnwrapPacket bxs = liftEither (Decode.parse wireParsePacket bxs)
 
 -- | Parses a serialized 'Packet' message.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireParsePacket :: Parser RawMessage (Packet ByteString)
 wireParsePacket =
   Packet
@@ -148,7 +155,7 @@ wireParsePacket =
 -- produce the original unpacketized 'ByteString' reconstructed from each packet
 -- payload.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makePacketReader ::
   (MonadIO m, MonadError ParseError m) =>
   TQueue ByteString ->
@@ -210,7 +217,7 @@ maxPacketSize = 256 * 2 ^ (20 :: Int) - 128 * 2 ^ (10 :: Int)
 -- packet payload (in bytes), the wire serialization options, and a MQTT publish
 -- function.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makePacketSender ::
   forall m.
   MonadUnliftIO m =>
@@ -302,7 +309,7 @@ naturalToBounded = fromMaybe maxBound . toIntegralSized
 -- | Predicate on 'PacketInfo' testing if the 'position' is the last position for
 -- it's 'npackets'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isLastPacket :: Packet a -> Bool
 isLastPacket (Packet _ i n) = i == n - 1
 
@@ -310,20 +317,20 @@ isLastPacket (Packet _ i n) = i == n - 1
 
 -- | 'PacketSet' is a set of packets carrying a message payload type @a@.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype PacketSet a = PacketSet
   {getPacketSet :: TMap Word32 a}
 
 -- | Constructs an empty 'PacketSet' in 'IO'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 emptyPacketSetIO :: IO (PacketSet a)
 emptyPacketSetIO = fmap PacketSet TMap.emptyIO
 
 -- | Merge the payloads of each packet in a 'PacketSet' back into the original
 -- unpacketized 'ByteString'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 mergePacketSet :: PacketSet ByteString -> STM LByteString
 mergePacketSet (PacketSet pxs) = do
   parts <- TMap.elems pxs
@@ -335,7 +342,7 @@ mergePacketSet (PacketSet pxs) = do
 -- same 'position' as a previously inserted packet, then no change to the
 -- 'PacketSet' is made.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insertPacketSet :: Packet a -> PacketSet a -> STM ()
 insertPacketSet px (PacketSet pxs) = do
   let key = position px
@@ -345,7 +352,7 @@ insertPacketSet px (PacketSet pxs) = do
 
 -- | Obtain the number of packets in a 'PacketSet'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 lengthPacketSet :: PacketSet a -> STM Int
 lengthPacketSet (PacketSet pxs) = TMap.length pxs
 
@@ -353,7 +360,7 @@ lengthPacketSet (PacketSet pxs) = TMap.length pxs
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype PacketReader a = PacketReader
   {unPacketReader :: ReaderT PacketReaderEnv (ExceptT ParseError IO) a}
   deriving newtype (Functor, Applicative, Monad)
@@ -362,7 +369,7 @@ newtype PacketReader a = PacketReader
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data PacketReaderEnv = PacketReaderEnv
   { queue :: {-# UNPACK #-} !(TQueue ByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)

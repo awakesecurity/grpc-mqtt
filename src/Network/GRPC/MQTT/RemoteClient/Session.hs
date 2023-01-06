@@ -1,13 +1,18 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 
 -- |
+-- Module      :  Network.GRPC.MQTT.RemoteClient.Session
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.RemoteClient.Session
   ( -- * Session
     Session (Session),
@@ -110,7 +115,7 @@ import Network.GRPC.MQTT.Types (ClientHandler, MethodMap)
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype Session a = Session
   {unSession :: ReaderT SessionConfig IO a}
   deriving
@@ -122,7 +127,7 @@ newtype Session a = Session
 
 -- | Evaluates a 'Session' with the given 'SessionConfig'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 runSessionIO :: Session a -> SessionConfig -> IO a
 runSessionIO session = runReaderT (unSession session)
 
@@ -138,7 +143,7 @@ runSessionIO session = runReaderT (unSession session)
 -- The 'SessionHandle' created by 'withSession' is freed from the sessions map
 -- after the inner function's timeout period expires or yields a result.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 withSession :: (SessionHandle -> Session ()) -> Session ()
 withSession k = do
   config <- ask
@@ -153,7 +158,7 @@ withSession k = do
 -- | Querys the ambient sessions map for session with the given session id
 -- 'Topic'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 lookupSessionM :: Topic -> Session (Maybe SessionHandle)
 lookupSessionM sid = do
   sessions <- asks cfgSessions
@@ -162,7 +167,7 @@ lookupSessionM sid = do
 -- | Registers a new 'SessionHandle' with the given session id 'Topic' with the
 -- ambient sessions map.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insertSessionM :: Topic -> SessionHandle -> Session ()
 insertSessionM sid handle = do
   sessions <- asks cfgSessions
@@ -171,7 +176,7 @@ insertSessionM sid handle = do
 -- | Frees the 'SessionHandle' with the given session id 'Topic' from the ambient
 -- sessions map, if one exists.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 deleteSessionM :: Topic -> Session ()
 deleteSessionM sid = do
   sessions <- asks cfgSessions
@@ -181,7 +186,7 @@ deleteSessionM sid = do
 
 -- | Write a debug log to the ambient session's logger.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 logDebug :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logDebug ctx msg = do
   logger <- asks cfgLogger
@@ -189,7 +194,7 @@ logDebug ctx msg = do
 
 -- | Write an error log to the ambient session's logger.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 logError :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logError ctx msg = do
   logger <- asks cfgLogger
@@ -202,7 +207,7 @@ logError ctx msg = do
 -- | Queries the session's method map for the 'ClientHandler' mapped to the
 -- session's service and RPC name.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askMethod :: Session (Maybe ClientHandler)
 askMethod =
   HashMap.lookup
@@ -211,7 +216,7 @@ askMethod =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askMethodKey :: Session ByteString
 askMethodKey = do
   -- 'askMethodTopic' renders the topic as "service/rpc", but a session's
@@ -225,7 +230,7 @@ askMethodKey = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askMethodTopic :: Session Topic
 askMethodTopic =
   Topic.makeRPCMethodTopic
@@ -234,7 +239,7 @@ askMethodTopic =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askRequestTopic :: Session Topic
 askRequestTopic =
   Topic.makeRequestTopic
@@ -245,7 +250,7 @@ askRequestTopic =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askResponseTopic :: Session Topic
 askResponseTopic =
   Topic.makeResponseTopic
@@ -257,14 +262,14 @@ askResponseTopic =
 -- | Like 'makeControlFilter', but uses the base topic provided by session's
 -- ambient 'SessionConfig'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askControlFilter :: Session Filter
 askControlFilter = Topic.makeControlFilter <$> asks (topicBase . cfgTopics)
 
 -- | Like 'makeRequestFilter', but uses the base topic provided by session's
 -- ambient 'SessionConfig'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 askRequestFilter :: Session Filter
 askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 
@@ -272,7 +277,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
   , hdlRqtQueue :: TQueue ByteString
@@ -281,7 +286,7 @@ data SessionHandle = SessionHandle
 
 -- | Constructs a 'SessionHandle' monitoring from a request handler thread.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
   SessionHandle thread 
@@ -290,7 +295,7 @@ newSessionHandleIO thread = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newWatchdogIO :: NominalDiffTime -> TMVar () -> IO ()
 newWatchdogIO period'sec var = do
   -- 'NominalDiffTime' is measured in unit-seconds. Here @period'sec@ is converted
@@ -311,7 +316,7 @@ newWatchdogIO period'sec var = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data SessionConfig = SessionConfig
   { cfgClient :: MQTTClient
   , cfgSessions :: TMap Topic SessionHandle
@@ -329,7 +334,7 @@ data SessionConfig = SessionConfig
 -- client sessions. 'SessionTopic' conversion functions (such as 'toRqtTopic') can
 -- be used to deconstruct a 'SessionTopic' into frequently used MQTT topic.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data SessionTopic = SessionTopic
   { topicBase :: {-# UNPACK #-} !Topic
   , topicSid :: {-# UNPACK #-} !Topic
@@ -342,7 +347,7 @@ data SessionTopic = SessionTopic
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 fromRqtTopic :: Topic -> Topic -> Maybe SessionTopic
 fromRqtTopic base topic = do
   ["grpc", "request", sid, escapedSvc, rpc] <- stripPrefix (Topic.split base) (Topic.split topic)

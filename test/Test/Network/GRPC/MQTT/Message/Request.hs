@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
 module Test.Network.GRPC.MQTT.Message.Request
   ( -- * Test Tree

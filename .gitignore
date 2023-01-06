@@ -5,3 +5,4 @@ cabal.project.local
 result
 .hpc
 test-files/mqtt-broker.pid
+.envrc

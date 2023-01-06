@@ -1,3 +1,12 @@
+-- |
+-- Module      :  Network.GRPC.MQTT.Serial
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Serial
   ( -- * Wire Encoding Options
     WireEncodeOptions (WireEncodeOptions, encodeCLevel, encodeBatched),
@@ -43,7 +52,7 @@ import Network.GRPC.MQTT.Option.Batched qualified as Batched
 -- messages (instances of 'Message') should be serialized into the wire binary
 -- format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data WireEncodeOptions = WireEncodeOptions
   { -- | If given, 'encodeCLevel' is the zstandard compression level that is
     -- used for compressing a protobuf message after it has been serialized.
@@ -61,7 +70,7 @@ data WireEncodeOptions = WireEncodeOptions
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 defaultEncodeOptions :: WireEncodeOptions
 defaultEncodeOptions =
   WireEncodeOptions
@@ -73,7 +82,7 @@ defaultEncodeOptions =
 -- | Obtain the wire encoding options that should be used client-side from a
 -- 'ProtoOptions' record.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientEncodeOptions :: ProtoOptions -> WireEncodeOptions
 makeClientEncodeOptions opts =
   WireEncodeOptions
@@ -84,7 +93,7 @@ makeClientEncodeOptions opts =
 -- | Obtain the wire encoding options that should be used by the remote client
 -- from a 'ProtoOptions' record.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeRemoteEncodeOptions :: ProtoOptions -> WireEncodeOptions
 makeRemoteEncodeOptions opts =
   WireEncodeOptions
@@ -96,7 +105,7 @@ makeRemoteEncodeOptions opts =
 
 -- | Is compression enabled for the 'WireEncodeOptions'?
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isEncodeCompressed :: WireEncodeOptions -> Bool
 isEncodeCompressed options = isJust (encodeCLevel options)
 
@@ -116,7 +125,7 @@ newtype WireDecodeOptions = WireDecodeOptions
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 defaultDecodeOptions :: WireDecodeOptions
 defaultDecodeOptions =
   WireDecodeOptions
@@ -144,6 +153,6 @@ makeRemoteDecodeOptions opts =
 
 -- | Is decompression enabled for the 'WireDecodeOptions'?
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isDecodeCompressed :: WireDecodeOptions -> Bool
 isDecodeCompressed options = decodeDecompress options

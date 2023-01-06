@@ -1,7 +1,15 @@
--- | This module defines a type-safe wrappers over for the zstandard compression
+-- |
+-- Module      :  Network.GRPC.MQTT.Compress
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see LICENSE
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module defines a type-safe wrappers over for the zstandard compression
 -- functions.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Compress
   ( -- * Compression
     compress,
@@ -44,7 +52,7 @@ import Proto.Mqtt qualified as Proto
 
 -- | Compress the 'ByteString' as a single zstandard frame.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 compress :: CLevel -> ByteString -> ByteString
 compress level bytes
   | ByteString.null bytes = bytes
@@ -55,18 +63,18 @@ compress level bytes
 -- | 'ZstdError' represent the errors that can be produced during decompression.
 -- It is a generic zstandard error string emitted from the zstandard FFI.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype ZstdError = ZstdError {getZstdError :: String}
   deriving stock (Data, Eq, Ord, Show, Typeable)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Exception ZstdError where
   displayException (ZstdError err) =
     Show.showString "zstd decompression error: " err
 
 -- | Convert a 'ZstdError' to a 'RemoteError'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toRemoteError :: ZstdError -> RemoteError
 toRemoteError err =
   let encoded :: Enumerated RError
@@ -83,7 +91,7 @@ toRemoteError err =
 -- A 'ZstdError' is emitted if an error was thrown by the internal zstandard FFI
 -- call.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 decompress :: MonadError ZstdError m => ByteString -> m ByteString
 decompress bytes
   | ByteString.null bytes = pure bytes

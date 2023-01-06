@@ -1,11 +1,14 @@
--- Copyright (c) 2021-2022 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
 {-# LANGUAGE TemplateHaskell #-}
 
--- | TODO
+-- |
+-- Module      :  Network.GRPC.MQTT.TH.Client
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.TH.Client
   ( -- * TODO
     makeMQTTClientFuncs,
@@ -122,7 +125,7 @@ makeMQTTClientFuncs filepath = do
 -- makeClientHandlerSigQ (DotProto.Single "HandlerType")
 -- @
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientHandlerSigQ :: DotProtoIdentifier -> Q Type
 makeClientHandlerSigQ typeId = do
   typeNm <- queryProtoTypeNameQ typeId
@@ -132,7 +135,7 @@ makeClientHandlerSigQ typeId = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientHandlerExpQ ::
   DotProtoIdentifier ->
   DotProtoIdentifier ->
@@ -150,7 +153,7 @@ makeClientHandlerExpQ pkgId svcId rpc optmap = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientMethodNameQ ::
   DotProtoIdentifier ->
   DotProtoIdentifier ->
@@ -174,7 +177,7 @@ makeClientMethodNameQ pkgId svcId rpcId = do
 -- >>> $(makeClientEndpointNameQ pkg svc >>= TH.stringE)
 -- "cool.proto.package.ServiceName"
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientEndpointNameQ :: DotProtoIdentifier -> DotProtoIdentifier -> Q String
 makeClientEndpointNameQ pkgId svcId = do
   pkgNm <- toQualProtoNameQ pkgId
@@ -188,7 +191,7 @@ makeClientEndpointNameQ pkgId svcId = do
 -- >>> $(makeClientHandlerNameQ idt >>= TH.stringE)
 -- "serviceNameMqttClient"
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeClientHandlerNameQ :: DotProtoIdentifier -> Q String
 makeClientHandlerNameQ svcId = do
   svcNm <- toProtoNameQ svcId

@@ -1,11 +1,18 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | Extensions to the proto-wire format decoders missing from the proto3-wire
+-- |
+-- Module      :  Proto3.Wire.Decode.Extra
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Extensions to the proto-wire format decoders missing from the proto3-wire
 -- package.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Proto3.Wire.Decode.Extra
   ( -- * Message Parsers
     msgOneField,
@@ -58,7 +65,7 @@ msgOneField recField parse =
 -- * Thrown parse errors are annotated with the field number, field selector,
 --   and parent record.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 oneField :: RecordField -> Parser RawPrimitive a -> Parser RawField a
 oneField recField parse = do
   fieldM <- Decode.one (fmap Just parse) Nothing
@@ -84,13 +91,13 @@ primOneField recField = msgOneField recField . oneField recField
 --   * Thown parse errors are annotated with the field number, field selector,
 --     and parent record.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 primOptField :: RecordField -> Parser RawPrimitive a -> a -> Parser RawMessage a
 primOptField recField parse def = msgOneField recField (Decode.one parse def)
 
 -- | Parses an 'Int' primitive encoded as a fixed-width 64-bit integer.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 sint :: Parser RawPrimitive Int
 sint =
   let parse :: Parser RawPrimitive Int
@@ -109,7 +116,7 @@ sint =
 --   * the name of the 'RecordField' parent record the parsed field is
 --     constructing
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireErrorRecordField :: RecordField -> ParseError -> ParseError
 wireErrorRecordField recField e =
   let issue :: LText
@@ -125,7 +132,7 @@ wireErrorRecordField recField e =
 -- >>> runParser sint (Fixed32Field "bad!")
 -- Left (EmbeddedError "decoding Proto3.Wire.Decode.Extra.sint raised" e)
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireErrorLabel :: Name -> ParseError -> ParseError
 wireErrorLabel nm e =
   let issue :: LText
@@ -136,14 +143,14 @@ wireErrorLabel nm e =
 
 -- | Raise a wire-format parse error.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwE :: ParseError -> Parser i a
 throwE e = Decode.Parser \_ -> Left e
 {-# INLINE throwE #-}
 
 -- | Catch and handle parse errors by a parser.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 catchE :: Parser i a -> (ParseError -> Parser i a) -> Parser i a
 catchE parse onError =
   Decode.Parser \input ->

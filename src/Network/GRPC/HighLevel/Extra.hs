@@ -1,10 +1,17 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | Definitions extending to grpc-haskell.
+-- |
+-- Module      :  Network.GRPC.HighLevel.Extra
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Definitions extending to grpc-haskell.
+--
+-- @since 1.0.0
 module Network.GRPC.HighLevel.Extra
   ( -- * Wire Encoding
     wireEncodeMetadataMap,

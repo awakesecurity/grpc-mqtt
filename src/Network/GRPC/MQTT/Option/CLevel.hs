@@ -4,7 +4,15 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | This module defines the 'CLevel' datatype. 'CLevel' represents a zstandard
+-- |
+-- Module      :  Network.GRPC.MQTT.Option.CLevel
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module defines the 'CLevel' datatype. 'CLevel' represents a zstandard
 -- compression level. Zstandard offers compression levels for controlling how 
 -- the algorithm favors speed vs. compression ratio. The supported range for a
 -- compression levels is from 1 to 22. See [the "introduction" section of the 
@@ -12,7 +20,7 @@
 -- (https://raw.githack.com/facebook/zstd/release/doc/zstd_manual.html) for more
 -- information regarding zstandard compression levels.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Option.CLevel
   ( -- * CLevel
     CLevel (CLevel, getCLevel),
@@ -89,7 +97,7 @@ import Proto3.Wire.Decode.Extra qualified as Decode
 -- Constructing 'CLevel' should be done via 'toCLevel' unless the underlying
 -- 'Int' value is known to always be between @1@ and @22@ (inclusively).
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype CLevel = CLevel {getCLevel :: Int32}
   deriving stock (Data, Eq, Generic, Lift, Ord)
   deriving anyclass (Message)
@@ -99,27 +107,27 @@ newtype CLevel = CLevel {getCLevel :: Int32}
 --
 -- @'maxBound' == 'CLevel' 22@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance Bounded CLevel where
   minBound = CLevel 1
   maxBound = CLevel (fromIntegral @Int @Int32 Zstd.maxCLevel)
 
 -- | @'show' ('CLevel' 10) == "CLEVEL_10"@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance Show CLevel where
   show (CLevel x) = "CLEVEL_" ++ show x
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Ppr CLevel where
   ppr x = Ppr.text (show x)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoEnum CLevel where
   toProtoEnumMay = toCLevel
   fromProtoEnum = fromCLevel
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Finite CLevel where
   enumerate _ = map makeEnum [1 .. 22]
     where
@@ -128,17 +136,17 @@ instance Finite CLevel where
 
 -- | @'nameOf' ('proxy#' :: 'Proxy#' 'CLevel') == \"CLevel\"@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 instance Named CLevel where
   nameOf _ = "CLevel"
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Primitive CLevel where
   encodePrimitive = Encode.enum
   decodePrimitive = Decode.enum >>= either throwCLevelBoundsError pure
   primType = toPrimType
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum CLevel where
   datumRep = DRepIdent
 
@@ -151,14 +159,14 @@ instance ProtoDatum CLevel where
 
 -- | Convert a 'CLevel' value to an 'Integral' value.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 fromCLevel :: Integral a => CLevel -> a
 fromCLevel (CLevel x) = fromIntegral x
 
 -- | Constructs a 'CLevel' from an 'Integral' value, if the value corresponds to
 -- compression level that is supported by zstandard, otherwise yields 'Nothing'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toCLevel :: Integral a => a -> Maybe CLevel
 toCLevel n
   | isCLevel n = Just (CLevel (fromIntegral n))
@@ -169,7 +177,7 @@ toCLevel n
 -- | Predicate that tests if a given integral value corresponds to a compression
 --  level supported by zstandard.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 isCLevel :: Integral a => a -> Bool
 isCLevel x = fromCLevel minBound <= x && x <= fromCLevel maxBound
 
@@ -177,7 +185,7 @@ isCLevel x = fromCLevel minBound <= x && x <= fromCLevel maxBound
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 showMaybeCLevel :: Maybe CLevel -> String
 showMaybeCLevel x = maybe "CLEVEL_DISABLED" show x
 
@@ -210,7 +218,7 @@ showMaybeCLevel x = maybe "CLEVEL_DISABLED" show x
 -- >>> toProtoValue (CLevel 10)
 -- Identifier (Single "CLEVEL_10")
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toProtoValue :: CLevel -> DotProtoValue
 toProtoValue x = DotProto.Identifier (DotProto.Single (show x))
 
@@ -220,7 +228,7 @@ toProtoValue x = DotProto.Identifier (DotProto.Single (show x))
 -- >>> toPrimType proxy#
 -- Named (Dots (Path {components = "haskell" :| ["grpc","mqtt","CLevel"]}))
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toPrimType :: Proxy# CLevel -> DotProtoPrimType
 toPrimType p =
   let path :: Path
@@ -233,7 +241,7 @@ toPrimType p =
 -- failed to be deserialized because the parsed enum value was outside of the
 -- supported range for compression levels.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwCLevelBoundsError :: Show a => a -> Parser i b
 throwCLevelBoundsError x =
   let issue :: ParseError

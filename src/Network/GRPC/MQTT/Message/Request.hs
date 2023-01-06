@@ -1,7 +1,14 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | Definitions for the 'Request' message type.
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.Request
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Definitions for the 'Request' message type.
 --
 -- = Request Wire Format
 --
@@ -97,7 +104,7 @@
 -- @SearchRequest@ sent by the client. The raw 'ByteString' @SearchRequest@
 -- message can then be provided to @callSearchRPC@ to complete the request.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.Request
   ( -- * Requests
     Request (Request, message, options, timeout, metadata),
@@ -176,7 +183,7 @@ import Proto3.Wire.Types.Extra (RecordField)
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 fromMQTTRequest ::
   HasDefault rqt =>
   ProtoOptions ->
@@ -199,7 +206,7 @@ fromMQTTRequest options = \case
 --
 -- >>> wireEncodeRequest ~ wireWrapRequest . fmap toStrict toLazyByteString
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireEncodeRequest :: Message a => WireEncodeOptions -> Request a -> LByteString
 wireEncodeRequest options x =
   let message :: Request ByteString
@@ -208,7 +215,7 @@ wireEncodeRequest options x =
 
 -- | Like 'wireEncodeRequest', but the resulting 'ByteString' is strict.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireEncodeRequest' :: Message a => WireEncodeOptions -> Request a -> ByteString
 wireEncodeRequest' options x =
   let message :: Request ByteString
@@ -221,20 +228,20 @@ wireEncodeRequest' options x =
 -- If the given request's 'message' is not a valid wire binary, then it is very
 -- likely the resulting 'ByteString' can never be decoded.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireWrapRequest :: Request ByteString -> LByteString
 wireWrapRequest request = Encode.toLazyByteString (wireBuildRequest request)
 
 -- | Like 'wireWrapRequest', but the resulting 'ByteString' is strict.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireWrapRequest' :: Request ByteString -> ByteString
 wireWrapRequest' request = toStrict (wireWrapRequest request)
 
 -- | 'MessageBuilder' capable of partially serializing a 'Request'. The wrapped
 -- 'message' 'ByteString' __must__ be a valid wire binary.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireBuildRequest :: Request ByteString -> MessageBuilder
 wireBuildRequest rqt =
   wireBuildMessageField
@@ -276,7 +283,7 @@ wireBuildRequest rqt =
 -- | Partially decodes a 'Request' message, leaving wrapped 'message' in wire
 -- format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireUnwrapRequest ::
   MonadError ParseError m =>
   ByteString ->
@@ -286,7 +293,7 @@ wireUnwrapRequest bytes = do
 
 -- | Parses a serialized 'Request' message.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 wireParseRequest :: Parser RawMessage (Request ByteString)
 wireParseRequest = do
   Request

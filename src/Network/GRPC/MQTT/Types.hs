@@ -1,10 +1,15 @@
--- Copyright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
 -- |
+-- Module      :  Network.GRPC.MQTT.Types
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Types
   ( -- * Session Id
     SessionId,
@@ -82,7 +87,7 @@ data MQTTRequest :: GRPCMethodType -> Type -> Type -> Type where
 
 -- | Retrieve a MQTT request's metadata.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 requestMetadata :: MQTTRequest s rqt rsp -> MetadataMap
 requestMetadata (MQTTNormalRequest _ _ ms) = ms
 requestMetadata (MQTTWriterRequest _ ms _) = ms
@@ -91,14 +96,14 @@ requestMetadata (MQTTBiDiRequest _ ms _) = ms
 
 -- | Retrieve a MQTT request's timeout period.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 requestTimeout :: MQTTRequest s rqt rsp -> TimeoutSeconds
 requestTimeout (MQTTNormalRequest _ t _) = t
 requestTimeout (MQTTWriterRequest t _ _) = t
 requestTimeout (MQTTReaderRequest _ t _ _) = t
 requestTimeout (MQTTBiDiRequest t _ _) = t
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Show rqt => Show (MQTTRequest s rqt rsp) where
   show (MQTTNormalRequest x timeout metadata) =
     intercalate " " [show 'MQTTNormalRequest, show x, show timeout, show metadata]

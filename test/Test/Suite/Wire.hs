@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
 module Test.Suite.Wire
   ( -- * Test Combinators

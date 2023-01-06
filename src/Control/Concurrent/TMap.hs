@@ -1,8 +1,15 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
--- | Definitions for the 'TMap' container.
+-- |
+-- Module      :  Control.Concurrent.TMap
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Definitions for the 'TMap' container.
+--
+-- @since 1.0.0
 module Control.Concurrent.TMap
   ( -- * TMap
     TMap (TMap, getTMap),
@@ -47,7 +54,7 @@ import Relude hiding (empty, length)
 
 -- | STM-specialized non-blocking 'Map' container.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype TMap k v = TMap
   {getTMap :: IORef (Map k (TVar v))}
 
@@ -55,13 +62,13 @@ newtype TMap k v = TMap
 
 -- | Constructs an empty 'TMap'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 empty :: STM (TMap k v)
 empty = unsafeIOToSTM emptyIO
 
 -- | Like 'empty', constructs the empty 'TMap' in 'IO'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 emptyIO :: IO (TMap k v)
 emptyIO = fmap TMap (newIORef Map.empty)
 
@@ -70,7 +77,7 @@ emptyIO = fmap TMap (newIORef Map.empty)
 -- | Converts a 'TMap' to a list of key-value pairs sorted in ascending key
 -- order.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toAscList :: TMap k v -> STM [(k, v)]
 toAscList (TMap ref) = do
   kvs0 <- unsafeIOToSTM (readIORef ref)
@@ -82,7 +89,7 @@ toAscList (TMap ref) = do
 -- | Inserts a new key-value pair into the 'TMap'. If the 'TMap' already contains
 -- then given key, the associated value will be replaced.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insert :: Ord k => k -> v -> TMap k v -> STM ()
 insert k x (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -99,7 +106,7 @@ insert k x (TMap ref) = do
 -- | Removes the value associated to the key. If the key is not a member 'TMap',
 -- no change is made.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 delete :: Ord k => k -> TMap k v -> STM ()
 delete k (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -113,7 +120,7 @@ delete k (TMap ref) = do
 
 -- | Return the number of elements in the 'TMap'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 length :: TMap k v -> STM Int
 length (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -121,7 +128,7 @@ length (TMap ref) = do
 
 -- | Is the the key an element of the 'TMap'?
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 member :: Ord k => k -> TMap k v -> STM Bool
 member k (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -129,7 +136,7 @@ member k (TMap ref) = do
 
 -- | Returns the value associated to the given key, if one exists.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 lookup :: Ord k => k -> TMap k v -> STM (Maybe v)
 lookup k (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -141,7 +148,7 @@ lookup k (TMap ref) = do
 
 -- | Right-associative fold indexed by the map keys.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 ifoldr :: forall k v m. (k -> v -> m -> STM m) -> m -> TMap k v -> STM m
 ifoldr cons nil (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)
@@ -158,7 +165,7 @@ ifoldr cons nil (TMap ref) = do
 --
 -- prop> elems kvs ~ map snd (toAscList kvs)
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 elems :: TMap k v -> STM [v]
 elems (TMap ref) = do
   kvs <- unsafeIOToSTM (readIORef ref)

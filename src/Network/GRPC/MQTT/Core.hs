@@ -1,13 +1,17 @@
--- Copyright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RecordWildCards #-}
 
--- | Module defintions core components required by the library.
+-- |
+-- Module      :  Network.GRPC.MQTT.Core
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Module defintions core components required by the library.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (..),
     connectMQTT,
@@ -76,7 +80,7 @@ import Relude
 
 -- | Superset of 'MQTTConfig'
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data MQTTGRPCConfig = MQTTGRPCConfig
   { -- | Whether or not to use TLS for the connection
     useTLS :: Bool
@@ -107,7 +111,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
 
 -- | The default 'MQTTGRPCConfig'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 defaultMGConfig :: MQTTGRPCConfig
 defaultMGConfig =
   MQTTGRPCConfig
@@ -131,13 +135,13 @@ defaultMGConfig =
 
 -- | Project 'MQTTConfig' from 'MQTTGRPCConfig'
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getMQTTConfig :: MQTTGRPCConfig -> MQTTConfig
 getMQTTConfig MQTTGRPCConfig{..} = MQTTConfig{..}
 
 -- | Connect to an MQTT broker
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 connectMQTT :: (MonadIO io) => MQTTGRPCConfig -> io MQTTClient
 connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTConfig cfg)
   where
@@ -157,7 +161,7 @@ connectMQTT cfg@MQTTGRPCConfig{..} = liftIO $ runMQTTConduit runClient (getMQTTC
 
 -- | Period for heartbeat messages
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 heartbeatPeriodSeconds :: NominalDiffTime
 heartbeatPeriodSeconds = 10
 

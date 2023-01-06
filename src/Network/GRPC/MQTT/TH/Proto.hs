@@ -1,14 +1,17 @@
--- Copyright (c) 2021-2022 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | TODO
+-- |
+-- Module      :  Network.GRPC.MQTT.TH.Proto
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.TH.Proto
   ( -- * Template Haskell
     openProtoFileQ,
@@ -113,7 +116,7 @@ import Network.GRPC.MQTT.Proto
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 openProtoFileQ :: Turtle.FilePath -> Q DotProto
 openProtoFileQ filepath = do
   dotproto <- liftIO (openProtoFileIO filepath)
@@ -122,7 +125,7 @@ openProtoFileQ filepath = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeProtoOptionMapQ :: DotProto -> Q ProtoOptionMap
 makeProtoOptionMapQ dotproto =
   case makeProtoOptionConfig dotproto of
@@ -131,7 +134,7 @@ makeProtoOptionMapQ dotproto =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 queryMethodOptionsQ :: RPCMethod -> ProtoOptionMap -> Q ProtoOptions
 queryMethodOptionsQ rpc optmap =
   case lookupProtoOptionMap rpc optmap of
@@ -142,26 +145,26 @@ queryMethodOptionsQ rpc optmap =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype ProtoOptionMap = ProtoOptionMap
   {getProtoOptionConfig :: Map RPCMethod ProtoOptions}
   deriving (Eq, Ord, Show)
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 emptyProtoOptionMap :: ProtoOptionMap
 emptyProtoOptionMap = ProtoOptionMap Map.empty
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 lookupProtoOptionMap :: RPCMethod -> ProtoOptionMap -> Maybe ProtoOptions
 lookupProtoOptionMap key (ProtoOptionMap kvs) = Map.lookup key kvs
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insertProtoOptionMap :: RPCMethod -> ProtoOptions -> ProtoOptionMap -> ProtoOptionMap
 insertProtoOptionMap key val (ProtoOptionMap kvs) = ProtoOptionMap (Map.insert key val kvs)
 
@@ -169,7 +172,7 @@ insertProtoOptionMap key val (ProtoOptionMap kvs) = ProtoOptionMap (Map.insert k
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype OptionReader a = OptionReader
   { unOptionReader ::
       ReaderT OptionReaderCtx (StateT ProtoOptionMap (Except ProtoOptionError)) a
@@ -183,7 +186,7 @@ newtype OptionReader a = OptionReader
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data OptionReaderCtx = OptionReaderCtx
   { ctxOptionDefs :: ProtoOptions
   , ctxSetOptions :: ProtoOptionSet
@@ -191,7 +194,7 @@ data OptionReaderCtx = OptionReaderCtx
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeProtoOptionConfig :: DotProto -> Either ProtoOptionError ProtoOptionMap
 makeProtoOptionConfig dotproto = do
   opts <- getFileOptions dotproto
@@ -247,7 +250,7 @@ makeProtoOptionConfig dotproto = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 readFileProtoOptions :: OptionReader ProtoOptions
 readFileProtoOptions = do
   defs <- asks ctxOptionDefs
@@ -258,7 +261,7 @@ readFileProtoOptions = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 readServiceProtoOptions :: OptionReader ProtoOptions
 readServiceProtoOptions = do
   defs <- asks ctxOptionDefs
@@ -269,7 +272,7 @@ readServiceProtoOptions = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 readMethodProtoOptions :: OptionReader ProtoOptions
 readMethodProtoOptions = do
   defs <- asks ctxOptionDefs
@@ -282,7 +285,7 @@ readMethodProtoOptions = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 queryOptionConfig :: ProtoDatum a => String -> a -> OptionReader a
 queryOptionConfig nm def = do
   opts <- asks ctxSetOptions
@@ -294,7 +297,7 @@ queryOptionConfig nm def = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 queryOptionConfigM ::
   ProtoDatum a =>
   String ->
@@ -312,7 +315,7 @@ queryOptionConfigM nm def = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 castProtoOption :: forall a. ProtoDatum a => DotProtoOption -> OptionReader a
 castProtoOption opt =
   let val :: DotProtoValue

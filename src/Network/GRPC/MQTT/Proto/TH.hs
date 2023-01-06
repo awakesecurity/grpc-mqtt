@@ -1,6 +1,15 @@
--- | Template haskell functions for creating splices from protocol buffers.
+
+-- |
+-- Module      :  Network.GRPC.MQTT.Proto.TH
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Template haskell functions for creating splices from protocol buffers.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Proto.TH
   ( -- * Quotation
 
@@ -48,7 +57,7 @@ import Network.GRPC.MQTT.Proto (showCompileError, showProtoId)
 -- Aborts the current splice's computation with a "not in scope" error if no
 -- type constructor could be found.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 queryProtoTypeNameQ :: DotProtoIdentifier -> Q Name
 queryProtoTypeNameQ typeId = do
   -- Apply type-casing (pascal case) to @typeId@ and perform namespace lookup.
@@ -62,32 +71,32 @@ queryProtoTypeNameQ typeId = do
 
 -- | Applies type-case (or pascal case) formatting to the string.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 formatTypeNameQ :: String -> Q String
 formatTypeNameQ nm = hoistCompileErrorQ (DotProto.typeLikeName nm)
 
 -- | Obtain the name of a proto3 package from a 'DotProtoPacketSpec'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 protoPackageIdQ :: DotProtoPackageSpec -> Q DotProtoIdentifier
 protoPackageIdQ spec = hoistCompileErrorQ (DotProto.protoPackageName spec)
 
 -- | Accesses the unqualified base name of the 'DotProtoIdentifier'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toProtoNameQ :: DotProtoIdentifier -> Q String
 toProtoNameQ idt = hoistCompileErrorQ (DotProto.dpIdentUnqualName idt)
 
 -- | Accesses the qualified name of the 'DotProtoIdentifier'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toQualProtoNameQ :: DotProtoIdentifier -> Q String
 toQualProtoNameQ idt = hoistCompileErrorQ (DotProto.dpIdentQualName idt)
 
 -- | Constructs a qualified RPC name from the 'DotProtoIdentifier' of the RPC
 -- and the service the RPC belongs to.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeServiceFieldNameQ :: DotProtoIdentifier -> DotProtoIdentifier -> Q Name
 makeServiceFieldNameQ svcId rpcId = do
   svcNm <- toProtoNameQ svcId
@@ -98,7 +107,7 @@ makeServiceFieldNameQ svcId rpcId = do
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwTypeNotInScopeQ :: DotProtoIdentifier -> Q a
 throwTypeNotInScopeQ idt =
   let idtS :: String
@@ -108,14 +117,14 @@ throwTypeNotInScopeQ idt =
 -- | Fails 'Q' reporting the compile error with the location information for the
 -- current splice context.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwCompileErrorQ :: CompileError -> Q a
 throwCompileErrorQ err = throwLocationQ (showCompileError err)
 
 -- | Fails 'Q' reporting the given error annotated with formatted location
 -- information for the current splice context.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwLocationQ :: String -> Q a
 throwLocationQ issue = do
   loc <- TH.location

@@ -1,9 +1,16 @@
 {-# LANGUAGE TemplateHaskellQuotes #-}
 {-# LANGUAGE ImplicitPrelude #-}
 
--- | Template haskell extensions to type exported by the proto3-wire package.
+-- Module      :  Proto3.Wire.Types.Extra.TH
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Template haskell extensions to type exported by the proto3-wire package.
+--
+-- @since 1.0.0
 module Proto3.Wire.Types.Extra.TH
   ( -- * Template Haskell Extensions
     liftFieldNumber,
@@ -26,7 +33,7 @@ import Proto3.Wire.Types.Extra (RecordField (RecordField))
 
 -- | Lifts a 'FieldNumber' type into a quoted expression.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 liftFieldNumber :: FieldNumber -> Q Exp
 liftFieldNumber (FieldNumber x) = do
   litE <- lift x
@@ -36,7 +43,7 @@ liftFieldNumber (FieldNumber x) = do
 
 -- | Lifts a 'RecordField' type into a quoted expression.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 liftRecordField :: RecordField -> Q Exp
 liftRecordField (RecordField par sel num) = do
   parE <- lift par

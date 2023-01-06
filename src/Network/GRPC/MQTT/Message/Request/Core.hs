@@ -1,8 +1,15 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
--- | Core module defining the 'Request' type and 'Request' instances.
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.Request.Core
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Core module defining the 'Request' type and 'Request' instances.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.Request.Core
   ( -- * Request
     Request (Request, message, options, timeout, metadata),
@@ -30,7 +37,7 @@ import Network.GRPC.MQTT.Option (ProtoOptions)
 -- dictionary of gRPC metadata bound to the request, and properties configuring
 -- how the request is handled.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data Request msg = Request
   { -- | The request's 'message' is a type representing the protocol buffer
     -- message needed to perform the RPC call the client is requesting.
@@ -54,7 +61,7 @@ data Request msg = Request
   deriving stock (Eq, Ord, Show)
   deriving stock (Data, Generic, Typeable)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Functor Request where
   fmap f (Request x opts to ms) = Request (f x) opts to ms
   {-# INLINE fmap #-}

@@ -1,12 +1,19 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 -- See [NOTE: Enforcing Message Splice Order]
 {-# OPTIONS_GHC -Wno-unused-imports #-}
 
--- | Definitions of template haskell splices used by 'Network.GRPC.MQTT.Message'
+-- |
+-- Module      :  Network.GRPC.MQTT.Message.TH
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- Definitions of template haskell splices used by 'Network.GRPC.MQTT.Message'
 -- message types.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Message.TH
   ( -- * Record Introspection
     reifyFieldNumber,

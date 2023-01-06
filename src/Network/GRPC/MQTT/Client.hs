@@ -1,15 +1,19 @@
--- Copyright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | The client API for making gRPC requests over MQTT.
+-- |
+-- Module      :  Network.GRPC.MQTT.Client
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- The client API for making gRPC requests over MQTT.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.Client
   ( MQTTGRPCClient (..),
     mqttRequest,
@@ -133,7 +137,7 @@ import Proto.Mqtt (RemoteError)
 
 -- | Client for making gRPC calls over MQTT
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
@@ -153,7 +157,7 @@ data MQTTGRPCClient = MQTTGRPCClient
 -- `MQTTGRPCClient' to the supplied function, closing the connection for you when
 -- the function finishes.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 withMQTTGRPCClient :: Logger -> MQTTGRPCConfig -> (MQTTGRPCClient -> IO a) -> IO a
 withMQTTGRPCClient logger cfg =
   bracket
@@ -163,7 +167,7 @@ withMQTTGRPCClient logger cfg =
 -- | Send a gRPC request over MQTT using the provided client This function makes
 -- synchronous requests.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 mqttRequest ::
   forall request response streamtype.
   (Message request, Message response, HasDefault request) =>
@@ -306,14 +310,14 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 -- | Helper function to run an 'ExceptT RemoteError' action and convert any failure
 -- to an 'MQTTResult'
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 exceptToResult :: Functor f => ExceptT RemoteError f (MQTTResult s rsp) -> f (MQTTResult s rsp)
 exceptToResult = fmap (either fromRemoteError id) . runExceptT
 
 -- | Manages the control signals (Heartbeat and Terminate) asynchronously while
 -- the provided action performs a request
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 withControlSignals :: (AuxControl -> IO ()) -> IO a -> IO a
 withControlSignals publishControlMsg =
   withMQTTHeartbeat . sendTerminateOnException
@@ -331,7 +335,7 @@ withControlSignals publishControlMsg =
 -- | Connects to the MQTT broker and creates a 'MQTTGRPCClient'
 -- NB: Overwrites the '_msgCB' field in the 'MQTTConfig'
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
   queues <- newIORef (Map.empty @Topic @(TQueue ByteString))
@@ -363,7 +367,7 @@ disconnectMQTTGRPC client = liftIO (normalDisconnect (mqttClient client))
 --
 -- @'GRPCResult' ('ClientErrorResponse' ('ClientIOError' 'GRPCIOTimeout'))@
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 timeoutGRPC ::
   MonadUnliftIO m =>
   TimeoutSeconds ->
@@ -379,7 +383,7 @@ timeoutGRPC timelimit'secs action = do
 -- | A variant of 'System.timeout' that accepts the timeout period in unit
 -- seconds (as opposed to microseconds).
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 timeout'secs :: MonadUnliftIO m => TimeoutSeconds -> m a -> m (Maybe a)
 timeout'secs period'secs action =
   -- @System.timeout@ expects the timeout period given to be in unit
@@ -399,7 +403,7 @@ timeout'secs period'secs action =
 -- | 'ClientTopicError' captures all exceptions that can be raised when
 -- constructing MQTT topics required by a client.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ClientTopicError
   = -- | Exception that is raised when the client generates a nonce that does
     -- not form a valid MQTT topic (this should be impossible).
@@ -409,10 +413,10 @@ data ClientTopicError
     BadRPCMethodTopicError Text
   deriving stock (Eq, Ord, Typeable)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Exception ClientTopicError
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Show ClientTopicError where
   show e = case e of
     BadSessionIdTopicError x -> formatS ("session ID " ++ show x)
@@ -432,7 +436,7 @@ instance Show ClientTopicError where
 -- >>> makeSessionIdTopic =<< Crypto.Nonce.new
 -- Topic {unTopic = "fA6L7xKY6_-qa7k3g3J7DZ-e"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeSessionIdTopic :: Nonce.Generator -> IO Topic
 makeSessionIdTopic gen = do
   uuid <- Nonce.nonce128urlT gen
@@ -458,7 +462,7 @@ makeSessionIdTopic gen = do
 -- >>> makeMethodRequestTopic "..." "..." "/bad/#/topic"
 -- *** Exception: Network.GRPC.MQTT.Client.ClientTopicError: gRPC method name"/bad/#/topic" forms invalid topic
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeMethodRequestTopic :: Topic -> Topic -> MethodName -> IO Topic
 makeMethodRequestTopic baseTopic sid (MethodName nm) =
   -- Some MQTT implementations (for e.g. RabbitMQ) can't handle dots

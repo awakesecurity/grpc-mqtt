@@ -1,9 +1,16 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 
--- | This module exports templates for constructing frequently MQTT topics and
+-- |
+-- Module      :  Network.GRPC.MQTT.Topic
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module exports templates for constructing frequently MQTT topics and
 -- filters that are frequently needed by clients and remote clients.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Topic
   ( -- * MQTT Topic Templates
     -- $mqtt-topic-templates
@@ -42,7 +49,7 @@ import Relude
 -- >>> makeRPCMethodTopic "service.Name" "rpc.Method"
 -- Topic {unTopic = "service.Name/rpc.Method"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeRPCMethodTopic :: Topic -> Topic -> Topic
 makeRPCMethodTopic svc rpc = svc <> rpc
 
@@ -52,7 +59,7 @@ makeRPCMethodTopic svc rpc = svc <> rpc
 -- >>> makeControlTopic "base.topic" "i1X-Kk7cjUkpeEswPfP9kIid"
 -- Topic {unTopic = "base.topic/grpc/session/i1X-Kk7cjUkpeEswPfP9kIid/control"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeControlTopic :: Topic -> Topic -> Topic
 makeControlTopic base sid = makeResponseTopic base sid <> "control"
 
@@ -63,7 +70,7 @@ makeControlTopic base sid = makeResponseTopic base sid <> "control"
 -- >>> makeRequestTopic "base" "cFCQLYSWNprWkMEWsRcbl1yx" "my.service" "my.method"
 -- Topic {unTopic = "base/grpc/request/cFCQLYSWNprWkMEWsRcbl1yx/my.service/my.method"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeRequestTopic :: Topic -> Topic -> Topic -> Topic -> Topic
 makeRequestTopic base sid svc rpc = base <> "grpc" <> "request" <> sid <> svc <> rpc
 
@@ -74,7 +81,7 @@ makeRequestTopic base sid svc rpc = base <> "grpc" <> "request" <> sid <> svc <>
 -- >>> makeResponseTopic "base.topic" "i1X-Kk7cjUkpeEswPfP9kIid"
 -- Topic {unTopic = "base.topic/grpc/session/i1X-Kk7cjUkpeEswPfP9kIid"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeResponseTopic :: Topic -> Topic -> Topic
 makeResponseTopic base sid = base <> "grpc" <> "session" <> sid
 
@@ -94,7 +101,7 @@ makeResponseTopic base sid = base <> "grpc" <> "session" <> sid
 -- >>> makeControlFilter ("two" <> "level")
 -- Filter {unFilter = "two/levels/grpc/session/+/control"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeControlFilter :: Topic -> Filter
 makeControlFilter base = Topic.toFilter base <> "grpc" <> "session" <> "+" <> "control"
 
@@ -107,6 +114,6 @@ makeControlFilter base = Topic.toFilter base <> "grpc" <> "session" <> "+" <> "c
 -- >>> makeRequestFilter ("two" <> "level")
 -- Filter {unFilter = "two/levels/grpc/request/+/+/+"}
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 makeRequestFilter :: Topic -> Filter
 makeRequestFilter base = Topic.toFilter base <> "grpc" <> "request" <> "+" <> "+" <> "+"

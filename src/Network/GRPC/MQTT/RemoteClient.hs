@@ -1,13 +1,17 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- Copyright (c) 2021 Arista Networks, Inc.
--- Use of this source code is governed by the Apache License 2.0
--- that can be found in the COPYING file.
-
--- | gRPC-MQTT remote clients.
+-- |
+-- Module      :  Network.GRPC.MQTT.RemoteClient
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
 --
--- @since 0.1.0.0
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- gRPC-MQTT remote clients.
+--
+-- @since 1.0.0
 module Network.GRPC.MQTT.RemoteClient
   ( runRemoteClient,
     runRemoteClientWithConnect,
@@ -226,7 +230,7 @@ handleControlMessage logger handle msg =
 
 -- | TODO
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   let queue = hdlRqtQueue handle
@@ -324,7 +328,7 @@ publishGRPCIOError options err =
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 publishRemoteError :: WireEncodeOptions -> RemoteError -> Session ()
 publishRemoteError options err = do
   -- TODO: note why remote error cannot take encoding options

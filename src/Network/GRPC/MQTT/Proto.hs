@@ -2,13 +2,21 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 
--- | This module defines functions used by @grpc-mqtt@ internals for:
+-- |
+-- Module      :  Network.GRPC.MQTT.Proto
+-- Copyright   :  (c) Arista Networks, 2022-2023
+-- License     :  Apache License 2.0, see COPYING
+--
+-- Stability   :  stable
+-- Portability :  non-portable (GHC extensions)
+--
+-- This module defines functions used by @grpc-mqtt@ internals for:
 --
 -- * Handling IO for protocol buffers.
 --
 -- * Manipulating the protobuf syntax trees.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 module Network.GRPC.MQTT.Proto
   ( -- * Proto IO
     openProtoFileIO,
@@ -130,7 +138,7 @@ import Turtle qualified
 -- Raises 'ProtoIOError' 'IO' exceptions if the 'Turtle.FilePath' does not refer
 -- to a valid *.proto file that can be read.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 openProtoFileIO :: Turtle.FilePath -> IO DotProto
 openProtoFileIO filepath = do
   -- Test that the path @filepath@ exists.
@@ -158,14 +166,14 @@ openProtoFileIO filepath = do
 -- | 'ProtoIOError' represents an IO error that occurs when reading or parsing
 -- the contents of a *.proto file.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ProtoIOError = ProtoIOError
   { ioeFilePath :: Turtle.FilePath
   , ioeErrorTag :: ProtoIOErrorTag
   }
   deriving stock (Eq, Ord)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Show ProtoIOError where
   show (ProtoIOError filepath tag) =
     let locS = "(" ++ Turtle.encodeString filepath ++ "): "
@@ -173,7 +181,7 @@ instance Show ProtoIOError where
      in "protobuf IO error" ++ locS ++ tagS
   {-# INLINE show #-}
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Exception ProtoIOError where
   displayException ioe = show ioe
   {-# INLINE displayException #-}
@@ -181,28 +189,28 @@ instance Exception ProtoIOError where
 -- | Throws a 'ProtoIOError' IO exception with the 'InvalidProtoExtension' tag
 -- for the given filepath.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwProtoInvalidExtensionIO :: Turtle.FilePath -> IO a
 throwProtoInvalidExtensionIO = throwProtoIO ProtoInvalidExtension
 
 -- | Throws a 'ProtoIOError' IO exception with the 'ProtoFileDoesNotExist' tag
 -- for the given filepath.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwProtoDoesNotExistIO :: Turtle.FilePath -> IO a
 throwProtoDoesNotExistIO = throwProtoIO ProtoFileDoesNotExist
 
 -- | Throws a 'ProtoIOError' IO exception with the 'ProtoPathIsDirectory' tag
 -- for the given filepath.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwProtoPathIsDirectoryIO :: Turtle.FilePath -> IO a
 throwProtoPathIsDirectoryIO = throwProtoIO ProtoPathIsDirectory
 
 -- | Throws a 'CompileError' as an 'ErrorCall' IO exception using the filepath
 --  as the 'ErrorCall' location.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 throwCompileErrorIO :: Turtle.FilePath -> CompileError -> IO a
 throwCompileErrorIO filepath err =
   let issue :: ErrorCall
@@ -216,14 +224,14 @@ throwProtoIO tag filepath = throwIO (ProtoIOError filepath tag)
 
 -- | An enumeration of error codes that 'ProtoIOError' is tagged with.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ProtoIOErrorTag
   = ProtoInvalidExtension
   | ProtoFileDoesNotExist
   | ProtoPathIsDirectory
   deriving stock (Enum, Eq, Ord, Show)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Exception ProtoIOErrorTag where
   displayException ProtoInvalidExtension = "filepath must have a *.proto extension"
   displayException ProtoFileDoesNotExist = "proto filepath not found (does not exist)"
@@ -234,7 +242,7 @@ instance Exception ProtoIOErrorTag where
 
 -- | Obtain the kind of 'DatumRep' used to represent a 'DotProtoValue'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 datumRepOf :: DotProtoValue -> DatumRep
 datumRepOf DotProto.BoolLit{} = DRepBoolean
 datumRepOf DotProto.FloatLit{} = DRepDecimal
@@ -255,7 +263,7 @@ datumRepOf DotProto.StringLit{} = DRepString
 -- >>> castDatumRepWith @String DRepString (DotProto.BoolLit True)
 -- Nothing
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 castDatumRepWith :: forall a. Typeable a => DatumRep -> DotProtoValue -> Maybe a
 castDatumRepWith datrep val =
   case datrep of
@@ -285,7 +293,7 @@ castDatumRepWith datrep val =
 -- | 'DatumRep' enumerates the /kinds/ of scalars that can be represented by a
 -- 'DotProtoValue' value.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data DatumRep
   = -- | Boolean representations correspond to the @bool@ .proto type.
     DRepBoolean
@@ -306,17 +314,17 @@ data DatumRep
 -- | 'ProtoDatum' is the class of types that can be obtained from a
 -- 'DotProtoValue' literal.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 class ProtoDatum a where
   -- | The type of protobuf literal used to represent a value of type @a@.
   --
-  -- @since 0.1.0.0
+  -- @since 1.0.0
   datumRep :: DatumRep
 
   -- | A type-safe cast operation from a 'DotProtoValue' literal to a value of
   -- the type @a@.
   --
-  -- @since 0.1.0.0
+  -- @since 1.0.0
   castDatum :: DotProtoValue -> Maybe a
   castDatum val = castDatumRepWith (datumRep @a) val
   {-# INLINE castDatum #-}
@@ -324,29 +332,29 @@ class ProtoDatum a where
 
   {-# MINIMAL datumRep #-}
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum Bool where
   datumRep = DRepBoolean
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum Double where
   datumRep = DRepDecimal
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum Int where
   datumRep = DRepInteger
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum String where
   datumRep = DRepString
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum ByteString where
   datumRep = DRepString
 
   castDatum x = encodeUtf8 <$> castDatum @String x
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance ProtoDatum DotProtoIdentifier where
   datumRep = DRepIdent
 
@@ -355,7 +363,7 @@ instance ProtoDatum DotProtoIdentifier where
 -- | Splits a 'DotProtoIdentifier' into a list of the names that the identifier
 -- is comprised of.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 toProtoNameList :: DotProtoIdentifier -> [String]
 toProtoNameList idt = case idt of
   DotProto.Anonymous -> []
@@ -374,7 +382,7 @@ toProtoNameList idt = case idt of
 -- >>> showProtoId (DotProto.Dots (DotProto.Path ["package", "identifier"]))
 -- "package.identifier"
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 showProtoId :: DotProtoIdentifier -> String
 showProtoId idt =
   let parts :: [String]
@@ -387,7 +395,7 @@ showProtoId idt =
 
 -- | 'ProtoOptionSet' is a collection of protobuf options.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 newtype ProtoOptionSet = ProtoOptionSet
   {getProtoOptionSet :: Map DotProtoIdentifier DotProtoValue}
   deriving
@@ -399,7 +407,7 @@ newtype ProtoOptionSet = ProtoOptionSet
 -- If an option with the same 'DotProtoIdentifier' is an element of the
 -- 'ProtoOptionSet', then a 'ProtoOptionAlreadySet' error is raised.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insertOption ::
   MonadError ProtoOptionError m =>
   DotProtoOption ->
@@ -417,7 +425,7 @@ insertOption opt opts =
 -- If an option with the same 'DotProtoIdentifier' is an element of the
 -- 'ProtoOptionSet', then the associated 'DotProtoValue' is replaced.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 insertOption' :: DotProtoOption -> ProtoOptionSet -> ProtoOptionSet
 insertOption' opt (ProtoOptionSet kvs) = do
   let key = DotProto.dotProtoOptionIdentifier opt
@@ -426,14 +434,14 @@ insertOption' opt (ProtoOptionSet kvs) = do
 
 -- | Lookup the 'DotProtoValue' set for a protobuf option by name.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 lookupOption :: DotProtoIdentifier -> ProtoOptionSet -> Maybe DotProtoValue
 lookupOption key (ProtoOptionSet kvs) = Map.lookup key kvs
 
 -- | Is an option with the 'DotProtoIdentifier' an element of the
 -- 'ProtoOptionSet'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 memberOption :: DotProtoIdentifier -> ProtoOptionSet -> Bool
 memberOption key (ProtoOptionSet kvs) = Map.member key kvs
 
@@ -442,7 +450,7 @@ memberOption key (ProtoOptionSet kvs) = Map.member key kvs
 -- | 'ProtoOptionError' represents the errors that improper protobuf option
 -- usage can produce.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ProtoOptionError
   = -- | 'ProtoOptionAlreadySet' errors are emitted when protobuf declarations
     -- when multiple values are set for the same option.
@@ -475,7 +483,7 @@ data ProtoOptionError
     OptionValueTypeMismatch DatumRep DotProtoOption
   deriving stock (Data, Eq, Generic, Ord, Show, Typeable)
 
--- | @since 0.1.0.0
+-- | @since 1.0.0
 instance Exception ProtoOptionError where
   displayException (ProtoOptionAlreadySet idt) =
     "the option " ++ showProtoId idt ++ " was already set."
@@ -493,13 +501,13 @@ instance Exception ProtoOptionError where
 
 -- | 'for'-style traversal over the 'ProtoServices' defined in a 'DotProto'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 servicesOf :: Applicative f => DotProto -> (ProtoService -> f a) -> f [a]
 servicesOf dotproto = for (getFileServices dotproto)
 
 -- | Accesses the list of services defined in the 'DotProto'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getFileServices :: DotProto -> [ProtoService]
 getFileServices dotproto =
   foldMap toService (DotProto.protoDefinitions dotproto)
@@ -513,7 +521,7 @@ getFileServices dotproto =
 -- If the 'DotProto' sets the same file-level option more than once, a
 -- 'ProtoOptionAlreadySet' error is raised.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getFileOptions :: MonadError ProtoOptionError m => DotProto -> m ProtoOptionSet
 getFileOptions dotproto = foldrM insertOption mempty (DotProto.protoOptions dotproto)
 
@@ -521,7 +529,7 @@ getFileOptions dotproto = foldrM insertOption mempty (DotProto.protoOptions dotp
 
 -- | 'ProtoService' is a record representing a protobuf service definition.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 data ProtoService = ProtoService
   { serviceName :: DotProtoIdentifier
   , serviceDefs :: [DotProtoServicePart]
@@ -530,13 +538,13 @@ data ProtoService = ProtoService
 
 -- | 'for'-style traversal over the 'RPCMethod' defined in a 'ProtoService'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 methodsOf :: Applicative f => ProtoService -> (RPCMethod -> f a) -> f [a]
 methodsOf dotproto = for (getServiceMethods dotproto)
 
 -- | Accesses the 'RPCMethods' defined by a 'ProtoService'.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getServiceMethods :: ProtoService -> [RPCMethod]
 getServiceMethods (ProtoService _ ps) = foldr toRPCs mempty ps
   where
@@ -549,7 +557,7 @@ getServiceMethods (ProtoService _ ps) = foldr toRPCs mempty ps
 -- If the 'ProtoService' sets the same service-level option more than once, a
 -- 'ProtoOptionAlreadySet' error is thrown.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getServiceOptions ::
   forall m.
   MonadError ProtoOptionError m =>
@@ -565,7 +573,7 @@ getServiceOptions (ProtoService _ ps) = foldrM toOptions mempty ps
 
 -- | Querys a 'RPCMethod' for its gRPC method type.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getMethodType :: RPCMethod -> GRPCMethodType
 getMethodType rpc =
   case DotProto.rpcMethodRequestStreaming rpc of
@@ -583,7 +591,7 @@ getMethodType rpc =
 -- If the 'RPCMethod' sets the same method-level option more than once, a
 -- 'ProtoOptionAlreadySet' error is thrown.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 getMethodOptions :: MonadError ProtoOptionError m => RPCMethod -> m ProtoOptionSet
 getMethodOptions rpc = foldrM insertOption mempty (DotProto.rpcMethodOptions rpc)
 
@@ -591,7 +599,7 @@ getMethodOptions rpc = foldrM insertOption mempty (DotProto.rpcMethodOptions rpc
 
 -- | Displays a 'CompileError' in a legible format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 showCompileError :: CompileError -> String
 showCompileError = \case
   DotProto.CircularImport filepath ->
@@ -654,7 +662,7 @@ showCompileError = \case
 
 -- | Displays a 'CompileError' in a legible format.
 --
--- @since 0.1.0.0
+-- @since 1.0.0
 showParseError :: ParseError -> String
 showParseError = \case
   Wire.WireTypeError msg -> toString msg

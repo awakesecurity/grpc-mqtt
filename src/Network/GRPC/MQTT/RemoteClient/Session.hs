@@ -20,6 +20,8 @@ module Network.GRPC.MQTT.RemoteClient.Session
     withSession,
 
     -- ** Logging
+    useSessionId,
+    logInfo,
     logError,
     logDebug,
 
@@ -92,7 +94,7 @@ import Data.List (stripPrefix)
 import Data.Text qualified as Text
 
 import Network.MQTT.Client (MQTTClient)
-import Network.MQTT.Topic (Filter, Topic)
+import Network.MQTT.Topic (Filter, Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
 import UnliftIO.Exception (finally)
@@ -106,7 +108,7 @@ import System.Timeout qualified as System
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
-import Network.GRPC.MQTT.Logging (Logger)
+import Network.GRPC.MQTT.Logging (Logger (..))
 import Network.GRPC.MQTT.Logging qualified as Logging
 import Network.GRPC.MQTT.Topic qualified as Topic
 import Network.GRPC.MQTT.Types (ClientHandler, MethodMap)
@@ -184,13 +186,26 @@ deleteSessionM sid = do
 
 -- Session - Logging ------------------------------------------------------------
 
+-- | Modify a logger to prefix log messages with the session ID
+useSessionId :: Topic -> Logger -> Logger
+useSessionId sid logger@Logger{runLog} =
+  logger{runLog = \msg -> runLog ("[" <> unTopic sid <> "]: " <> msg)}
+
+-- | Write a info log to the ambient session's logger.
+--
+-- @since 1.0.0
+logInfo :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
+logInfo ctx msg = do
+  logger <- asks cfgLogger
+  Logging.logInfo logger ("info: " <> ctx <> ": " <> msg)
+
 -- | Write a debug log to the ambient session's logger.
 --
 -- @since 1.0.0
 logDebug :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logDebug ctx msg = do
   logger <- asks cfgLogger
-  Logging.logDebug logger ("remote session debug: " <> ctx <> ": " <> msg)
+  Logging.logDebug logger ("debug: " <> ctx <> ": " <> msg)
 
 -- | Write an error log to the ambient session's logger.
 --
@@ -198,7 +213,7 @@ logDebug ctx msg = do
 logError :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logError ctx msg = do
   logger <- asks cfgLogger
-  Logging.logErr logger ("remote session error: " <> ctx <> ": " <> msg)
+  Logging.logErr logger ("error: " <> ctx <> ": " <> msg)
 
 -- 'Session' ---------------------------------------------------------------------
 
@@ -289,7 +304,7 @@ data SessionHandle = SessionHandle
 -- @since 1.0.0
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
-  SessionHandle thread 
+  SessionHandle thread
     <$> newTQueueIO
     <*> newTMVarIO ()
 

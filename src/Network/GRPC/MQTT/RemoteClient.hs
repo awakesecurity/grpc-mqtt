@@ -61,6 +61,10 @@ import UnliftIO.Async (concurrently_)
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
+import Network.GRPC.HighLevel
+  ( NormalRequestResult (..),
+    StatusDetails (unStatusDetails),
+  )
 import Network.GRPC.HighLevel.Extra (wireEncodeMetadataMap)
 
 import Network.GRPC.MQTT.Core
@@ -71,7 +75,7 @@ import Network.GRPC.MQTT.Core
     subscribeOrThrow,
   )
 
-import Network.GRPC.MQTT.Logging (Logger)
+import Network.GRPC.MQTT.Logging (Logger (..))
 import Network.GRPC.MQTT.Logging qualified as Logger
 
 import Network.GRPC.MQTT.Message qualified as Message
@@ -108,8 +112,8 @@ import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
-import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
-import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult)
+import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter)
+import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult (..))
 
 import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
@@ -147,15 +151,14 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
         handleAny handleError do
           case fromRqtTopic baseTopic topic of
             Nothing -> case stripPrefix (Topic.split baseTopic) (Topic.split topic) of
-              Just ["grpc", "session", sessionId, "control"] -> do
-                sessionHandle <- atomically (TMap.lookup sessionId sessions)
-                case sessionHandle of
+              Just ["grpc", "session", sessionId, "control"] ->
+                atomically (TMap.lookup sessionId sessions) >>= \case
                   Nothing ->
                     let logmsg :: Text
                         logmsg = "Recieved control for non-existent session: " <> Topic.unTopic sessionId
                      in Logger.logErr logger logmsg
-                  Just handle -> do
-                    handleControlMessage logger handle msg
+                  Just sessionHandle -> do
+                    handleControlMessage (Session.useSessionId sessionId logger) sessionHandle msg
               _ ->
                 -- TODO: FIXME: handle parse errors with a RemoteError response along
                 -- with the following log message.
@@ -167,7 +170,7 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                let config = SessionConfig client sessions logger topics msglim rateLimit methods
+                let config = SessionConfig client sessions (Session.useSessionId sessionKey logger) topics msglim rateLimit methods
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
@@ -238,11 +241,20 @@ handleRequest handle = do
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
       publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
-    Right rqt@Request.Request{..} -> do
+    Right Request.Request{..} -> do
       let encodeOptions = Serial.makeRemoteEncodeOptions options
       let decodeOptions = Serial.makeClientDecodeOptions options
 
-      Session.logDebug "handling client request" (show rqt)
+      method <- askMethodTopic
+      Session.logInfo
+        "Received request"
+        ( Text.intercalate
+            ", "
+            [ "Method: " <> unTopic method
+            , "Metadata: " <> show metadata
+            ]
+        )
+      Session.logDebug "Request body" (decodeUtf8 message)
 
       dispatchClientHandler \case
         ClientUnaryHandler k -> do
@@ -303,10 +315,47 @@ publishClientResponse options result = do
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
-  Session.logDebug "publishing response as packets to client" (Topic.unTopic topic)
-  Session.logDebug "...with packet size" (show packetSizeLimit)
+  Session.logInfo "Publishing response" (logDisplayResult result)
 
   Response.makeResponseSender client topic packetSizeLimit rateLimit options result
+
+logDisplayResult :: RemoteResult s -> Text
+logDisplayResult = \case
+  RemoteNormalResult NormalRequestResult{rspCode, details, initMD, trailMD} ->
+    "NormalResult: "
+      <> Text.intercalate
+        ", "
+        [ "Status Code: " <> show rspCode
+        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
+        , "Inital Metadata: " <> show initMD
+        , "Trailing Metadata: " <> show trailMD
+        ]
+  RemoteWriterResult (_, initMD, trailMD, rspCode, details) ->
+    "ClientWriterResult: "
+      <> Text.intercalate
+        ", "
+        [ "Status Code: " <> show rspCode
+        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
+        , "Inital Metadata: " <> show initMD
+        , "Trailing Metadata: " <> show trailMD
+        ]
+  RemoteReaderResult (metadata, rspCode, details) ->
+    "ClientReaderResult: "
+      <> Text.intercalate
+        ", "
+        [ "Status Code: " <> show rspCode
+        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
+        , "Metadata: " <> show metadata
+        ]
+  RemoteBiDiResult (metadata, rspCode, details) ->
+    "ClientRWResult: "
+      <> Text.intercalate
+        ", "
+        [ "Status Code: " <> show rspCode
+        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
+        , "Metadata: " <> show metadata
+        ]
+  RemoteErrorResult err -> show err
 
 publishPackets :: ByteString -> Session ()
 publishPackets message = do
@@ -316,7 +365,6 @@ publishPackets message = do
   rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing message as packets" (show message)
-  Session.logDebug "...to the response topic" (Topic.unTopic topic)
 
   let publish :: ByteString -> IO ()
       publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
@@ -339,7 +387,6 @@ publishRemoteError options err = do
   rateLimit <- asks cfgRateLimit
 
   Session.logError "publishing remote error as packets" (show response)
-  Session.logError "...to the response topic" (Topic.unTopic topic)
 
   Response.makeErrorResponseSender client topic packetSizeLimit rateLimit options err
 

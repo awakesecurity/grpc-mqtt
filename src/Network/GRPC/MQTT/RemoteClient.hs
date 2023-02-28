@@ -61,10 +61,6 @@ import UnliftIO.Async (concurrently_)
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
-import Network.GRPC.HighLevel
-  ( NormalRequestResult (..),
-    StatusDetails (unStatusDetails),
-  )
 import Network.GRPC.HighLevel.Extra (wireEncodeMetadataMap)
 
 import Network.GRPC.MQTT.Core
@@ -75,7 +71,7 @@ import Network.GRPC.MQTT.Core
     subscribeOrThrow,
   )
 
-import Network.GRPC.MQTT.Logging (Logger (..))
+import Network.GRPC.MQTT.Logging (RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logger
 
 import Network.GRPC.MQTT.Message qualified as Message
@@ -123,17 +119,17 @@ import Proto.Mqtt qualified as Proto
 
 ---------------------------------------------------------------------------------
 
-runRemoteClient :: Logger -> MQTTGRPCConfig -> Topic -> MethodMap -> IO ()
+runRemoteClient :: RemoteClientLogger -> MQTTGRPCConfig -> Topic -> MethodMap -> IO ()
 runRemoteClient = runRemoteClientWithConnect connectMQTT
 
 runRemoteClientWithConnect ::
   (MQTTGRPCConfig -> IO MQTTClient) ->
-  Logger ->
+  RemoteClientLogger ->
   MQTTGRPCConfig ->
   Topic ->
   MethodMap ->
   IO ()
-runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
+runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg baseTopic methods = do
   sessions <- TMap.emptyIO
   handleConnect sessions \client -> do
     subRemoteClient client baseTopic
@@ -158,7 +154,7 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
                         logmsg = "Recieved control for non-existent session: " <> Topic.unTopic sessionId
                      in Logger.logErr logger logmsg
                   Just sessionHandle -> do
-                    handleControlMessage (Session.useSessionId sessionId logger) sessionHandle msg
+                    handleControlMessage (Session.useSessionId sessionId rcLogger) sessionHandle msg
               _ ->
                 -- TODO: FIXME: handle parse errors with a RemoteError response along
                 -- with the following log message.
@@ -170,7 +166,7 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                let config = SessionConfig client sessions (Session.useSessionId sessionKey logger) topics msglim rateLimit methods
+                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
@@ -210,11 +206,11 @@ handleNewSession config handle = handleWithHeartbeat
     runHeartbeat = do
       let period'sec = 3 * heartbeatPeriodSeconds
       newWatchdogIO period'sec (hdlHeartbeat handle)
-      Logger.logWarn (cfgLogger config) "Watchdog timed out"
+      Logger.logWarn (logger (cfgLogger config)) "Watchdog timed out"
 
 -- | Handles AuxControl signals from the "/control" topic
-handleControlMessage :: Logger -> SessionHandle -> LByteString -> IO ()
-handleControlMessage logger handle msg =
+handleControlMessage :: RemoteClientLogger -> SessionHandle -> LByteString -> IO ()
+handleControlMessage RemoteClientLogger{logger} handle msg =
   let result :: Either Decode.ParseError AuxControlMessage
       result = Proto3.fromByteString (toStrict msg)
    in case result of
@@ -241,20 +237,12 @@ handleRequest handle = do
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
       publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
-    Right Request.Request{..} -> do
+    Right request@Request.Request{..} -> do
       let encodeOptions = Serial.makeRemoteEncodeOptions options
       let decodeOptions = Serial.makeClientDecodeOptions options
 
       method <- askMethodTopic
-      Session.logInfo
-        "Received request"
-        ( Text.intercalate
-            ", "
-            [ "Method: " <> unTopic method
-            , "Metadata: " <> show metadata
-            ]
-        )
-      Session.logDebug "Request body" (decodeUtf8 message)
+      Session.logRequest (unTopic method) request
 
       dispatchClientHandler \case
         ClientUnaryHandler k -> do
@@ -315,47 +303,9 @@ publishClientResponse options result = do
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
-  Session.logInfo "Publishing response" (logDisplayResult result)
+  Session.logResponse result
 
   Response.makeResponseSender client topic packetSizeLimit rateLimit options result
-
-logDisplayResult :: RemoteResult s -> Text
-logDisplayResult = \case
-  RemoteNormalResult NormalRequestResult{rspCode, details, initMD, trailMD} ->
-    "NormalResult: "
-      <> Text.intercalate
-        ", "
-        [ "Status Code: " <> show rspCode
-        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
-        , "Inital Metadata: " <> show initMD
-        , "Trailing Metadata: " <> show trailMD
-        ]
-  RemoteWriterResult (_, initMD, trailMD, rspCode, details) ->
-    "ClientWriterResult: "
-      <> Text.intercalate
-        ", "
-        [ "Status Code: " <> show rspCode
-        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
-        , "Inital Metadata: " <> show initMD
-        , "Trailing Metadata: " <> show trailMD
-        ]
-  RemoteReaderResult (metadata, rspCode, details) ->
-    "ClientReaderResult: "
-      <> Text.intercalate
-        ", "
-        [ "Status Code: " <> show rspCode
-        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
-        , "Metadata: " <> show metadata
-        ]
-  RemoteBiDiResult (metadata, rspCode, details) ->
-    "ClientRWResult: "
-      <> Text.intercalate
-        ", "
-        [ "Status Code: " <> show rspCode
-        , "Status Details: " <> decodeUtf8 (unStatusDetails details)
-        , "Metadata: " <> show metadata
-        ]
-  RemoteErrorResult err -> show err
 
 publishPackets :: ByteString -> Session ()
 publishPackets message = do

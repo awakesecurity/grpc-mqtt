@@ -24,6 +24,8 @@ module Network.GRPC.MQTT.RemoteClient.Session
     logInfo,
     logError,
     logDebug,
+    logRequest,
+    logResponse,
 
     -- ** Service Methods
     askMethod,
@@ -108,10 +110,11 @@ import System.Timeout qualified as System
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
-import Network.GRPC.MQTT.Logging (Logger (..))
+import Network.GRPC.MQTT.Logging (Logger (..), RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logging
+import Network.GRPC.MQTT.Message (Request)
 import Network.GRPC.MQTT.Topic qualified as Topic
-import Network.GRPC.MQTT.Types (ClientHandler, MethodMap)
+import Network.GRPC.MQTT.Types (ClientHandler, MethodMap, RemoteResult)
 
 -- Session ----------------------------------------------------------------------
 
@@ -186,17 +189,36 @@ deleteSessionM sid = do
 
 -- Session - Logging ------------------------------------------------------------
 
--- | Modify a logger to prefix log messages with the session ID
-useSessionId :: Topic -> Logger -> Logger
-useSessionId sid logger@Logger{runLog} =
-  logger{runLog = \msg -> runLog ("[" <> unTopic sid <> "]: " <> msg)}
+-- | Modify a `RemoteClientLogger` to prefix log messages with the session ID
+useSessionId :: Topic -> RemoteClientLogger -> RemoteClientLogger
+useSessionId sid rcLogger@RemoteClientLogger{logger} = rcLogger{logger = prefixedLogger}
+  where
+    prefixedLogger = logger{runLog = \msg -> runLog logger ("[" <> unTopic sid <> "]: " <> msg)}
+
+-- | Write a request to the ambient session's logger.
+--
+-- @since 1.0.0
+logRequest :: (MonadReader SessionConfig m, MonadIO m) => Text -> Request ByteString -> m ()
+logRequest method request = do
+  RemoteClientLogger{formatRequest, logger} <- asks cfgLogger
+  let msg = formatRequest (verbosity logger) method request
+  logInfo "Request" msg
+
+-- | Write a response to the ambient session's logger.
+--
+-- @since 1.0.0
+logResponse :: (MonadReader SessionConfig m, MonadIO m) => RemoteResult s -> m ()
+logResponse response = do
+  RemoteClientLogger{formatResponse, logger} <- asks cfgLogger
+  let msg = formatResponse (verbosity logger) response
+  logInfo "Response" msg
 
 -- | Write a info log to the ambient session's logger.
 --
 -- @since 1.0.0
 logInfo :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logInfo ctx msg = do
-  logger <- asks cfgLogger
+  logger <- asks (logger . cfgLogger)
   Logging.logInfo logger ("info: " <> ctx <> ": " <> msg)
 
 -- | Write a debug log to the ambient session's logger.
@@ -204,7 +226,7 @@ logInfo ctx msg = do
 -- @since 1.0.0
 logDebug :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logDebug ctx msg = do
-  logger <- asks cfgLogger
+  logger <- asks (logger . cfgLogger)
   Logging.logDebug logger ("debug: " <> ctx <> ": " <> msg)
 
 -- | Write an error log to the ambient session's logger.
@@ -212,7 +234,7 @@ logDebug ctx msg = do
 -- @since 1.0.0
 logError :: (MonadReader SessionConfig m, MonadIO m) => Text -> Text -> m ()
 logError ctx msg = do
-  logger <- asks cfgLogger
+  logger <- asks (logger . cfgLogger)
   Logging.logErr logger ("error: " <> ctx <> ": " <> msg)
 
 -- 'Session' ---------------------------------------------------------------------
@@ -335,7 +357,7 @@ newWatchdogIO period'sec var = do
 data SessionConfig = SessionConfig
   { cfgClient :: MQTTClient
   , cfgSessions :: TMap Topic SessionHandle
-  , cfgLogger :: Logger
+  , cfgLogger :: RemoteClientLogger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
   , cfgMsgSize :: {-# UNPACK #-} !Word32
   , cfgRateLimit :: Maybe Natural

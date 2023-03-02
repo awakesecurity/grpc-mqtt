@@ -395,8 +395,7 @@ readNextPacket = do
   pxs <- asks packets
   var <- asks npacket
   liftIO $ atomically do
-    when (isLastPacket packet) do
-      putTMVar var (position packet)
+    _ <- tryPutTMVar var (npackets packet)
     insertPacketSet packet pxs
 
 isMissingPackets :: PacketReader Bool
@@ -409,4 +408,4 @@ isMissingPackets = do
       Nothing -> pure True
       Just ct -> do
         len <- lengthPacketSet pxs
-        pure (fromIntegral len - 1 < ct)
+        pure (fromIntegral len < ct)

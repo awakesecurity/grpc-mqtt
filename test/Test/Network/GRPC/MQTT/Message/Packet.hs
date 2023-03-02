@@ -1,4 +1,3 @@
-
 module Test.Network.GRPC.MQTT.Message.Packet
   ( -- * Test Tree
     tests,
@@ -39,10 +38,10 @@ import Network.GRPC.MQTT.Message.Packet qualified as Packet
 import Data.ByteString qualified as ByteString
 import Proto3.Wire.Decode (ParseError)
 
-import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Range as Range
-import Data.Time.Clock (getCurrentTime, diffUTCTime, nominalDiffTimeToSeconds)
-import Data.Fixed (Pico, Fixed (MkFixed))
+import Data.Fixed (Fixed (MkFixed), Pico)
+import Data.Time.Clock (diffUTCTime, getCurrentTime, nominalDiffTimeToSeconds)
+import Hedgehog.Gen qualified as Gen
+import Hedgehog.Range qualified as Range
 
 --------------------------------------------------------------------------------
 
@@ -57,6 +56,7 @@ tests =
     "Network.GRPC.MQTT.Message.Packet"
     [ testProperty "Packet.Wire" propPacketWire
     , testProperty "Packet.Handle" propPacketHandle
+    , testProperty "Packet.HandleOrder" propPacketHandleOrder
     , testProperty "Packet.MaxSize" propPacketMaxSize
     , testProperty "Packet.RateLimit" propPacketRateLimit
     ]
@@ -85,6 +85,48 @@ propPacketHandle = property do
     concurrently (sender message) (runExceptT reader)
 
   Right message === result
+
+propPacketHandleOrder :: Property
+propPacketHandleOrder = property do
+  message <- forAll Message.Gen.packetBytes
+  maxsize <- forAll (Message.Gen.packetSplitLength message)
+  queue <- Hedgehog.evalIO newTQueueIO
+
+  let maxPayloadSize :: Word32
+      maxPayloadSize = max 1 (maxsize - Packet.minPacketSize)
+
+  let nPackets :: Word32
+      nPackets = max 1 (quotInf (fromIntegral $ ByteString.length message) maxPayloadSize)
+
+  let packetsOrig :: [Packet.Packet ByteString]
+      packetsOrig =
+        if ByteString.length message == 0
+          then [Packet.Packet message 0 1]
+          else getPackets 0 message
+        where
+          getPackets i bs =
+            case ByteString.splitAt (fromIntegral maxPayloadSize) bs of
+              (chunk, rest)
+                | ByteString.null chunk -> []
+                | otherwise -> Packet.Packet chunk i nPackets : getPackets (i + 1) rest
+
+  packets <- forAll (Gen.shuffle (packetsOrig ++ packetsOrig))
+
+  let reader :: ExceptT ParseError IO ByteString
+      reader = Packet.makePacketReader queue
+
+  let sender :: IO ()
+      sender =
+        forM_ packets $ \packet -> do
+          mockPublish queue (Packet.wireWrapPacket' packet)
+
+  ((), result) <- Hedgehog.evalIO do
+    concurrently sender (runExceptT reader)
+
+  Right message === result
+
+quotInf :: Integral a => a -> a -> a
+quotInf x y = quot (x + (y - 1)) y
 
 mockPublish :: TQueue ByteString -> ByteString -> IO ()
 mockPublish queue message = atomically (writeTQueue queue message)

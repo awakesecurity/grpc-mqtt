@@ -71,7 +71,7 @@ import Network.GRPC.MQTT.Core
     subscribeOrThrow,
   )
 
-import Network.GRPC.MQTT.Logging (Logger)
+import Network.GRPC.MQTT.Logging (RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logger
 
 import Network.GRPC.MQTT.Message qualified as Message
@@ -108,8 +108,8 @@ import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
-import Network.GRPC.MQTT.Topic (makeControlFilter, makeRequestFilter)
-import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult)
+import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter)
+import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult (..))
 
 import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
@@ -119,17 +119,17 @@ import Proto.Mqtt qualified as Proto
 
 ---------------------------------------------------------------------------------
 
-runRemoteClient :: Logger -> MQTTGRPCConfig -> Topic -> MethodMap -> IO ()
+runRemoteClient :: RemoteClientLogger -> MQTTGRPCConfig -> Topic -> MethodMap -> IO ()
 runRemoteClient = runRemoteClientWithConnect connectMQTT
 
 runRemoteClientWithConnect ::
   (MQTTGRPCConfig -> IO MQTTClient) ->
-  Logger ->
+  RemoteClientLogger ->
   MQTTGRPCConfig ->
   Topic ->
   MethodMap ->
   IO ()
-runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
+runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg baseTopic methods = do
   sessions <- TMap.emptyIO
   handleConnect sessions \client -> do
     subRemoteClient client baseTopic
@@ -147,15 +147,14 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
         handleAny handleError do
           case fromRqtTopic baseTopic topic of
             Nothing -> case stripPrefix (Topic.split baseTopic) (Topic.split topic) of
-              Just ["grpc", "session", sessionId, "control"] -> do
-                sessionHandle <- atomically (TMap.lookup sessionId sessions)
-                case sessionHandle of
+              Just ["grpc", "session", sessionId, "control"] ->
+                atomically (TMap.lookup sessionId sessions) >>= \case
                   Nothing ->
                     let logmsg :: Text
                         logmsg = "Recieved control for non-existent session: " <> Topic.unTopic sessionId
                      in Logger.logErr logger logmsg
-                  Just handle -> do
-                    handleControlMessage logger handle msg
+                  Just sessionHandle -> do
+                    handleControlMessage (Session.useSessionId sessionId rcLogger) sessionHandle msg
               _ ->
                 -- TODO: FIXME: handle parse errors with a RemoteError response along
                 -- with the following log message.
@@ -167,7 +166,7 @@ runRemoteClientWithConnect onConnect logger cfg baseTopic methods = do
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                let config = SessionConfig client sessions logger topics msglim rateLimit methods
+                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
@@ -207,11 +206,11 @@ handleNewSession config handle = handleWithHeartbeat
     runHeartbeat = do
       let period'sec = 3 * heartbeatPeriodSeconds
       newWatchdogIO period'sec (hdlHeartbeat handle)
-      Logger.logWarn (cfgLogger config) "Watchdog timed out"
+      Logger.logWarn (logger (cfgLogger config)) "Watchdog timed out"
 
 -- | Handles AuxControl signals from the "/control" topic
-handleControlMessage :: Logger -> SessionHandle -> LByteString -> IO ()
-handleControlMessage logger handle msg =
+handleControlMessage :: RemoteClientLogger -> SessionHandle -> LByteString -> IO ()
+handleControlMessage RemoteClientLogger{logger} handle msg =
   let result :: Either Decode.ParseError AuxControlMessage
       result = Proto3.fromByteString (toStrict msg)
    in case result of
@@ -238,11 +237,12 @@ handleRequest handle = do
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
       publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
-    Right rqt@Request.Request{..} -> do
+    Right request@Request.Request{..} -> do
       let encodeOptions = Serial.makeRemoteEncodeOptions options
       let decodeOptions = Serial.makeClientDecodeOptions options
 
-      Session.logDebug "handling client request" (show rqt)
+      method <- askMethodTopic
+      Session.logRequest (unTopic method) request
 
       dispatchClientHandler \case
         ClientUnaryHandler k -> do
@@ -303,8 +303,7 @@ publishClientResponse options result = do
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
-  Session.logDebug "publishing response as packets to client" (Topic.unTopic topic)
-  Session.logDebug "...with packet size" (show packetSizeLimit)
+  Session.logResponse result
 
   Response.makeResponseSender client topic packetSizeLimit rateLimit options result
 
@@ -316,7 +315,6 @@ publishPackets message = do
   rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing message as packets" (show message)
-  Session.logDebug "...to the response topic" (Topic.unTopic topic)
 
   let publish :: ByteString -> IO ()
       publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
@@ -339,7 +337,6 @@ publishRemoteError options err = do
   rateLimit <- asks cfgRateLimit
 
   Session.logError "publishing remote error as packets" (show response)
-  Session.logError "...to the response topic" (Topic.unTopic topic)
 
   Response.makeErrorResponseSender client topic packetSizeLimit rateLimit options err
 

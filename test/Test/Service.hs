@@ -7,10 +7,6 @@ module Test.Service
   )
 where
 
-#if !MIN_VERSION_proto3_suite(0,4,3)
-#define testServicenormalCall testServiceNormalCall
-#endif
-
 --------------------------------------------------------------------------------
 
 import Test.Tasty (TestTree, after, testGroup)
@@ -57,7 +53,7 @@ import Test.Suite.Fixture qualified as Suite
 import Network.GRPC.MQTT.Client (MQTTGRPCClient, withMQTTGRPCClient)
 import Network.GRPC.MQTT.Client qualified as GRPC.MQTT.Client
 import Network.GRPC.MQTT.Core (MQTTGRPCConfig (..))
-import Network.GRPC.MQTT.Logging (Logger (Logger))
+import Network.GRPC.MQTT.Logging (Logger (Logger), RemoteClientLogger (logger), defaultRemoteClientLogger)
 import Network.GRPC.MQTT.Logging qualified as GRPC.MQTT.Logging
 import Network.GRPC.MQTT.RemoteClient (runRemoteClient)
 import Network.GRPC.MQTT.Types
@@ -124,13 +120,16 @@ withServiceFixture k = do
   withTestService \server -> do
     withGRPCClient configGRPC \client -> do
       methods <- testServiceRemoteClientMethodMap client
-      Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \remote -> do
+      Async.withAsync (runRemoteClient rcLogger remoteConfig baseTopic methods) \remote -> do
         Async.link2 server remote
         sleep remoteClientWaitSecs
         withMQTTGRPCClient logger clientConfig (k clientConfig)
   where
     logger :: Logger
     logger = Logger print GRPC.MQTT.Logging.Silent
+
+    rcLogger :: RemoteClientLogger
+    rcLogger = defaultRemoteClientLogger{logger = logger}
 
 --------------------------------------------------------------------------------
 
@@ -155,29 +154,32 @@ testCallLongBytes = do
   withTestService \_ -> do
     withGRPCClient configGRPC \grpcClient -> do
       methods <- testServiceRemoteClientMethodMap grpcClient
-      result <- Async.withAsync (runRemoteClient logger remoteConfig baseTopic methods) \_ -> do
+      result <- Async.withAsync (runRemoteClient rcLogger remoteConfig baseTopic methods) \_ -> do
         withMQTTGRPCClient logger clientConfig \client -> do
-            -- For uniquely identifying requests to the server.
-            uuid <- UUID.nextRandom
+          -- For uniquely identifying requests to the server.
+          uuid <- UUID.nextRandom
 
-            -- NB: 2022-08-02 we discovered a bug with concurrent client
-            -- requests that send responses which, when sent back by the
-            -- server trigger a GRPCIOTimeout error in some of the clients.
-            let msg = Message.OneInt 64
-            let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+          -- NB: 2022-08-02 we discovered a bug with concurrent client
+          -- requests that send responses which, when sent back by the
+          -- server trigger a GRPCIOTimeout error in some of the clients.
+          let msg = Message.OneInt 64
+          let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
-            testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
+          testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 
       liftIO case result of
-          GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do
-            print (ByteString.length x)
-          GRPCResult (ClientErrorResponse err) -> do
-            assertFailure (show err)
-          MQTTError err -> do
-            error err
+        GRPCResult (ClientNormalResponse (Message.BytesResponse x) _ms0 _ms1 _stat _details) -> do
+          print (ByteString.length x)
+        GRPCResult (ClientErrorResponse err) -> do
+          assertFailure (show err)
+        MQTTError err -> do
+          error err
   where
     logger :: Logger
     logger = Logger print GRPC.MQTT.Logging.Silent
+
+    rcLogger :: RemoteClientLogger
+    rcLogger = defaultRemoteClientLogger{logger = logger}
 
 testNormalCall :: Fixture ()
 testNormalCall = do
@@ -337,7 +339,7 @@ testMissingClientMethod = do
       -- MethodMap to the remote client. This test is ensuring that this
       -- will cause a failure upon when the remote client attempts to handle
       -- the non-existent request.
-      let remoteClient = runRemoteClient logger remoteConfig baseTopic mempty
+      let remoteClient = runRemoteClient rcLogger remoteConfig baseTopic mempty
       Async.withAsync remoteClient \_ -> do
         sleep remoteClientWaitSecs
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
@@ -356,6 +358,9 @@ testMissingClientMethod = do
     logger :: Logger
     logger = Logger print GRPC.MQTT.Logging.Debug
 
+    rcLogger :: RemoteClientLogger
+    rcLogger = defaultRemoteClientLogger{logger = logger}
+
     expectation :: GRPC.Client.ClientError
     expectation = GRPC.Client.ClientIOError (GRPC.GRPCIOCallError GRPC.Unsafe.CallError)
 
@@ -372,7 +377,7 @@ testMalformedMessage = do
   rsp <- withTestService \_ -> do
     withGRPCClient configGRPC \clientGRPC -> do
       methods <- testServiceRemoteClientMethodMap clientGRPC
-      let remoteClient = runRemoteClient logger remoteConfig baseTopic methods
+      let remoteClient = runRemoteClient rcLogger remoteConfig baseTopic methods
       Async.withAsync remoteClient \_ -> do
         withMQTTGRPCClient logger clientConfig \clientMQTT -> do
           -- Send a malformed message to an unknown topic
@@ -387,6 +392,9 @@ testMalformedMessage = do
   where
     logger :: Logger
     logger = Logger print GRPC.MQTT.Logging.Debug
+
+    rcLogger :: RemoteClientLogger
+    rcLogger = defaultRemoteClientLogger{logger = logger}
 
 --------------------------------------------------------------------------------
 

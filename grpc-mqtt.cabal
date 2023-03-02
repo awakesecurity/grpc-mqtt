@@ -149,7 +149,7 @@ test-suite test
     -O2
     -threaded
     -rtsopts
-    "-with-rtsopts=-N4"
+    "-with-rtsopts=-N1"
     -fregs-iterative
 
   other-modules:

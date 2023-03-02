@@ -58,7 +58,7 @@ tests =
     , testProperty "Packet.Handle" propPacketHandle
     , testProperty "Packet.HandleOrder" propPacketHandleOrder
     , testProperty "Packet.MaxSize" propPacketMaxSize
-    -- , testProperty "Packet.RateLimit" propPacketRateLimit
+    , testProperty "Packet.RateLimit" propPacketRateLimit
     ]
 
 propPacketWire :: Property

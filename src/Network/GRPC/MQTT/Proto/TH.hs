@@ -79,10 +79,9 @@ formatTypeNameQ nm = hoistCompileErrorQ (DotProto.typeLikeName nm)
 --
 -- @since 1.0.0
 protoPackageIdQ :: DotProtoPackageSpec -> Q DotProtoIdentifier
-protoPackageIdQ spec =
-  case spec of
-    DotProtoPackageSpec name -> pure name
-    DotProtoNoPackage -> hoistCompileErrorQ (Left NoPackageDeclaration)
+protoPackageIdQ = \case
+  DotProtoPackageSpec name -> pure name
+  DotProtoNoPackage -> hoistCompileErrorQ (Left NoPackageDeclaration)
 
 -- | Accesses the unqualified base name of the 'DotProtoIdentifier'.
 --

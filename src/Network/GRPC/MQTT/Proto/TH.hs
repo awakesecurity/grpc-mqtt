@@ -36,10 +36,10 @@ import Language.Haskell.TH qualified as TH
 
 import Proto3.Suite.DotProto
   ( DotProtoIdentifier,
-    DotProtoPackageSpec,
+    DotProtoPackageSpec (..),
   )
 import Proto3.Suite.DotProto qualified as DotProto
-import Proto3.Suite.DotProto.Generate (CompileError)
+import Proto3.Suite.DotProto.Generate (CompileError (..))
 import Proto3.Suite.DotProto.Internal qualified as DotProto
 import Proto3.Suite.DotProto.Internal.Compat (prefixedMethodName)
 
@@ -79,7 +79,9 @@ formatTypeNameQ nm = hoistCompileErrorQ (DotProto.typeLikeName nm)
 --
 -- @since 1.0.0
 protoPackageIdQ :: DotProtoPackageSpec -> Q DotProtoIdentifier
-protoPackageIdQ spec = hoistCompileErrorQ (DotProto.protoPackageName spec)
+protoPackageIdQ = \case
+  DotProtoPackageSpec name -> pure name
+  DotProtoNoPackage -> hoistCompileErrorQ (Left NoPackageDeclaration)
 
 -- | Accesses the unqualified base name of the 'DotProtoIdentifier'.
 --

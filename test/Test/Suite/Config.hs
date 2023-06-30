@@ -53,9 +53,10 @@ import GHC.TypeLits (Symbol)
 
 import Network.Connection (TLSSettings (TLSSettings))
 
+import Network.GRPC.LowLevel.Call (Endpoint (..))
 import Network.GRPC.HighLevel.Client (ClientConfig, Host, Port)
 import Network.GRPC.HighLevel.Client qualified as GRPC.Client
-import Network.GRPC.HighLevel.Generated (ServiceOptions)
+import Network.GRPC.HighLevel.Generated (Host (..), Port (..), ServiceOptions)
 import Network.GRPC.HighLevel.Generated qualified as GRPC.Generated
 import Network.GRPC.Unsafe.ChannelArgs (Arg(..))
 
@@ -115,13 +116,12 @@ askServiceOptions = do
 
 askConfigClientGRPC :: MonadReader TestConfig m => m ClientConfig
 askConfigClientGRPC = do
-  host <- asks testConfigServerHost
-  port <- asks testConfigServerPort
+  Host host <- asks testConfigServerHost
+  Port port <- asks testConfigServerPort
   let config :: ClientConfig
       config =
         GRPC.Client.ClientConfig
-          { GRPC.Client.clientServerHost = host
-          , GRPC.Client.clientServerPort = port
+          { GRPC.Client.clientServerEndpoint = Endpoint $ host <> ":" <> show port
           , GRPC.Client.clientArgs =
               [ MaxReceiveMessageLength 268435456 ]
           , GRPC.Client.clientSSLConfig = Nothing

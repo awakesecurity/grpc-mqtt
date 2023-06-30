@@ -1,7 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Network.GRPC.MQTT.TH.Proto
@@ -59,7 +57,7 @@ import Proto3.Suite.DotProto.AST
   ( DotProto,
     DotProtoIdentifier,
     DotProtoOption,
-    DotProtoPackageSpec,
+    DotProtoPackageSpec (..),
     DotProtoServicePart (DotProtoServiceRPCMethod),
     DotProtoValue,
     Path,
@@ -74,7 +72,7 @@ import Proto3.Suite.DotProto.AST
       ),
     Streaming (NonStreaming, Streaming),
   )
-import Proto3.Suite.DotProto.Internal (CompileError, invalidMethodNameError)
+import Proto3.Suite.DotProto.Internal (CompileError(..), invalidMethodNameError)
 import Proto3.Suite.DotProto.Internal qualified as DotProto
 
 import Relude
@@ -372,7 +370,10 @@ forEachService filepath action = do
     mapCompileErrorQ result
   where
     toPackageNameQ :: DotProtoPackageSpec -> Q DotProtoIdentifier
-    toPackageNameQ pkg = mapCompileErrorQ (DotProto.protoPackageName pkg)
+    toPackageNameQ pkg = mapCompileErrorQ $
+      case pkg of
+        DotProtoPackageSpec name -> Right name
+        DotProtoNoPackage -> Left NoPackageDeclaration
 
     toUnqualifiedNameQ :: DotProtoIdentifier -> Q String
     toUnqualifiedNameQ idt = mapCompileErrorQ do

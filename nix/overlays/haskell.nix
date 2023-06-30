@@ -26,7 +26,7 @@ final: prev: {
           })
           (hfinal: _: {
             grpc-haskell = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { });
-            grpc-haskell-core = final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/grpc-haskell-core.nix { 
+            grpc-haskell-core = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell-core.nix { 
               gpr = final.grpc;
             });
           })

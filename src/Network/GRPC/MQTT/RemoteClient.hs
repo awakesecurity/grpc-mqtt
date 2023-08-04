@@ -39,7 +39,7 @@ import Network.GRPC.LowLevel.Op (WritesDone)
 
 import Network.MQTT.Client
   ( MQTTClient,
-    MessageCallback (SimpleCallback),
+    MessageCallback (OrderedCallback),
     QoS (QoS1),
     normalDisconnect,
     publishq,
@@ -143,7 +143,7 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
 
     handleGateway :: TMap Topic SessionHandle -> MessageCallback
     handleGateway sessions =
-      SimpleCallback \client topic msg _ -> do
+      OrderedCallback \client topic msg _ -> do
         handleAny handleError do
           case fromRqtTopic baseTopic topic of
             Nothing -> case stripPrefix (Topic.split baseTopic) (Topic.split topic) of

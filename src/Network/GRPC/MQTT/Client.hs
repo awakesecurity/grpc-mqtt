@@ -76,7 +76,7 @@ import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
 import Network.MQTT.Client
   ( MQTTClient,
     MQTTException,
-    MessageCallback (SimpleCallback),
+    MessageCallback (OrderedCallback),
     QoS (QoS1),
     normalDisconnect,
     publishq,
@@ -343,7 +343,7 @@ connectMQTTGRPC logger cfg = do
 
   let clientCallback :: MessageCallback
       clientCallback =
-        SimpleCallback \_ topic msg _ -> do
+        OrderedCallback \_ topic msg _ -> do
           cxs <- readIORef queues
           case Map.lookup topic cxs of
             Nothing -> do

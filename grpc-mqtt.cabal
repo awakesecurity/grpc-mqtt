@@ -36,20 +36,21 @@ common common
     -Wunused-packages
     -Wno-unused-top-binds
     -fshow-warning-groups
+    -Wno-error=unused-packages
 
   default-extensions:
     BangPatterns BlockArguments DataKinds DefaultSignatures DeriveDataTypeable
     DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable
     DerivingStrategies DerivingVia FlexibleContexts FlexibleInstances
     FunctionalDependencies GADTs ImportQualifiedPost InstanceSigs KindSignatures
-    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude 
-    NumericUnderscores OverloadedStrings PatternSynonyms RankNTypes 
-    ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications 
+    LambdaCase MultiParamTypeClasses NamedFieldPuns NoImplicitPrelude
+    NumericUnderscores OverloadedStrings PatternSynonyms RankNTypes
+    ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications
     TypeFamilies TypeOperators
 
   build-depends:
     , async                >= 2.2.3    && < 2.3
-    , base                 >= 4.14     && < 4.15
+    , base                 >= 4.14     && < 4.16
     , bytestring           >= 0.10.6.0 && < 0.12.0
     , containers           >= 0.5      && < 0.7
     , deepseq              == 1.4.*
@@ -59,7 +60,7 @@ common common
     , net-mqtt             >= 0.8.2    && < 0.9
     , proto3-suite         >= 0.5.2    && < 0.7
     , proto3-wire          >= 1.2.2    && < 1.5
-    , relude               >= 0.7.0    && < 0.8
+    , relude               >= 0.7.0    && < 2
     , stm                  >= 2.5.0    && < 2.6
     , text                 >= 0.2      && < 1.3
     , time                 >= 1.9.3    && < 1.10
@@ -68,7 +69,7 @@ common common
 
 library
   import:      common
-  ghc-options: 
+  ghc-options:
     -O2
     -fregs-iterative
 
@@ -126,11 +127,11 @@ library
   build-depends:
     , conduit-extra        >= 1.3.5  && < 1.4
     , connection           >= 0.3.1  && < 0.4
-    , ghc-prim             >= 0.6.1  && < 0.7
+    , ghc-prim             >= 0.6.1  && < 0.9
     , network-conduit-tls  >= 1.3.2  && < 1.4
     , nonce                >= 1.0.7  && < 1.1
     , safe-exceptions      >= 0.1.7  && < 0.2
-    , template-haskell     >= 2.16.0 && < 2.17
+    , template-haskell     >= 2.16.0 && < 2.19
     , unliftio             >= 0.2.15 && < 0.3
     , unliftio-core        >= 0.2.0  && < 0.3
     , unordered-containers >= 0.2.13 && < 0.3

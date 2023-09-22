@@ -31,7 +31,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TQueue (TQueue)
+import Control.Concurrent.OrderedTQueue (OrderedTQueue)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Traversable (for)
@@ -51,7 +51,7 @@ import Network.GRPC.HighLevel.Client
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
 
-import Network.MQTT.Client (MQTTClient, QoS (QoS1), publishq)
+import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Topic)
 
 import Proto3.Suite.Class (Message)
@@ -71,8 +71,9 @@ import Network.GRPC.MQTT.Types (MQTTResult (GRPCResult, MQTTError), RemoteResult
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
-import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.LowLevel (NormalRequestResult (..))
+import Network.GRPC.MQTT.Core (Publisher)
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Proto.Mqtt
   ( MQTTResponse (..),
     RemoteError,
@@ -247,6 +248,7 @@ unwrapBiDiStreamResponse options =
 
 makeResponseSender ::
   MonadUnliftIO m =>
+  Publisher ->
   MQTTClient ->
   Topic ->
   Word32 ->
@@ -254,34 +256,35 @@ makeResponseSender ::
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
-makeResponseSender client topic packetSizeLimit rateLimit options response =
+makeResponseSender publisher client topic packetSizeLimit rateLimit options response =
   let message :: ByteString
       message = wireEncodeResponse options response
    in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
-    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+    publish bytes = publisher client topic (fromStrict bytes)
 
 makeErrorResponseSender ::
   MonadUnliftIO m =>
+  Publisher ->
   MQTTClient ->
   Topic ->
   Word32 ->
-  Maybe Natural -> 
+  Maybe Natural ->
   WireEncodeOptions ->
   RemoteError ->
   m ()
-makeErrorResponseSender client topic packetSizeLimit rateLimit options err = do
+makeErrorResponseSender publisher client topic packetSizeLimit rateLimit options err = do
   let message :: ByteString
       message = wireEncodeErrorResponse options err
    in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
   where
     publish :: ByteString -> IO ()
-    publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
+    publish bytes = publisher client topic (fromStrict bytes)
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'Normal a)
 makeNormalResponseReader channel options = do
@@ -291,7 +294,7 @@ makeNormalResponseReader channel options = do
 
 makeClientResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ClientStreaming a)
 makeClientResponseReader channel options = do
@@ -301,7 +304,7 @@ makeClientResponseReader channel options = do
 
 makeServerResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ServerStreaming a)
 makeServerResponseReader channel options = do
@@ -311,7 +314,7 @@ makeServerResponseReader channel options = do
 
 makeBiDiResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'BiDiStreaming a)
 makeBiDiResponseReader channel options =

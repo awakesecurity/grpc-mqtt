@@ -19,6 +19,8 @@ module Network.GRPC.MQTT.Core
     defaultMGConfig,
     subscribeOrThrow,
     withSubscription,
+    Publisher,
+    mkIndexedPublish,
   )
 where
 
@@ -64,15 +66,20 @@ import Network.MQTT.Client
       ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
+    Property (PropUserProperty),
     QoS (QoS1),
     SubOptions (_subQoS),
+    Topic,
+    publishq,
     runMQTTConduit,
     subOptions,
     subscribe,
     unsubscribe,
   )
 import Network.MQTT.Topic (Filter (unFilter))
-import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
+import Network.MQTT.Types (LastWill, ProtocolLevel (Protocol311), SubErr)
+
+import Proto3.Suite (toLazyByteString)
 
 import Relude
 
@@ -91,7 +98,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , -- | Proxy to use to connect to the MQTT broker
     brokerProxy :: Maybe ProxySettings
   , -- | Limit the rate of publishing data to the MQTT broker in bytes per second.
-    -- 4GiB/s is the maximum allowed rate. If a rate larger than 4GiB/s is supplied, 
+    -- 4GiB/s is the maximum allowed rate. If a rate larger than 4GiB/s is supplied,
     -- publishing will still be limited to 4GiB/s
     -- If this option is not supplied, no rate limit is applied.
     mqttPublishRateLimit :: Maybe Natural
@@ -187,3 +194,18 @@ withSubscription client topics =
   bracket_
     (subscribeOrThrow client topics)
     (unsubscribe client topics [])
+
+type Publisher = MQTTClient -> Topic -> LByteString -> IO ()
+mkIndexedPublish :: MonadIO m => m (MQTTClient -> Topic -> LByteString -> IO ())
+mkIndexedPublish = do
+  indexVar <- newTVarIO (0 :: Int32)
+
+  let indexedPublish client topic message = do
+        index <- atomically do
+          i <- readTVar indexVar
+          modifyTVar' indexVar (+ 1)
+          pure i
+
+        publishq client topic message False QoS1 [PropUserProperty "i" (toLazyByteString index)]
+
+  pure indexedPublish

@@ -31,6 +31,8 @@ where
 
 --------------------------------------------------------------------------------
 
+import Control.Concurrent.OrderedTQueue (OrderedTQueue)
+
 import Control.Concurrent.STM.TQueue (TQueue, isEmptyTQueue, readTQueue)
 
 import Control.Monad.Except (MonadError, throwError)
@@ -58,9 +60,9 @@ import Network.GRPC.MQTT.Option.Batched qualified as Batched
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
 
+import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Proto.Mqtt (RemoteError, WrappedStreamChunk)
 import Proto.Mqtt qualified as Proto
-import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 
 -- Stream Chunks ---------------------------------------------------------------
 
@@ -125,11 +127,11 @@ wireUnwrapStreamChunk options bytes =
 makeStreamReader ::
   forall io m.
   (MonadIO io, MonadError RemoteError m, MonadIO m) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   io (m (Maybe ByteString))
 makeStreamReader source options = do
-  -- TODO: document 'makeStreamReader' how buffering the stream chunks here, 
+  -- TODO: document 'makeStreamReader' how buffering the stream chunks here,
   -- noting interactions with other functions such as 'makeClientStreamReader'.
   queue <- atomically newTQueue
   isdone <- newIORef False
@@ -141,27 +143,27 @@ makeStreamReader source options = do
         Nothing -> writeIORef isdone True
         Just cs -> liftIO (atomically (mapM_ (writeTQueue queue) cs))
 
-    readStreamQueue :: 
+    readStreamQueue ::
       TQueue ByteString ->
-      IORef Bool -> 
+      IORef Bool ->
       m (Maybe ByteString)
     readStreamQueue queue isdone = do
       isQueueEmpty <- atomically (isEmptyTQueue queue)
-      if isQueueEmpty 
-        then do 
+      if isQueueEmpty
+        then do
           isStreamDone <- readIORef isdone
           if isStreamDone
             then pure Nothing
-            else do 
+            else do
               nextStreamChunk queue isdone
               readStreamQueue queue isdone
-        else do 
+        else do
           chunk <- atomically (readTQueue queue)
           pure (Just chunk)
-      
+
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
-  TQueue ByteString ->
+  OrderedTQueue ByteString ->
   WireDecodeOptions ->
   m (Maybe (Vector ByteString))
 runStreamChunkRead channel options = do

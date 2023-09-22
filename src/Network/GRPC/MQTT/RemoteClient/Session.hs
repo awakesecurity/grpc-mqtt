@@ -85,8 +85,6 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO)
-
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Data.Time.Clock (NominalDiffTime)
@@ -109,6 +107,11 @@ import System.Timeout qualified as System
 
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
+
+import Control.Concurrent.OrderedTQueue
+  ( OrderedTQueue,
+    newOrderedTQueueIO,
+  )
 
 import Network.GRPC.MQTT.Logging (Logger (..), RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logging
@@ -317,7 +320,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtQueue :: TQueue ByteString
+  , hdlRqtQueue :: OrderedTQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
 
@@ -327,7 +330,7 @@ data SessionHandle = SessionHandle
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
   SessionHandle thread
-    <$> newTQueueIO
+    <$> newOrderedTQueueIO
     <*> newTMVarIO ()
 
 -- | TODO

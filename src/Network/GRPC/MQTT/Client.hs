@@ -40,7 +40,12 @@ import Control.Exception
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, writeTQueue)
+import Control.Concurrent.OrderedTQueue
+  ( Indexed (Indexed),
+    OrderedTQueue,
+    newOrderedTQueueIO,
+    writeOrderedTQueue,
+  )
 
 import Control.Monad.Except (throwError, withExceptT)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
@@ -68,6 +73,7 @@ import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (_msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
+    mkIndexedPublish,
     mqttMsgSizeLimit,
     mqttPublishRateLimit,
     withSubscription,
@@ -77,13 +83,14 @@ import Network.MQTT.Client
   ( MQTTClient,
     MQTTException,
     MessageCallback (SimpleCallback),
+    Property (PropUserProperty),
     QoS (QoS1),
     normalDisconnect,
     publishq,
   )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
 
-import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message)
+import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message, fromByteString)
 import Proto3.Suite qualified as Proto3
 
 import Relude hiding (reader)
@@ -142,7 +149,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | 'TQueue' for passing MQTT messages back to calling thread
-    responseQueues :: IORef (Map Topic (TQueue ByteString))
+    responseQueues :: IORef (Map Topic (OrderedTQueue ByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -182,7 +189,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    responseQueue <- newTQueueIO
+    responseQueue <- newOrderedTQueueIO
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
@@ -199,10 +206,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
+    publisher <- mkIndexedPublish
+
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
         logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
-        publishq mqttClient requestTopic (fromStrict message) False QoS1 []
+        publisher mqttClient requestTopic (fromStrict message)
 
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream x =
@@ -218,7 +227,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         Request.makeRequestSender
           packetSizeLimit
           publishRateLimit
-          (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
+          (\x -> publisher mqttClient requestTopic (fromStrict x))
           (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
         withControlSignals (publishControl controlTopic) . exceptToResult $ do
@@ -286,7 +295,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
               Response.makeBiDiResponseReader responseQueue decodeOptions
   where
     makeMetadataMapReader ::
-      TQueue ByteString ->
+      OrderedTQueue ByteString ->
       ExceptT RemoteError IO MetadataMap
     makeMetadataMapReader queue = do
       bytes <- runExceptT (Packet.makePacketReader queue)
@@ -338,12 +347,12 @@ withControlSignals publishControlMsg =
 -- @since 1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
-  queues <- newIORef (Map.empty @Topic @(TQueue ByteString))
+  queues <- newIORef (Map.empty @Topic @(OrderedTQueue ByteString))
   uuid <- Nonce.new
 
   let clientCallback :: MessageCallback
       clientCallback =
-        SimpleCallback \_ topic msg _ -> do
+        SimpleCallback \_ topic msg props -> do
           cxs <- readIORef queues
           case Map.lookup topic cxs of
             Nothing -> do
@@ -351,7 +360,16 @@ connectMQTTGRPC logger cfg = do
             Just chan -> do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
-              atomically $ writeTQueue chan (toStrict msg)
+              index <- case props of
+                [PropUserProperty "i" v] -> case fromByteString @Int32 (toStrict v) of
+                  Right i -> pure i
+                  Left e -> do
+                    logErr logger ("Failed to decode index: " <> show e)
+                    return 0
+                _ -> do
+                  logDebug logger ("ahhh, bad properties - client: " <> show props)
+                  return 0
+              atomically $ writeOrderedTQueue chan (Indexed index (toStrict msg))
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

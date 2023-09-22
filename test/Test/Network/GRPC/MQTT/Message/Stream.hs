@@ -1,4 +1,3 @@
-
 module Test.Network.GRPC.MQTT.Message.Stream
   ( -- * Test Tree
     tests,
@@ -16,14 +15,18 @@ import Test.Tasty.Hedgehog (testProperty)
 --------------------------------------------------------------------------------
 
 import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
-import qualified Test.Network.GRPC.MQTT.Option.Gen as Option.Gen
+import Test.Network.GRPC.MQTT.Option.Gen qualified as Option.Gen
 
 import Test.Suite.Wire qualified as Test.Wire
 
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (concurrently)
-import Control.Concurrent.STM.TQueue (newTQueueIO, writeTQueue)
+import Control.Concurrent.OrderedTQueue
+  ( Indexed (Indexed),
+    newOrderedTQueueIO,
+    writeOrderedTQueue,
+  )
 
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
@@ -33,11 +36,11 @@ import Relude hiding (reader)
 --------------------------------------------------------------------------------
 
 import Network.GRPC.MQTT.Message (RemoteError)
-import Network.GRPC.MQTT.Message.Stream qualified as Stream
 import Network.GRPC.MQTT.Message.Stream (makeStreamBatchSender, makeStreamReader)
+import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
-import qualified Network.GRPC.MQTT.Serial as Serial
+import Network.GRPC.MQTT.Serial qualified as Serial
 
 --------------------------------------------------------------------------------
 
@@ -101,16 +104,20 @@ propHandleRemoteToClient = property do
 
 --------------------------------------------------------------------------------
 
--- TODO: test for 0 batching limit flushes, 
+-- TODO: test for 0 batching limit flushes,
 
 mockHandleStream :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandleStream encodeOptions decodeOptions = do
   chunks <- forAll Message.Gen.streamChunk
   limit <- forAll (Message.Gen.streamChunkLength chunks)
-  queue <- Hedgehog.evalIO (newTQueueIO @ByteString)
+  queue <- Hedgehog.evalIO (newOrderedTQueueIO @ByteString)
 
-  (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions \x -> do
-    atomically (writeTQueue queue x)
+  indexVar <- newTVarIO (0 :: Int32)
+
+  (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions \x -> atomically do
+    i <- readTVar indexVar
+    modifyTVar' indexVar (+ 1)
+    writeOrderedTQueue queue (Indexed i x)
 
   reader <- makeStreamReader queue decodeOptions
 

@@ -23,10 +23,15 @@ import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
 import Control.Concurrent.Async (concurrently)
 
 import Control.Concurrent.STM.TQueue
-  ( TQueue,
-    flushTQueue,
+  ( flushTQueue,
     newTQueueIO,
     writeTQueue,
+  )
+
+import Control.Concurrent.OrderedTQueue
+  ( Indexed (Indexed),
+    newOrderedTQueueIO,
+    writeOrderedTQueue,
   )
 
 import Relude hiding (reader)
@@ -73,13 +78,20 @@ propPacketHandle :: Property
 propPacketHandle = property do
   message <- forAll Message.Gen.packetBytes
   maxsize <- forAll (Message.Gen.packetSplitLength message)
-  queue <- Hedgehog.evalIO newTQueueIO
+  queue <- Hedgehog.evalIO newOrderedTQueueIO
 
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
+  indexVar <- newTVarIO (0 :: Int32)
+
+  let indexedSend x = atomically do
+        i <- readTVar indexVar
+        modifyTVar' indexVar (+ 1)
+        writeOrderedTQueue queue (Indexed i x)
+
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize Nothing (mockPublish queue)
+      sender = Packet.makePacketSender maxsize Nothing indexedSend
 
   ((), result) <- Hedgehog.evalIO do
     concurrently (sender message) (runExceptT reader)
@@ -90,7 +102,7 @@ propPacketHandleOrder :: Property
 propPacketHandleOrder = property do
   message <- forAll Message.Gen.packetBytes
   maxsize <- forAll (Message.Gen.packetSplitLength message)
-  queue <- Hedgehog.evalIO newTQueueIO
+  queue <- Hedgehog.evalIO newOrderedTQueueIO
 
   let maxPayloadSize :: Word32
       maxPayloadSize = max 1 (maxsize - Packet.minPacketSize)
@@ -115,10 +127,17 @@ propPacketHandleOrder = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
+  indexVar <- newTVarIO (0 :: Int32)
+
+  let indexedSend x = atomically do
+        i <- readTVar indexVar
+        modifyTVar' indexVar (+ 1)
+        writeOrderedTQueue queue (Indexed i x)
+
   let sender :: IO ()
       sender =
         forM_ packets $ \packet -> do
-          mockPublish queue (Packet.wireWrapPacket' packet)
+          indexedSend (Packet.wireWrapPacket' packet)
 
   ((), result) <- Hedgehog.evalIO do
     concurrently sender (runExceptT reader)
@@ -127,9 +146,6 @@ propPacketHandleOrder = property do
 
 quotInf :: Integral a => a -> a -> a
 quotInf x y = quot (x + (y - 1)) y
-
-mockPublish :: TQueue ByteString -> ByteString -> IO ()
-mockPublish queue message = atomically (writeTQueue queue message)
 
 propPacketMaxSize :: Property
 propPacketMaxSize = property do
@@ -158,13 +174,20 @@ propPacketRateLimit = Hedgehog.withTests 20 $ property do
       rateLimitRange = Range.linear (fromIntegral maxsize) (fromIntegral messageLength)
   rateLimit <- forAll (Gen.integral_ rateLimitRange)
 
-  queue <- Hedgehog.evalIO newTQueueIO
+  queue <- Hedgehog.evalIO newOrderedTQueueIO
 
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
+  indexVar <- newTVarIO (0 :: Int32)
+
+  let indexedSend x = atomically do
+        i <- readTVar indexVar
+        modifyTVar' indexVar (+ 1)
+        writeOrderedTQueue queue (Indexed i x)
+
   let sender :: ByteString -> IO ()
-      sender = Packet.makePacketSender maxsize (Just rateLimit) (atomically . writeTQueue queue)
+      sender = Packet.makePacketSender maxsize (Just rateLimit) indexedSend
 
   (result, sendTime) <- Hedgehog.evalIO $ do
     t1 <- getCurrentTime

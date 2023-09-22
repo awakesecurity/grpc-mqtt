@@ -76,6 +76,7 @@ library
     src
 
   exposed-modules:
+    Control.Concurrent.OrderedTQueue
     Network.GRPC.HighLevel.Extra
     Network.GRPC.MQTT
     Network.GRPC.MQTT.Client
@@ -105,7 +106,6 @@ library
     Network.GRPC.MQTT.Wrapping
 
   other-modules:
-    Control.Concurrent.OrderedTQueue
     Control.Concurrent.TMap
     Network.GRPC.HighLevel.Orphans
     Network.GRPC.MQTT.Message.Request.Core

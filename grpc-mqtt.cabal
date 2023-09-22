@@ -105,6 +105,7 @@ library
     Network.GRPC.MQTT.Wrapping
 
   other-modules:
+    Control.Concurrent.OrderedTQueue
     Control.Concurrent.TMap
     Network.GRPC.HighLevel.Orphans
     Network.GRPC.MQTT.Message.Request.Core
@@ -135,6 +136,7 @@ library
     , unliftio-core        >= 0.2.0  && < 0.3
     , unordered-containers >= 0.2.13 && < 0.3
     , zstd                 >= 0.1.2  && < 0.2
+    , sorted-list
 
 -- cabal v2-test +RTS -N4 -I2 -qb -qg -RTS
 test-suite test

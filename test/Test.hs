@@ -61,9 +61,13 @@ testOptions :: [OptionDescription]
 testOptions =
   [ Option (Proxy @NumThreads)
   , Option (Proxy @(TestOption "broker-port" Port))
+  , Option (Proxy @(TestOption "broker-host" Host))
   , Option (Proxy @(TestOption "server-port" Port))
   , Option (Proxy @(TestOption "server-host" Host))
   , Option (Proxy @(TestOption "base-topic" Topic))
   , Option (Proxy @(TestOption "client-id" String))
   , Option (Proxy @(TestOption "remote-id" String))
+  , Option (Proxy @(TestOption "certificate-path" (Maybe FilePath)))
+  , Option (Proxy @(TestOption "private-key-path" (Maybe FilePath)))
+  , Option (Proxy @(TestOption "certificate-store-path" (Maybe FilePath)))
   ]

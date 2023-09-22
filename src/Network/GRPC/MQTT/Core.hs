@@ -77,7 +77,7 @@ import Network.MQTT.Client
     unsubscribe,
   )
 import Network.MQTT.Topic (Filter (unFilter))
-import Network.MQTT.Types (LastWill, ProtocolLevel (Protocol311), SubErr)
+import Network.MQTT.Types (LastWill, ProtocolLevel (Protocol50), SubErr)
 
 import Proto3.Suite (toLazyByteString)
 
@@ -129,7 +129,7 @@ defaultMGConfig =
     , _cleanSession = True
     , _lwt = Nothing
     , _msgCB = NoCallback
-    , _protocol = Protocol311
+    , _protocol = Protocol50
     , _connProps = []
     , _hostname = ""
     , _port = 1883

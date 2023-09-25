@@ -168,7 +168,7 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
             Just topics ->
               when (topicBase topics == baseTopic) do
                 index <- case props of
-                  [PropUserProperty "i" v] -> case Proto3.fromByteString @Int32 (toStrict v) of
+                  [PropUserProperty "i" v] -> case readEither @Int32 (decodeUtf8 v) of
                     Right i -> pure i
                     Left e -> do
                       Logger.logErr logger ("Failed to decode index: " <> show e)

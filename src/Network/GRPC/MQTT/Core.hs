@@ -206,6 +206,6 @@ mkIndexedPublish = do
           modifyTVar' indexVar (+ 1)
           pure i
 
-        publishq client topic message False QoS1 [PropUserProperty "i" (toLazyByteString index)]
+        publishq client topic message False QoS1 [PropUserProperty "i" (show index)]
 
   pure indexedPublish

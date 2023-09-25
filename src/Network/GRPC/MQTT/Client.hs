@@ -361,7 +361,7 @@ connectMQTTGRPC logger cfg = do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
               index <- case props of
-                [PropUserProperty "i" v] -> case fromByteString @Int32 (toStrict v) of
+                [PropUserProperty "i" v] -> case readEither @Int32 (decodeUtf8 v) of
                   Right i -> pure i
                   Left e -> do
                     logErr logger ("Failed to decode index: " <> show e)

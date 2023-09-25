@@ -44,7 +44,6 @@ import Network.GRPC.LowLevel.Op (WritesDone)
 import Network.MQTT.Client
   ( MQTTClient,
     MessageCallback (SimpleCallback),
-    Property (PropUserProperty),
     normalDisconnect,
     waitForClient,
   )
@@ -73,6 +72,7 @@ import Network.GRPC.MQTT.Core
     heartbeatPeriodSeconds,
     mkIndexedPublish,
     mqttPublishRateLimit,
+    readIndexFromProperties,
     subscribeOrThrow,
   )
 
@@ -167,15 +167,12 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                  in Logger.logErr logger logmsg
             Just topics ->
               when (topicBase topics == baseTopic) do
-                index <- case props of
-                  [PropUserProperty "i" v] -> case readEither @Int32 (decodeUtf8 v) of
-                    Right i -> pure i
-                    Left e -> do
-                      Logger.logErr logger ("Failed to decode index: " <> show e)
-                      return 0
-                  _ -> do
-                    Logger.logDebug logger ("ahhh, bad properties - RC: " <> show props)
-                    return 0
+                index <- case readIndexFromProperties props of
+                  Just i -> pure i
+                  Nothing -> do
+                    Logger.logDebug logger ("Failed to get index from properties: " <> show props)
+                    -- TODO: Probably don't just return 0...
+                    pure 0
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg

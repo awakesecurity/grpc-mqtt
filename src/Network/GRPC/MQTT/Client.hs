@@ -76,6 +76,7 @@ import Network.GRPC.MQTT.Core
     mkIndexedPublish,
     mqttMsgSizeLimit,
     mqttPublishRateLimit,
+    readIndexFromProperties,
     withSubscription,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
@@ -83,7 +84,6 @@ import Network.MQTT.Client
   ( MQTTClient,
     MQTTException,
     MessageCallback (SimpleCallback),
-    Property (PropUserProperty),
     QoS (QoS1),
     normalDisconnect,
     publishq,
@@ -360,16 +360,9 @@ connectMQTTGRPC logger cfg = do
             Just chan -> do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
-              index <- case props of
-                [PropUserProperty "i" v] -> case readEither @Int32 (decodeUtf8 v) of
-                  Right i -> pure i
-                  Left e -> do
-                    logErr logger ("Failed to decode index: " <> show e)
-                    return 0
-                _ -> do
-                  logDebug logger ("ahhh, bad properties - client: " <> show props)
-                  return 0
-              atomically $ writeOrderedTQueue chan (Indexed index (toStrict msg))
+              case readIndexFromProperties props of
+                Nothing -> logDebug logger ("Failed to get index from properties: " <> show props)
+                Just i -> atomically $ writeOrderedTQueue chan (Indexed i (toStrict msg))
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

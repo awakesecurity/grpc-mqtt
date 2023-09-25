@@ -21,6 +21,7 @@ module Network.GRPC.MQTT.Core
     withSubscription,
     Publisher,
     mkIndexedPublish,
+    readIndexFromProperties,
   )
 where
 
@@ -207,3 +208,14 @@ mkIndexedPublish = do
         publishq client topic message False QoS1 [PropUserProperty "i" (show index)]
 
   pure indexedPublish
+
+readIndexFromProperties :: [Property] -> Maybe Int32
+readIndexFromProperties props = do
+  v <- listToMaybe do
+    PropUserProperty "i" v <- props
+    pure (decodeUtf8 v)
+  readMaybe v
+
+-- isUserProperty k = \case
+--   PropUserProperty k' _ | k == k' -> True
+--   _ -> False

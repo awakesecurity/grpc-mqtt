@@ -20,11 +20,7 @@ import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
 
 import Control.Concurrent.Async (concurrently)
 
-import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    newOrderedTQueueIO,
-    writeOrderedTQueue,
-  )
+import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
 
 import Relude hiding (reader)
 
@@ -34,6 +30,7 @@ import Network.GRPC.MQTT.Message (Request, WireDecodeError)
 import Network.GRPC.MQTT.Message.Request qualified as Request
 
 import Proto3.Wire.Decode qualified as Decode
+import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
 
 --------------------------------------------------------------------------------
 
@@ -64,12 +61,7 @@ propRequestHandle = property do
   let reader :: ExceptT WireDecodeError IO (Request ByteString)
       reader = Request.makeRequestReader queue
 
-  indexVar <- newTVarIO (0 :: Int32)
-
-  let indexedSend x = atomically do
-        i <- readTVar indexVar
-        modifyTVar' indexVar (+ 1)
-        writeOrderedTQueue queue (Indexed i x)
+  indexedSend <- mkIndexedSend queue
 
   let sender :: Request ByteString -> IO ()
       sender = Request.makeRequestSender maxsize Nothing indexedSend

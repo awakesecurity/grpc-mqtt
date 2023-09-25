@@ -28,11 +28,7 @@ import Control.Concurrent.STM.TQueue
     writeTQueue,
   )
 
-import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    newOrderedTQueueIO,
-    writeOrderedTQueue,
-  )
+import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
 
 import Relude hiding (reader)
 
@@ -47,6 +43,7 @@ import Data.Fixed (Fixed (MkFixed), Pico)
 import Data.Time.Clock (diffUTCTime, getCurrentTime, nominalDiffTimeToSeconds)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
+import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
 
 --------------------------------------------------------------------------------
 
@@ -83,12 +80,7 @@ propPacketHandle = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexVar <- newTVarIO (0 :: Int32)
-
-  let indexedSend x = atomically do
-        i <- readTVar indexVar
-        modifyTVar' indexVar (+ 1)
-        writeOrderedTQueue queue (Indexed i x)
+  indexedSend <- mkIndexedSend queue
 
   let sender :: ByteString -> IO ()
       sender = Packet.makePacketSender maxsize Nothing indexedSend
@@ -127,12 +119,7 @@ propPacketHandleOrder = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexVar <- newTVarIO (0 :: Int32)
-
-  let indexedSend x = atomically do
-        i <- readTVar indexVar
-        modifyTVar' indexVar (+ 1)
-        writeOrderedTQueue queue (Indexed i x)
+  indexedSend <- mkIndexedSend queue
 
   let sender :: IO ()
       sender =
@@ -179,12 +166,7 @@ propPacketRateLimit = Hedgehog.withTests 20 $ property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexVar <- newTVarIO (0 :: Int32)
-
-  let indexedSend x = atomically do
-        i <- readTVar indexVar
-        modifyTVar' indexVar (+ 1)
-        writeOrderedTQueue queue (Indexed i x)
+  indexedSend <- mkIndexedSend queue
 
   let sender :: ByteString -> IO ()
       sender = Packet.makePacketSender maxsize (Just rateLimit) indexedSend

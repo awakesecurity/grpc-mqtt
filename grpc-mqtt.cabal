@@ -155,8 +155,8 @@ test-suite test
     -fregs-iterative
 
   other-modules:
-    Proto.Service
     Proto.Message
+    Proto.Service
     Test.Network.GRPC.HighLevel.Extra
     Test.Network.GRPC.HighLevel.Extra.Gen
     Test.Network.GRPC.MQTT
@@ -167,17 +167,18 @@ test-suite test
     Test.Network.GRPC.MQTT.Message.Packet
     Test.Network.GRPC.MQTT.Message.Request
     Test.Network.GRPC.MQTT.Message.Stream
+    Test.Network.GRPC.MQTT.Message.Utils
     Test.Network.GRPC.MQTT.Option
     Test.Network.GRPC.MQTT.Option.CLevel
     Test.Network.GRPC.MQTT.Option.Gen
     Test.Network.GRPC.MQTT.Serial
+    Test.Proto.Clients
+    Test.Proto.RemoteClients
+    Test.Proto.Service
     Test.Service
     Test.Suite.Config
     Test.Suite.Fixture
     Test.Suite.Wire
-    Test.Proto.Clients
-    Test.Proto.RemoteClients
-    Test.Proto.Service
 
   -- Oddly, adding this build-tool-depends can cause us to select the
   -- wrong version of the proto3-suite library when building sources.

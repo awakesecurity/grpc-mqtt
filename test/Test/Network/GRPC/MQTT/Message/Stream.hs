@@ -22,11 +22,7 @@ import Test.Suite.Wire qualified as Test.Wire
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (concurrently)
-import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    newOrderedTQueueIO,
-    writeOrderedTQueue,
-  )
+import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
 
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
@@ -41,6 +37,7 @@ import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
+import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
 
 --------------------------------------------------------------------------------
 
@@ -112,12 +109,9 @@ mockHandleStream encodeOptions decodeOptions = do
   limit <- forAll (Message.Gen.streamChunkLength chunks)
   queue <- Hedgehog.evalIO (newOrderedTQueueIO @ByteString)
 
-  indexVar <- newTVarIO (0 :: Int32)
+  indexedSend <- mkIndexedSend queue
 
-  (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions \x -> atomically do
-    i <- readTVar indexVar
-    modifyTVar' indexVar (+ 1)
-    writeOrderedTQueue queue (Indexed i x)
+  (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions indexedSend
 
   reader <- makeStreamReader queue decodeOptions
 

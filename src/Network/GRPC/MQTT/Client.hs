@@ -90,7 +90,7 @@ import Network.MQTT.Client
   )
 import Network.MQTT.Topic (Topic (unTopic), mkTopic, toFilter)
 
-import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message, fromByteString)
+import Proto3.Suite (Enumerated (Enumerated), HasDefault, Message)
 import Proto3.Suite qualified as Proto3
 
 import Relude hiding (reader)
@@ -227,7 +227,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         Request.makeRequestSender
           packetSizeLimit
           publishRateLimit
-          (\x -> publisher mqttClient requestTopic (fromStrict x))
+          (publisher mqttClient requestTopic . fromStrict)
           (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
         withControlSignals (publishControl controlTopic) . exceptToResult $ do

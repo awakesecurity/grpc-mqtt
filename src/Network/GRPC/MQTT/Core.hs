@@ -79,8 +79,6 @@ import Network.MQTT.Client
 import Network.MQTT.Topic (Filter (unFilter))
 import Network.MQTT.Types (LastWill, ProtocolLevel (Protocol50), SubErr)
 
-import Proto3.Suite (toLazyByteString)
-
 import Relude
 
 --------------------------------------------------------------------------------

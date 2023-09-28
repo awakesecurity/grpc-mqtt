@@ -325,7 +325,7 @@ withControlSignals publishControlMsg =
     withMQTTHeartbeat :: IO a -> IO a
     withMQTTHeartbeat action =
       Async.withAsync
-        (forever (publishControlMsg AuxControlAlive >> sleep heartbeatPeriodSeconds))
+        (forever (sleep heartbeatPeriodSeconds >> publishControlMsg AuxControlAlive))
         (const action)
 
     sendTerminateOnException :: IO a -> IO a

@@ -190,6 +190,7 @@ test-suite test
 
   build-depends:
     , connection
+    , containers
     , data-default
     , grpc-mqtt
     , hedgehog
@@ -198,4 +199,4 @@ test-suite test
     , tasty-hunit
     , tls
     , uuid
-    , containers
+    , x509-store

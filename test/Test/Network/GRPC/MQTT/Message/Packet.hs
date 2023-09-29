@@ -119,7 +119,7 @@ propPacketHandleOrder = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexedSend <- mkIndexedSend queue
+  indexedSend <- Hedgehog.evalIO $ mkIndexedSend queue
 
   let sender :: IO ()
       sender =

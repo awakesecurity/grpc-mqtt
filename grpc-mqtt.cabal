@@ -130,13 +130,13 @@ library
     , ghc-prim             >= 0.6.1  && < 0.7
     , network-conduit-tls  >= 1.3.2  && < 1.4
     , nonce                >= 1.0.7  && < 1.1
+    , pqueue
     , safe-exceptions      >= 0.1.7  && < 0.2
     , template-haskell     >= 2.16.0 && < 2.17
     , unliftio             >= 0.2.15 && < 0.3
     , unliftio-core        >= 0.2.0  && < 0.3
     , unordered-containers >= 0.2.13 && < 0.3
     , zstd                 >= 0.1.2  && < 0.2
-    , sorted-list
 
 -- cabal v2-test +RTS -N4 -I2 -qb -qg -RTS
 test-suite test
@@ -172,6 +172,7 @@ test-suite test
     Test.Network.GRPC.MQTT.Option.CLevel
     Test.Network.GRPC.MQTT.Option.Gen
     Test.Network.GRPC.MQTT.Serial
+    Test.Network.GRPC.MQTT.OrderedTQueue
     Test.Proto.Clients
     Test.Proto.RemoteClients
     Test.Proto.Service

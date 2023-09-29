@@ -9,14 +9,14 @@
 -- Definitions for the 'OrderedTQueue' container.
 --
 -- @since 1.0.0
-module Control.Concurrent.OrderedTQueue3 where
+module Control.Concurrent.OrderedTQueue where
 
 --------------------------------------------------------------------------------
 
 import Relude
 
 import Control.Concurrent.STM (retry)
-import Data.PQueue.Min
+import Data.PQueue.Min (MinQueue, insert, minView)
 
 data Indexed a = Indexed
   { idx :: !Int32
@@ -29,7 +29,7 @@ instance Eq (Indexed a) where
 instance Ord (Indexed a) where
   (<=) = (<=) `on` idx
 
-data OrderedTQueue a = OrderedTQueue (TVar Int32) (TVar (MinQueue (Indexed a)))
+data OrderedTQueue a = OrderedTQueue !(TVar Int32) !(TVar (MinQueue (Indexed a)))
 
 newOrderedTQueue :: STM (OrderedTQueue a)
 newOrderedTQueue =

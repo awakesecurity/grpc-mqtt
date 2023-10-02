@@ -20,12 +20,14 @@ module Network.GRPC.MQTT.Core
     subscribeOrThrow,
     withSubscription,
     Publisher,
-    mkIndexedPublish,
+    mkSequencedPublish,
     readIndexFromProperties,
   )
 where
 
 --------------------------------------------------------------------------------
+
+import Control.Concurrent.OrderedTQueue (SequenceId (SequenceId, Unordered))
 
 import Control.Exception (bracket_, throw)
 
@@ -195,11 +197,11 @@ withSubscription client topics =
     (unsubscribe client topics [])
 
 type Publisher = MQTTClient -> Topic -> LByteString -> IO ()
-mkIndexedPublish :: MonadIO m => m (MQTTClient -> Topic -> LByteString -> IO ())
-mkIndexedPublish = do
-  indexVar <- newTVarIO (0 :: Int32)
+mkSequencedPublish :: MonadIO m => m (MQTTClient -> Topic -> LByteString -> IO ())
+mkSequencedPublish = do
+  indexVar <- newTVarIO (0 :: Natural)
 
-  let indexedPublish client topic message = do
+  let sequencedPublish client topic message = do
         index <- atomically do
           i <- readTVar indexVar
           modifyTVar' indexVar (+ 1)
@@ -207,10 +209,10 @@ mkIndexedPublish = do
 
         publishq client topic message False QoS1 [PropUserProperty "i" (show index)]
 
-  pure indexedPublish
+  pure sequencedPublish
 
-readIndexFromProperties :: [Property] -> Maybe Int32
-readIndexFromProperties props = do
+readIndexFromProperties :: [Property] -> SequenceId
+readIndexFromProperties props = maybe Unordered SequenceId do
   v <- listToMaybe do
     PropUserProperty "i" v <- props
     pure (decodeUtf8 v)

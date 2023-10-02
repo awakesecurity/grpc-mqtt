@@ -30,7 +30,7 @@ import Network.GRPC.MQTT.Message (Request, WireDecodeError)
 import Network.GRPC.MQTT.Message.Request qualified as Request
 
 import Proto3.Wire.Decode qualified as Decode
-import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
+import Test.Network.GRPC.MQTT.Message.Utils (mkSequencedSend)
 
 --------------------------------------------------------------------------------
 
@@ -61,7 +61,7 @@ propRequestHandle = property do
   let reader :: ExceptT WireDecodeError IO (Request ByteString)
       reader = Request.makeRequestReader queue
 
-  indexedSend <- mkIndexedSend queue
+  indexedSend <- mkSequencedSend queue
 
   let sender :: Request ByteString -> IO ()
       sender = Request.makeRequestSender maxsize Nothing indexedSend

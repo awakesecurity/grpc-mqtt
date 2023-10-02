@@ -41,8 +41,8 @@ import Control.Exception
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    OrderedTQueue,
+  ( OrderedTQueue,
+    Sequenced (..),
     newOrderedTQueueIO,
     writeOrderedTQueue,
   )
@@ -73,7 +73,7 @@ import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (_msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
-    mkIndexedPublish,
+    mkSequencedPublish,
     mqttMsgSizeLimit,
     mqttPublishRateLimit,
     readIndexFromProperties,
@@ -206,7 +206,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
-    publisher <- mkIndexedPublish
+    publisher <- mkSequencedPublish
 
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
@@ -360,9 +360,8 @@ connectMQTTGRPC logger cfg = do
             Just chan -> do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
-              case readIndexFromProperties props of
-                Nothing -> logDebug logger ("Failed to get index from properties: " <> show props)
-                Just i -> atomically $ writeOrderedTQueue chan (Indexed i (toStrict msg))
+              let index = readIndexFromProperties props
+              atomically $ writeOrderedTQueue chan (Sequenced index (toStrict msg))
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

@@ -23,8 +23,8 @@ where
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    OrderedTQueue,
+  ( OrderedTQueue,
+    Sequenced (..),
     writeOrderedTQueue,
   )
 
@@ -70,7 +70,7 @@ import Network.GRPC.MQTT.Core
     Publisher,
     connectMQTT,
     heartbeatPeriodSeconds,
-    mkIndexedPublish,
+    mkSequencedPublish,
     mqttPublishRateLimit,
     readIndexFromProperties,
     subscribeOrThrow,
@@ -167,12 +167,7 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                  in Logger.logErr logger logmsg
             Just topics ->
               when (topicBase topics == baseTopic) do
-                index <- case readIndexFromProperties props of
-                  Just i -> pure i
-                  Nothing -> do
-                    Logger.logDebug logger ("Failed to get index from properties: " <> show props)
-                    -- TODO: Probably don't just return 0...
-                    pure 0
+                let index = readIndexFromProperties props
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
@@ -183,9 +178,9 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                 let session :: Session ()
                     session = case sessionHandle of
                       Just handle -> liftIO do
-                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Indexed index (toStrict msg)))
+                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                       Nothing -> withSession \handle -> liftIO do
-                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Indexed index (toStrict msg)))
+                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                         handleNewSession config handle
                  in runSessionIO session config
 
@@ -243,7 +238,7 @@ handleControlMessage RemoteClientLogger{logger} handle msg =
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   let queue = hdlRqtQueue handle
-  publisher <- mkIndexedPublish
+  publisher <- mkSequencedPublish
   runExceptT (Request.makeRequestReader queue) >>= \case
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)

@@ -13,9 +13,11 @@ import Hedgehog (Property, forAll, property, (===))
 import Hedgehog qualified
 
 import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
+  ( SequenceId (SequenceId, Unordered),
+    Sequenced (Sequenced),
     newOrderedTQueueIO,
     readOrderedTQueue,
+    val,
     writeOrderedTQueue,
   )
 import Hedgehog.Gen qualified as Gen
@@ -28,21 +30,48 @@ tests =
   testGroup
     "Network.GRPC.MQTT.OrderedTQueue"
     [ testProperty "Order" orderMaintained
+    , testProperty "Unordered" unorderedRespected
     ]
 
 orderMaintained :: Property
 orderMaintained = property do
   queue <- Hedgehog.evalIO newOrderedTQueueIO
 
-  n <- forAll $ Gen.int32 (Range.linear 0 1_000)
+  n <- forAll $ Gen.int (Range.linear 0 1_000)
 
-  let messages :: [Indexed Int]
-      messages = zipWith Indexed [0 .. n] [0 ..]
+  let messages :: [Sequenced Int]
+      messages = zipWith Sequenced (SequenceId <$> [0 ..]) [0 .. n]
 
   shuffledMessages <- forAll $ Gen.shuffle messages
 
   atomically $ traverse_ (writeOrderedTQueue queue) shuffledMessages
 
-  receivedMessages <- atomically $ replicateM (fromIntegral n + 1) (readOrderedTQueue queue)
+  receivedMessages <- atomically $ replicateM (length shuffledMessages) (readOrderedTQueue queue)
 
-  receivedMessages === [x | Indexed _ x <- messages]
+  receivedMessages === (val <$> messages)
+
+unorderedRespected :: Property
+unorderedRespected = property do
+  queue <- Hedgehog.evalIO newOrderedTQueueIO
+
+  n <- forAll $ Gen.int (Range.linear 0 1_000)
+
+  let messages :: [Sequenced Int]
+      messages = zipWith Sequenced (SequenceId <$> [0 ..]) [0 .. n]
+
+  let unorderedMsgs = fmap (Sequenced Unordered) [0 .. n]
+
+  shuffledMessages <- forAll $ Gen.shuffle messages
+
+  let interlacedShuffledMessages = interlace shuffledMessages unorderedMsgs
+
+  atomically $ traverse_ (writeOrderedTQueue queue) interlacedShuffledMessages
+
+  receivedMessages <- atomically $ replicateM (length interlacedShuffledMessages) (readOrderedTQueue queue)
+
+  -- All unordered should be pushed to the front but still be in FIFO order
+  receivedMessages === fmap val (unorderedMsgs ++ messages)
+  where
+    interlace [] ys = ys
+    interlace xs [] = xs
+    interlace (x : xs) (y : ys) = x : y : interlace xs ys

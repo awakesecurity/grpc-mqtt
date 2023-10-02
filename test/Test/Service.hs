@@ -163,7 +163,7 @@ testCallLongBytes = do
           -- requests that send responses which, when sent back by the
           -- server trigger a GRPCIOTimeout error in some of the clients.
           let msg = Message.OneInt 64
-          let rqt = GRPC.MQTT.MQTTNormalRequest msg 300 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
+          let rqt = GRPC.MQTT.MQTTNormalRequest msg 30 (GRPC.Client.MetadataMap (Map.fromList [("rqt-uuid", [UUID.toASCIIBytes uuid])]))
 
           testServicecallLongBytes (testServiceMqttClient client baseTopic) rqt
 

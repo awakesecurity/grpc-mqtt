@@ -37,7 +37,7 @@ import Network.GRPC.MQTT.Message.Stream qualified as Stream
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
-import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
+import Test.Network.GRPC.MQTT.Message.Utils (mkSequencedSend)
 
 --------------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ mockHandleStream encodeOptions decodeOptions = do
   limit <- forAll (Message.Gen.streamChunkLength chunks)
   queue <- Hedgehog.evalIO (newOrderedTQueueIO @ByteString)
 
-  indexedSend <- mkIndexedSend queue
+  indexedSend <- mkSequencedSend queue
 
   (sender, done) <- makeStreamBatchSender @_ @IO limit Nothing encodeOptions indexedSend
 

@@ -43,7 +43,7 @@ import Data.Fixed (Fixed (MkFixed), Pico)
 import Data.Time.Clock (diffUTCTime, getCurrentTime, nominalDiffTimeToSeconds)
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
-import Test.Network.GRPC.MQTT.Message.Utils (mkIndexedSend)
+import Test.Network.GRPC.MQTT.Message.Utils (mkSequencedSend)
 
 --------------------------------------------------------------------------------
 
@@ -80,7 +80,7 @@ propPacketHandle = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexedSend <- mkIndexedSend queue
+  indexedSend <- mkSequencedSend queue
 
   let sender :: ByteString -> IO ()
       sender = Packet.makePacketSender maxsize Nothing indexedSend
@@ -119,7 +119,7 @@ propPacketHandleOrder = property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexedSend <- Hedgehog.evalIO $ mkIndexedSend queue
+  indexedSend <- Hedgehog.evalIO $ mkSequencedSend queue
 
   let sender :: IO ()
       sender =
@@ -166,7 +166,7 @@ propPacketRateLimit = Hedgehog.withTests 20 $ property do
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
 
-  indexedSend <- mkIndexedSend queue
+  indexedSend <- mkSequencedSend queue
 
   let sender :: ByteString -> IO ()
       sender = Packet.makePacketSender maxsize (Just rateLimit) indexedSend

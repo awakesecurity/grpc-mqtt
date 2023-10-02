@@ -3,18 +3,24 @@ module Test.Network.GRPC.MQTT.Message.Utils where
 import Relude
 
 import Control.Concurrent.OrderedTQueue
-  ( Indexed (Indexed),
-    OrderedTQueue,
+  ( OrderedTQueue,
+    SequenceId (SequenceId, Unordered),
+    Sequenced (..),
     writeOrderedTQueue,
   )
 
-mkIndexedSend :: (MonadIO m1, MonadIO m2) => OrderedTQueue a -> m1 (a -> m2 ())
-mkIndexedSend queue = do
-  indexVar <- newTVarIO (0 :: Int32)
+mkSequencedSend :: (MonadIO m1, MonadIO m2) => OrderedTQueue a -> m1 (a -> m2 ())
+mkSequencedSend queue = do
+  indexVar <- newTVarIO (0 :: Natural)
 
   let indexedSend x = atomically do
         i <- readTVar indexVar
         modifyTVar' indexVar (+ 1)
-        writeOrderedTQueue queue (Indexed i x)
+        writeOrderedTQueue queue (Sequenced (SequenceId i) x)
 
   pure indexedSend
+
+mkUnorderedSend :: (MonadIO m1, MonadIO m2) => OrderedTQueue a -> m1 (a -> m2 ())
+mkUnorderedSend queue = do
+  let unorderedSend x = atomically $ writeOrderedTQueue queue (Sequenced Unordered x)
+  pure unorderedSend

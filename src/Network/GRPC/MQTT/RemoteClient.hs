@@ -22,10 +22,10 @@ where
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.OrderedTQueue
-  ( OrderedTQueue,
+import Control.Concurrent.TOrderedQueue
+  ( TOrderedQueue,
     Sequenced (..),
-    writeOrderedTQueue,
+    writeTOrderedQueue,
   )
 
 import Control.Exception (bracket, throwIO)
@@ -179,9 +179,9 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                 let session :: Session ()
                     session = case sessionHandle of
                       Just handle -> liftIO do
-                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
+                        atomically (writeTOrderedQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                       Nothing -> withSession \handle -> liftIO do
-                        atomically (writeOrderedTQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
+                        atomically (writeTOrderedQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                         handleNewSession config handle
                  in runSessionIO session config
 
@@ -372,7 +372,7 @@ handleWritesDone options done =
 ---------------------------------------------------------------------------------
 
 makeServerStreamSender ::
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireEncodeOptions ->
   WireDecodeOptions ->
   StreamSend ByteString ->
@@ -426,7 +426,7 @@ makeServerStreamReader options recv = do
 
 makeClientStreamReader ::
   (MonadError RemoteError m, MonadIO m) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   Session (m (Maybe ByteString))
 makeClientStreamReader queue options = do
@@ -447,7 +447,7 @@ makeClientStreamReader queue options = do
             Right rx -> pure rx
 
 makeClientStreamSender ::
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   ProtoOptions ->
   StreamSend ByteString ->
   Session ()

@@ -109,9 +109,9 @@ import System.Timeout qualified as System
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
-import Control.Concurrent.OrderedTQueue
-  ( OrderedTQueue,
-    newOrderedTQueueIO,
+import Control.Concurrent.TOrderedQueue
+  ( TOrderedQueue,
+    newTOrderedQueueIO,
   )
 
 import Network.GRPC.MQTT.Core (Publisher)
@@ -322,7 +322,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtQueue :: OrderedTQueue ByteString
+  , hdlRqtQueue :: TOrderedQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
 
@@ -332,7 +332,7 @@ data SessionHandle = SessionHandle
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
   SessionHandle thread
-    <$> newOrderedTQueueIO
+    <$> newTOrderedQueueIO
     <*> newTMVarIO ()
 
 -- | TODO

@@ -31,7 +31,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.OrderedTQueue (OrderedTQueue)
+import Control.Concurrent.TOrderedQueue (TOrderedQueue)
 
 import Control.Concurrent.STM.TQueue (TQueue, isEmptyTQueue, readTQueue)
 
@@ -127,7 +127,7 @@ wireUnwrapStreamChunk options bytes =
 makeStreamReader ::
   forall io m.
   (MonadIO io, MonadError RemoteError m, MonadIO m) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   io (m (Maybe ByteString))
 makeStreamReader source options = do
@@ -163,7 +163,7 @@ makeStreamReader source options = do
 
 runStreamChunkRead ::
   (MonadIO m, MonadError RemoteError m) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   m (Maybe (Vector ByteString))
 runStreamChunkRead channel options = do

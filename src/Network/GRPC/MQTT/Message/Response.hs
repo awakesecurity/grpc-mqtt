@@ -31,7 +31,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.OrderedTQueue (OrderedTQueue)
+import Control.Concurrent.TOrderedQueue (TOrderedQueue)
 import Control.Monad.Except (MonadError, throwError)
 
 import Data.Traversable (for)
@@ -284,7 +284,7 @@ makeErrorResponseSender publisher client topic packetSizeLimit rateLimit options
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'Normal a)
 makeNormalResponseReader channel options = do
@@ -294,7 +294,7 @@ makeNormalResponseReader channel options = do
 
 makeClientResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ClientStreaming a)
 makeClientResponseReader channel options = do
@@ -304,7 +304,7 @@ makeClientResponseReader channel options = do
 
 makeServerResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'ServerStreaming a)
 makeServerResponseReader channel options = do
@@ -314,7 +314,7 @@ makeServerResponseReader channel options = do
 
 makeBiDiResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>
-  OrderedTQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   m (MQTTResult 'BiDiStreaming a)
 makeBiDiResponseReader channel options =

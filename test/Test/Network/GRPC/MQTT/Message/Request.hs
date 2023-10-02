@@ -20,7 +20,7 @@ import Test.Network.GRPC.MQTT.Message.Gen qualified as Message.Gen
 
 import Control.Concurrent.Async (concurrently)
 
-import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
+import Control.Concurrent.TOrderedQueue (newTOrderedQueueIO)
 
 import Relude hiding (reader)
 
@@ -54,7 +54,7 @@ propRequestWire = property do
 
 propRequestHandle :: Property
 propRequestHandle = property do
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
   request <- forAll Message.Gen.request
   maxsize <- forAll (Message.Gen.packetSplitLength (Request.message request))
 

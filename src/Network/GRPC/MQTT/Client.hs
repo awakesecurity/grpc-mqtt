@@ -40,11 +40,11 @@ import Control.Exception
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.OrderedTQueue
-  ( OrderedTQueue,
+import Control.Concurrent.TOrderedQueue
+  ( TOrderedQueue,
     Sequenced (..),
-    newOrderedTQueueIO,
-    writeOrderedTQueue,
+    newTOrderedQueueIO,
+    writeTOrderedQueue,
   )
 
 import Control.Monad.Except (throwError, withExceptT)
@@ -149,7 +149,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | 'TQueue' for passing MQTT messages back to calling thread
-    responseQueues :: IORef (Map Topic (OrderedTQueue ByteString))
+    responseQueues :: IORef (Map Topic (TOrderedQueue ByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -189,7 +189,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    responseQueue <- newOrderedTQueueIO
+    responseQueue <- newTOrderedQueueIO
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
@@ -295,7 +295,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
               Response.makeBiDiResponseReader responseQueue decodeOptions
   where
     makeMetadataMapReader ::
-      OrderedTQueue ByteString ->
+      TOrderedQueue ByteString ->
       ExceptT RemoteError IO MetadataMap
     makeMetadataMapReader queue = do
       bytes <- runExceptT (Packet.makePacketReader queue)
@@ -347,7 +347,7 @@ withControlSignals publishControlMsg =
 -- @since 1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
-  queues <- newIORef (Map.empty @Topic @(OrderedTQueue ByteString))
+  queues <- newIORef (Map.empty @Topic @(TOrderedQueue ByteString))
   uuid <- Nonce.new
 
   let clientCallback :: MessageCallback
@@ -361,7 +361,7 @@ connectMQTTGRPC logger cfg = do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
               let index = readIndexFromProperties props
-              atomically $ writeOrderedTQueue chan (Sequenced index (toStrict msg))
+              atomically $ writeTOrderedQueue chan (Sequenced index (toStrict msg))
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

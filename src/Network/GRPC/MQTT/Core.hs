@@ -27,7 +27,7 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.OrderedTQueue (SequenceId (SequenceId, Unordered))
+import Control.Concurrent.TOrderedQueue (SequenceId (SequenceId, Unordered))
 
 import Control.Exception (bracket_, throw)
 

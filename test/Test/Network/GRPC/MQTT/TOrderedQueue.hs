@@ -1,4 +1,4 @@
-module Test.Network.GRPC.MQTT.OrderedTQueue
+module Test.Network.GRPC.MQTT.TOrderedQueue
   ( -- * Test Tree
     tests,
   )
@@ -12,13 +12,13 @@ import Relude
 import Hedgehog (Property, forAll, property, (===))
 import Hedgehog qualified
 
-import Control.Concurrent.OrderedTQueue
+import Control.Concurrent.TOrderedQueue
   ( SequenceId (SequenceId, Unordered),
     Sequenced (Sequenced),
-    newOrderedTQueueIO,
-    readOrderedTQueue,
+    newTOrderedQueueIO,
+    readTOrderedQueue,
     val,
-    writeOrderedTQueue,
+    writeTOrderedQueue,
   )
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -28,14 +28,14 @@ import Test.Tasty.Hedgehog (testProperty)
 tests :: TestTree
 tests =
   testGroup
-    "Network.GRPC.MQTT.OrderedTQueue"
+    "Network.GRPC.MQTT.TOrderedQueue"
     [ testProperty "Order" orderMaintained
     , testProperty "Unordered" unorderedRespected
     ]
 
 orderMaintained :: Property
 orderMaintained = property do
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
 
   n <- forAll $ Gen.int (Range.linear 0 1_000)
 
@@ -44,15 +44,15 @@ orderMaintained = property do
 
   shuffledMessages <- forAll $ Gen.shuffle messages
 
-  atomically $ traverse_ (writeOrderedTQueue queue) shuffledMessages
+  atomically $ traverse_ (writeTOrderedQueue queue) shuffledMessages
 
-  receivedMessages <- atomically $ replicateM (length shuffledMessages) (readOrderedTQueue queue)
+  receivedMessages <- atomically $ replicateM (length shuffledMessages) (readTOrderedQueue queue)
 
   receivedMessages === (val <$> messages)
 
 unorderedRespected :: Property
 unorderedRespected = property do
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
 
   n <- forAll $ Gen.int (Range.linear 0 1_000)
 
@@ -65,9 +65,9 @@ unorderedRespected = property do
 
   let interlacedShuffledMessages = interlace shuffledMessages unorderedMsgs
 
-  atomically $ traverse_ (writeOrderedTQueue queue) interlacedShuffledMessages
+  atomically $ traverse_ (writeTOrderedQueue queue) interlacedShuffledMessages
 
-  receivedMessages <- atomically $ replicateM (length interlacedShuffledMessages) (readOrderedTQueue queue)
+  receivedMessages <- atomically $ replicateM (length interlacedShuffledMessages) (readTOrderedQueue queue)
 
   -- All unordered should be pushed to the front but still be in FIFO order
   receivedMessages === fmap val (unorderedMsgs ++ messages)

@@ -76,7 +76,7 @@ library
     src
 
   exposed-modules:
-    Control.Concurrent.OrderedTQueue
+    Control.Concurrent.TOrderedQueue
     Network.GRPC.HighLevel.Extra
     Network.GRPC.MQTT
     Network.GRPC.MQTT.Client
@@ -172,7 +172,7 @@ test-suite test
     Test.Network.GRPC.MQTT.Option.CLevel
     Test.Network.GRPC.MQTT.Option.Gen
     Test.Network.GRPC.MQTT.Serial
-    Test.Network.GRPC.MQTT.OrderedTQueue
+    Test.Network.GRPC.MQTT.TOrderedQueue
     Test.Proto.Clients
     Test.Proto.RemoteClients
     Test.Proto.Service

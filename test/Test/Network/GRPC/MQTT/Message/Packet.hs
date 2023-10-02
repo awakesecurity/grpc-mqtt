@@ -28,7 +28,7 @@ import Control.Concurrent.STM.TQueue
     writeTQueue,
   )
 
-import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
+import Control.Concurrent.TOrderedQueue (newTOrderedQueueIO)
 
 import Relude hiding (reader)
 
@@ -75,7 +75,7 @@ propPacketHandle :: Property
 propPacketHandle = property do
   message <- forAll Message.Gen.packetBytes
   maxsize <- forAll (Message.Gen.packetSplitLength message)
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
 
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue
@@ -94,7 +94,7 @@ propPacketHandleOrder :: Property
 propPacketHandleOrder = property do
   message <- forAll Message.Gen.packetBytes
   maxsize <- forAll (Message.Gen.packetSplitLength message)
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
 
   let maxPayloadSize :: Word32
       maxPayloadSize = max 1 (maxsize - Packet.minPacketSize)
@@ -161,7 +161,7 @@ propPacketRateLimit = Hedgehog.withTests 20 $ property do
       rateLimitRange = Range.linear (fromIntegral maxsize) (fromIntegral messageLength)
   rateLimit <- forAll (Gen.integral_ rateLimitRange)
 
-  queue <- Hedgehog.evalIO newOrderedTQueueIO
+  queue <- Hedgehog.evalIO newTOrderedQueueIO
 
   let reader :: ExceptT ParseError IO ByteString
       reader = Packet.makePacketReader queue

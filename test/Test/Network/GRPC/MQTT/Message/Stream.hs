@@ -22,7 +22,7 @@ import Test.Suite.Wire qualified as Test.Wire
 --------------------------------------------------------------------------------
 
 import Control.Concurrent.Async (concurrently)
-import Control.Concurrent.OrderedTQueue (newOrderedTQueueIO)
+import Control.Concurrent.TOrderedQueue (newTOrderedQueueIO)
 
 import Data.Vector (Vector)
 import Data.Vector qualified as Vector
@@ -107,7 +107,7 @@ mockHandleStream :: WireEncodeOptions -> WireDecodeOptions -> PropertyT IO ()
 mockHandleStream encodeOptions decodeOptions = do
   chunks <- forAll Message.Gen.streamChunk
   limit <- forAll (Message.Gen.streamChunkLength chunks)
-  queue <- Hedgehog.evalIO (newOrderedTQueueIO @ByteString)
+  queue <- Hedgehog.evalIO (newTOrderedQueueIO @ByteString)
 
   indexedSend <- mkSequencedSend queue
 

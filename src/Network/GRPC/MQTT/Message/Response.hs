@@ -51,9 +51,6 @@ import Network.GRPC.HighLevel.Client
     GRPCMethodType (BiDiStreaming, ClientStreaming, Normal, ServerStreaming),
   )
 
-import Network.MQTT.Client (MQTTClient)
-import Network.MQTT.Topic (Topic)
-
 import Proto3.Suite.Class (Message)
 
 import Relude
@@ -249,38 +246,28 @@ unwrapBiDiStreamResponse options =
 makeResponseSender ::
   MonadUnliftIO m =>
   Publisher ->
-  MQTTClient ->
-  Topic ->
   Word32 ->
   Maybe Natural ->
   WireEncodeOptions ->
   RemoteResult s ->
   m ()
-makeResponseSender publisher client topic packetSizeLimit rateLimit options response =
+makeResponseSender publish packetSizeLimit rateLimit options response =
   let message :: ByteString
       message = wireEncodeResponse options response
    in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
-  where
-    publish :: ByteString -> IO ()
-    publish bytes = publisher client topic (fromStrict bytes)
 
 makeErrorResponseSender ::
   MonadUnliftIO m =>
   Publisher ->
-  MQTTClient ->
-  Topic ->
   Word32 ->
   Maybe Natural ->
   WireEncodeOptions ->
   RemoteError ->
   m ()
-makeErrorResponseSender publisher client topic packetSizeLimit rateLimit options err = do
+makeErrorResponseSender publish packetSizeLimit rateLimit options err = do
   let message :: ByteString
       message = wireEncodeErrorResponse options err
    in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
-  where
-    publish :: ByteString -> IO ()
-    publish bytes = publisher client topic (fromStrict bytes)
 
 makeNormalResponseReader ::
   (MonadIO m, MonadError RemoteError m, Message a) =>

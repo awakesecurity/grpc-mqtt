@@ -23,8 +23,8 @@ where
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.TOrderedQueue
-  ( TOrderedQueue,
-    Sequenced (..),
+  ( Sequenced (..),
+    TOrderedQueue,
     writeTOrderedQueue,
   )
 
@@ -93,7 +93,6 @@ import Network.GRPC.MQTT.RemoteClient.Session
   ( Session,
     SessionConfig
       ( SessionConfig,
-        cfgClient,
         cfgLogger,
         cfgMsgSize,
         cfgPublisher,
@@ -103,7 +102,6 @@ import Network.GRPC.MQTT.RemoteClient.Session
     SessionTopic (topicBase, topicSid),
     askMethod,
     askMethodTopic,
-    askResponseTopic,
     fromRqtTopic,
     newWatchdogIO,
     runSessionIO,
@@ -113,7 +111,7 @@ import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
-import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter)
+import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter, makeResponseTopic)
 import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult (..))
 
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
@@ -167,15 +165,16 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                  in Logger.logErr logger logmsg
             Just topics ->
               when (topicBase topics == baseTopic) do
-                let index = readIndexFromProperties props
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                publisher <- mkSequencedPublish
-                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods publisher
+                let responseTopic = makeResponseTopic (topicBase topics) (topicSid topics)
+                publisher <- mkSequencedPublish client responseTopic
+                let config = SessionConfig sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods publisher
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
+                let index = readIndexFromProperties props
                 let session :: Session ()
                     session = case sessionHandle of
                       Just handle -> liftIO do
@@ -306,28 +305,22 @@ publishClientResponse ::
   Session ()
 publishClientResponse options result = do
   publisher <- asks cfgPublisher
-  client <- asks cfgClient
-  topic <- askResponseTopic
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logResponse result
 
-  Response.makeResponseSender publisher client topic packetSizeLimit rateLimit options result
+  Response.makeResponseSender publisher packetSizeLimit rateLimit options result
 
 publishPackets :: ByteString -> Session ()
 publishPackets message = do
-  publisher <- asks cfgPublisher
-  client <- asks cfgClient
-  topic <- askResponseTopic
+  publish <- asks cfgPublisher
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing message as packets" (show message)
 
-  let publish :: ByteString -> IO ()
-      publish bytes = publisher client topic (fromStrict bytes)
-   in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
+  Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
 publishGRPCIOError options err =
@@ -341,14 +334,12 @@ publishRemoteError options err = do
   -- TODO: note why remote error cannot take encoding options
   let response = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError err
   publisher <- asks cfgPublisher
-  client <- asks cfgClient
-  topic <- askResponseTopic
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logError "publishing remote error as packets" (show response)
 
-  Response.makeErrorResponseSender publisher client topic packetSizeLimit rateLimit options err
+  Response.makeErrorResponseSender publisher packetSizeLimit rateLimit options err
 
 ---------------------------------------------------------------------------------
 
@@ -413,14 +404,12 @@ makeServerStreamReader options recv = do
   where
     makeStreamSender :: Session (ByteString -> Session (), Session ())
     makeStreamSender = do
-      publisher <- asks cfgPublisher
-      client <- asks cfgClient
-      topic <- askResponseTopic
+      publish <- asks cfgPublisher
       packetSizeLimit <- asks cfgMsgSize
       rateLimit <- asks cfgRateLimit
       Stream.makeStreamBatchSender packetSizeLimit rateLimit options \chunk -> do
         Session.logDebug "publish server stream chunk as bytes" (show chunk)
-        liftIO (publisher client topic (fromStrict chunk))
+        liftIO (publish chunk)
 
 ---------------------------------------------------------------------------------
 

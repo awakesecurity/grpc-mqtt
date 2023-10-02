@@ -54,7 +54,6 @@ module Network.GRPC.MQTT.RemoteClient.Session
     -- * Session Config
     SessionConfig
       ( SessionConfig,
-        cfgClient,
         cfgSessions,
         cfgLogger,
         cfgTopics,
@@ -94,7 +93,6 @@ import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
 import Data.Text qualified as Text
 
-import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Filter, Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
@@ -360,8 +358,7 @@ newWatchdogIO period'sec var = do
 --
 -- @since 1.0.0
 data SessionConfig = SessionConfig
-  { cfgClient :: MQTTClient
-  , cfgSessions :: TMap Topic SessionHandle
+  { cfgSessions :: TMap Topic SessionHandle
   , cfgLogger :: RemoteClientLogger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
   , cfgMsgSize :: {-# UNPACK #-} !Word32

@@ -41,8 +41,8 @@ import Control.Exception
 import Control.Concurrent.Async qualified as Async
 
 import Control.Concurrent.TOrderedQueue
-  ( TOrderedQueue,
-    Sequenced (..),
+  ( Sequenced (..),
+    TOrderedQueue,
     newTOrderedQueueIO,
     writeTOrderedQueue,
   )
@@ -206,12 +206,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
-    publisher <- mkSequencedPublish
+    publish <- mkSequencedPublish mqttClient requestTopic
 
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
         logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
-        publisher mqttClient requestTopic (fromStrict message)
+        publish message
 
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream x =
@@ -227,7 +227,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         Request.makeRequestSender
           packetSizeLimit
           publishRateLimit
-          (publisher mqttClient requestTopic . fromStrict)
+          publish
           (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
         withControlSignals (publishControl controlTopic) . exceptToResult $ do

@@ -196,8 +196,12 @@ withSubscription client topics =
     (subscribeOrThrow client topics)
     (unsubscribe client topics [])
 
+-- | A type synonym representing a simplified function for publishing MQTT messages
 type Publisher = MQTTClient -> Topic -> LByteString -> IO ()
 
+-- | Returns a MQTT `Publisher` which will annotate each MQTT message with a 
+-- sequence number as a user property "i". The sequence number will be incremented
+-- each time a message is published.
 mkSequencedPublish :: MonadIO m => m Publisher
 mkSequencedPublish = do
   indexVar <- newTVarIO (0 :: Natural)
@@ -212,6 +216,8 @@ mkSequencedPublish = do
 
   pure sequencedPublish
 
+-- | Takes the first user property "i" as a `SequnceId`. Or returns `Unordered`
+-- if no "i" property is present or the value fails to parse as a `Natural`.
 readIndexFromProperties :: [Property] -> SequenceId
 readIndexFromProperties props = maybe Unordered SequenceId do
   v <- listToMaybe do

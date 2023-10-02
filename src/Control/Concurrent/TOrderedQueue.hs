@@ -44,14 +44,14 @@ instance Eq (Sequenced a) where
 instance Ord (Sequenced a) where
   (<=) = (<=) `on` idx
 
--- | A queue in which messages written to the queue can be annotaed with a `SequenceId`, and messages read from
+-- | A queue in which messages written to the queue can be annotated with a `SequenceId`, and messages read from
 -- the queue will always be seen in order by `SequenceId`, even if the messages are written out-of-order.
--- Messages written to the queue annoted with `Unordered` will be read before any ordered messages and will be
+-- Messages written to the queue annotated with `Unordered` will be read before any ordered messages and will be
 -- processed in FIFO order.
 data TOrderedQueue a
   = TOrderedQueue
       !(TVar Natural) -- Sequence counter indicating what the sequence id of the next message read should be
-      !(TVar (MinPQueue Natural a)) -- A min heap for holding messages annoted by `SequenceId`
+      !(TVar (MinPQueue Natural a)) -- A min heap for holding messages annotated by `SequenceId`
       !(TQueue a) -- A regular TQueue used for processing `Unordered` messages
 
 -- | Build and return a new `TOrderedQueue`

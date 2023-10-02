@@ -352,20 +352,6 @@ publishRemoteError options err = do
 
 ---------------------------------------------------------------------------------
 
--- TODO: This doesn't looks like it's used for anything?
--- makePacketReader ::
---   TQueue ByteString ->
---   Session (Either RemoteError ByteString)
--- makePacketReader channel = do
---   result <- runExceptT (Packet.makePacketReader channel)
---   case result of
---     Left err -> do
---       Session.logError "wire parse error encountered parsing Packet" (show err)
---       pure (Left $ parseErrorToRCE err)
---     Right bs -> do
---       Session.logDebug "read packets to ByteString" (show bs)
---       pure (Right bs)
-
 handleStreamSend :: WireEncodeOptions -> StreamSend a -> a -> Session ()
 handleStreamSend options send x = do
   result <- liftIO (send x)

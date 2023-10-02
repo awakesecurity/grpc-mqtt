@@ -60,7 +60,8 @@ module Network.GRPC.MQTT.RemoteClient.Session
         cfgTopics,
         cfgMsgSize,
         cfgRateLimit,
-        cfgMethods
+        cfgMethods,
+        cfgPublisher
       ),
     insertSessionM,
     lookupSessionM,
@@ -113,6 +114,7 @@ import Control.Concurrent.OrderedTQueue
     newOrderedTQueueIO,
   )
 
+import Network.GRPC.MQTT.Core (Publisher)
 import Network.GRPC.MQTT.Logging (Logger (..), RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logging
 import Network.GRPC.MQTT.Message (Request)
@@ -365,6 +367,7 @@ data SessionConfig = SessionConfig
   , cfgMsgSize :: {-# UNPACK #-} !Word32
   , cfgRateLimit :: Maybe Natural
   , cfgMethods :: MethodMap
+  , cfgPublisher :: Publisher
   }
   deriving (Generic)
 

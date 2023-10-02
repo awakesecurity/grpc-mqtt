@@ -67,7 +67,6 @@ import Network.GRPC.HighLevel.Extra (wireEncodeMetadataMap)
 
 import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
-    Publisher,
     connectMQTT,
     heartbeatPeriodSeconds,
     mkSequencedPublish,
@@ -97,6 +96,7 @@ import Network.GRPC.MQTT.RemoteClient.Session
         cfgClient,
         cfgLogger,
         cfgMsgSize,
+        cfgPublisher,
         cfgRateLimit
       ),
     SessionHandle (hdlHeartbeat, hdlRqtQueue, hdlThread),
@@ -171,7 +171,8 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods
+                publisher <- mkSequencedPublish
+                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods publisher
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
@@ -238,11 +239,11 @@ handleControlMessage RemoteClientLogger{logger} handle msg =
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   let queue = hdlRqtQueue handle
-  publisher <- mkSequencedPublish
+
   runExceptT (Request.makeRequestReader queue) >>= \case
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
-      publishRemoteError publisher Serial.defaultEncodeOptions (Message.toRemoteError err)
+      publishRemoteError Serial.defaultEncodeOptions (Message.toRemoteError err)
     Right request@Request.Request{..} -> do
       let encodeOptions = Serial.makeRemoteEncodeOptions options
       let decodeOptions = Serial.makeClientDecodeOptions options
@@ -250,33 +251,33 @@ handleRequest handle = do
       method <- askMethodTopic
       Session.logRequest (unTopic method) request
 
-      dispatchClientHandler publisher \case
+      dispatchClientHandler \case
         ClientUnaryHandler k -> do
           result <- liftIO (k message timeout metadata)
-          publishClientResponse publisher encodeOptions result
+          publishClientResponse encodeOptions result
         ClientClientStreamHandler k -> do
           result <- withRunInIO \runIO -> do
-            let sender = makeClientStreamSender publisher queue options
+            let sender = makeClientStreamSender queue options
             k timeout metadata (runIO . sender)
-          publishClientResponse publisher encodeOptions result
+          publishClientResponse encodeOptions result
         ClientServerStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k message timeout metadata \_ ms recv -> runIO do
-              publishPackets publisher (toStrict $ wireEncodeMetadataMap ms)
-              makeServerStreamReader publisher encodeOptions recv
-          publishClientResponse publisher encodeOptions result
+              publishPackets (toStrict $ wireEncodeMetadataMap ms)
+              makeServerStreamReader encodeOptions recv
+          publishClientResponse encodeOptions result
         ClientBiDiStreamHandler k -> do
           result <- withRunInIO \runIO -> do
             k timeout metadata \_ getMetadata recv send done ->
               liftIO getMetadata >>= either throwIO \ms -> runIO do
-                publishPackets publisher (toStrict $ wireEncodeMetadataMap ms)
-                let reader = makeServerStreamReader publisher encodeOptions recv
-                    sender = makeServerStreamSender publisher queue encodeOptions decodeOptions send done
+                publishPackets (toStrict $ wireEncodeMetadataMap ms)
+                let reader = makeServerStreamReader encodeOptions recv
+                    sender = makeServerStreamSender queue encodeOptions decodeOptions send done
                  in concurrently_ sender reader
-          publishClientResponse publisher encodeOptions result
+          publishClientResponse encodeOptions result
 
-dispatchClientHandler :: Publisher -> (ClientHandler -> Session ()) -> Session ()
-dispatchClientHandler publisher k = do
+dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
+dispatchClientHandler k = do
   maybe onError k =<< askMethod
   where
     -- FIXME: The error message's details are lost in transit to the client.
@@ -294,18 +295,17 @@ dispatchClientHandler publisher k = do
           ecall = fromStrict ("/" <> Topic.unTopic mthTopic)
           extra = Just (Proto.RemoteErrorExtraStatusCode 12)
        in publishRemoteError
-            publisher
             Serial.defaultEncodeOptions
             (Proto.RemoteError etype ecall extra)
 
 ---------------------------------------------------------------------------------
 
 publishClientResponse ::
-  Publisher ->
   WireEncodeOptions ->
   RemoteResult s ->
   Session ()
-publishClientResponse publisher options result = do
+publishClientResponse options result = do
+  publisher <- asks cfgPublisher
   client <- asks cfgClient
   topic <- askResponseTopic
   packetSizeLimit <- asks cfgMsgSize
@@ -315,8 +315,9 @@ publishClientResponse publisher options result = do
 
   Response.makeResponseSender publisher client topic packetSizeLimit rateLimit options result
 
-publishPackets :: Publisher -> ByteString -> Session ()
-publishPackets publisher message = do
+publishPackets :: ByteString -> Session ()
+publishPackets message = do
+  publisher <- asks cfgPublisher
   client <- asks cfgClient
   topic <- askResponseTopic
   packetSizeLimit <- asks cfgMsgSize
@@ -328,17 +329,18 @@ publishPackets publisher message = do
       publish bytes = publisher client topic (fromStrict bytes)
    in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
 
-publishGRPCIOError :: Publisher -> WireEncodeOptions -> GRPCIOError -> Session ()
-publishGRPCIOError publisher options err =
-  publishRemoteError publisher options (Wrapping.toRemoteError err)
+publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
+publishGRPCIOError options err =
+  publishRemoteError options (Wrapping.toRemoteError err)
 
 -- | Encodes the given 'RemoteError', and publishes it to the topic provided.
 --
 -- @since 1.0.0
-publishRemoteError :: Publisher -> WireEncodeOptions -> RemoteError -> Session ()
-publishRemoteError publisher options err = do
+publishRemoteError :: WireEncodeOptions -> RemoteError -> Session ()
+publishRemoteError options err = do
   -- TODO: note why remote error cannot take encoding options
   let response = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError err
+  publisher <- asks cfgPublisher
   client <- asks cfgClient
   topic <- askResponseTopic
   packetSizeLimit <- asks cfgMsgSize
@@ -364,59 +366,57 @@ publishRemoteError publisher options err = do
 --       Session.logDebug "read packets to ByteString" (show bs)
 --       pure (Right bs)
 
-handleStreamSend :: Publisher -> WireEncodeOptions -> StreamSend a -> a -> Session ()
-handleStreamSend publisher options send x = do
+handleStreamSend :: WireEncodeOptions -> StreamSend a -> a -> Session ()
+handleStreamSend options send x = do
   result <- liftIO (send x)
   case result of
     Right () -> pure ()
     Left err -> do
       Session.logError "gRPC IO error encountered handling StreamSend" (show err)
-      publishGRPCIOError publisher options err
+      publishGRPCIOError options err
 
-handleWritesDone :: Publisher -> WireEncodeOptions -> WritesDone -> Session ()
-handleWritesDone publisher options done =
+handleWritesDone :: WireEncodeOptions -> WritesDone -> Session ()
+handleWritesDone options done =
   liftIO done >>= \case
     Right () -> pure ()
     Left err -> do
       Session.logError "gRPC IO error encountered handling WritesDone" (show err)
-      publishGRPCIOError publisher options err
+      publishGRPCIOError options err
 
 ---------------------------------------------------------------------------------
 
 makeServerStreamSender ::
-  Publisher ->
   OrderedTQueue ByteString ->
   WireEncodeOptions ->
   WireDecodeOptions ->
   StreamSend ByteString ->
   WritesDone ->
   Session ()
-makeServerStreamSender publisher queue encodeOptions decodeOptions sender done = do
+makeServerStreamSender queue encodeOptions decodeOptions sender done = do
   reader <- makeClientStreamReader @_ queue decodeOptions
   fix \loop -> do
     runExceptT reader >>= \case
       Left err -> do
-        handleWritesDone publisher encodeOptions done
-        publishRemoteError publisher encodeOptions err
+        handleWritesDone encodeOptions done
+        publishRemoteError encodeOptions err
       Right Nothing ->
-        handleWritesDone publisher encodeOptions done
+        handleWritesDone encodeOptions done
       Right (Just x) -> do
-        handleStreamSend publisher encodeOptions sender x
+        handleStreamSend encodeOptions sender x
         loop
 
 makeServerStreamReader ::
-  Publisher ->
   WireEncodeOptions ->
   StreamRecv ByteString ->
   Session ()
-makeServerStreamReader publisher options recv = do
+makeServerStreamReader options recv = do
   (send, done) <- makeStreamSender
   fix \loop ->
     liftIO recv >>= \case
       Left err -> do
         Session.logError "server stream reader: encountered error reading chunk" (show err)
         done
-        publishGRPCIOError publisher options err
+        publishGRPCIOError options err
       Right Nothing -> do
         Session.logDebug "server stream sender" "done"
         done
@@ -427,6 +427,7 @@ makeServerStreamReader publisher options recv = do
   where
     makeStreamSender :: Session (ByteString -> Session (), Session ())
     makeStreamSender = do
+      publisher <- asks cfgPublisher
       client <- asks cfgClient
       topic <- askResponseTopic
       packetSizeLimit <- asks cfgMsgSize
@@ -460,20 +461,19 @@ makeClientStreamReader queue options = do
             Right rx -> pure rx
 
 makeClientStreamSender ::
-  Publisher ->
   OrderedTQueue ByteString ->
   ProtoOptions ->
   StreamSend ByteString ->
   Session ()
-makeClientStreamSender publisher queue options sender = do
+makeClientStreamSender queue options sender = do
   let encodeOptions = Serial.makeRemoteEncodeOptions options
   let decodeOptions = Serial.makeRemoteDecodeOptions options
   reader <- makeClientStreamReader queue decodeOptions
   fix \loop ->
     runExceptT reader >>= \case
-      Left err -> publishRemoteError publisher encodeOptions err
+      Left err -> publishRemoteError encodeOptions err
       Right Nothing -> Session.logDebug "client stream sender" "done"
       Right (Just x) -> do
         Session.logDebug "client stream sender" "sending chunk"
-        handleStreamSend publisher encodeOptions sender x
+        handleStreamSend encodeOptions sender x
         loop

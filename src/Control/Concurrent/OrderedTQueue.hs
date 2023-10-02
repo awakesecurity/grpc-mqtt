@@ -58,16 +58,15 @@ writeOrderedTQueue (OrderedTQueue _ orderedQueueVar unorderedQueue) (Sequenced s
     SequenceId i -> modifyTVar' orderedQueueVar (insert i x)
 
 readOrderedTQueue :: OrderedTQueue a -> STM a
-readOrderedTQueue otq@(OrderedTQueue seqVar orderedQueueVar queue) =
-  tryReadTQueue queue >>= \case
+readOrderedTQueue otq@(OrderedTQueue seqVar orderedQueueVar unorderedQueue) =
+  tryReadTQueue unorderedQueue >>= \case
     Just a -> pure a
     Nothing -> do
-      curSeq <- readTVar seqVar
       orderedQueue <- readTVar orderedQueueVar
-
       case minViewWithKey orderedQueue of
         Nothing -> retry
-        Just ((i, a), rest) ->
+        Just ((i, a), rest) -> do
+          curSeq <- readTVar seqVar
           case i `compare` curSeq of
             -- If sequence number is less than current, it must be a duplicate,
             -- so we discard it and read again

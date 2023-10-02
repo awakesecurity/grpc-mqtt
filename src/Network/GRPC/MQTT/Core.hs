@@ -197,7 +197,8 @@ withSubscription client topics =
     (unsubscribe client topics [])
 
 type Publisher = MQTTClient -> Topic -> LByteString -> IO ()
-mkSequencedPublish :: MonadIO m => m (MQTTClient -> Topic -> LByteString -> IO ())
+
+mkSequencedPublish :: MonadIO m => m Publisher
 mkSequencedPublish = do
   indexVar <- newTVarIO (0 :: Natural)
 

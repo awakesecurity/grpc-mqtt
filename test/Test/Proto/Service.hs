@@ -36,8 +36,6 @@ import Network.GRPC.HighLevel.Server
       ),
   )
 
-import Turtle (sleep)
-
 import Relude
 
 ---------------------------------------------------------------------------------
@@ -130,8 +128,7 @@ handleServerStream :: Handler 'ServerStreaming StreamRequest StreamReply
 handleServerStream (ServerWriterRequest _ (Message.StreamRequest name n) ssend) = do
   forM_ @[] [1 .. n] \i -> do
     let greet = name <> show i
-    _ <- ssend (Message.StreamReply greet)
-    sleep 0.1
+    ssend (Message.StreamReply greet)
 
   pure (ServerWriterResponse metadata StatusOk details)
   where
@@ -139,7 +136,7 @@ handleServerStream (ServerWriterRequest _ (Message.StreamRequest name n) ssend) 
     metadata = [("server_writer_key", "server_writer_metadata")]
 
     details :: StatusDetails
-    details = fromString ("stream is done" ++ show name)
+    details = fromString "stream is done"
 
 handleBiDi :: Handler 'BiDiStreaming BiDiRequestReply BiDiRequestReply
 handleBiDi (ServerBiDiRequest _ recv send) = fix \go ->

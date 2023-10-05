@@ -22,7 +22,11 @@ where
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue, writeTQueue)
+import Control.Concurrent.TOrderedQueue
+  ( Sequenced (..),
+    TOrderedQueue,
+    writeTOrderedQueue,
+  )
 
 import Control.Exception (bracket, throwIO)
 import Control.Exception.Safe (handleAny)
@@ -40,9 +44,7 @@ import Network.GRPC.LowLevel.Op (WritesDone)
 import Network.MQTT.Client
   ( MQTTClient,
     MessageCallback (SimpleCallback),
-    QoS (QoS1),
     normalDisconnect,
-    publishq,
     waitForClient,
   )
 import Network.MQTT.Topic (Filter, Topic)
@@ -67,7 +69,9 @@ import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (mqttMsgSizeLimit, _msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
+    mkSequencedPublish,
     mqttPublishRateLimit,
+    readIndexFromProperties,
     subscribeOrThrow,
   )
 
@@ -89,16 +93,15 @@ import Network.GRPC.MQTT.RemoteClient.Session
   ( Session,
     SessionConfig
       ( SessionConfig,
-        cfgClient,
         cfgLogger,
         cfgMsgSize,
+        cfgPublisher,
         cfgRateLimit
       ),
     SessionHandle (hdlHeartbeat, hdlRqtQueue, hdlThread),
     SessionTopic (topicBase, topicSid),
     askMethod,
     askMethodTopic,
-    askResponseTopic,
     fromRqtTopic,
     newWatchdogIO,
     runSessionIO,
@@ -108,10 +111,9 @@ import Network.GRPC.MQTT.RemoteClient.Session qualified as Session
 
 import Network.GRPC.MQTT.Serial (WireDecodeOptions, WireEncodeOptions)
 import Network.GRPC.MQTT.Serial qualified as Serial
-import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter)
+import Network.GRPC.MQTT.Topic (Topic (unTopic), makeControlFilter, makeRequestFilter, makeResponseTopic)
 import Network.GRPC.MQTT.Types (ClientHandler (..), MethodMap, RemoteResult (..))
 
-import Network.GRPC.MQTT.Wrapping (parseErrorToRCE)
 import Network.GRPC.MQTT.Wrapping qualified as Wrapping
 
 import Proto.Mqtt (RemoteError)
@@ -143,7 +145,7 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
 
     handleGateway :: TMap Topic SessionHandle -> MessageCallback
     handleGateway sessions =
-      SimpleCallback \client topic msg _ -> do
+      SimpleCallback \client topic msg props -> do
         handleAny handleError do
           case fromRqtTopic baseTopic topic of
             Nothing -> case stripPrefix (Topic.split baseTopic) (Topic.split topic) of
@@ -166,16 +168,19 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
                 let sessionKey = topicSid topics
                 let msglim = mqttMsgSizeLimit cfg
                 let rateLimit = mqttPublishRateLimit cfg
-                let config = SessionConfig client sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods
+                let responseTopic = makeResponseTopic (topicBase topics) (topicSid topics)
+                publisher <- mkSequencedPublish client responseTopic
+                let config = SessionConfig sessions (Session.useSessionId sessionKey rcLogger) topics msglim rateLimit methods publisher
 
                 sessionHandle <- atomically (TMap.lookup sessionKey sessions)
 
+                let index = readIndexFromProperties props
                 let session :: Session ()
                     session = case sessionHandle of
                       Just handle -> liftIO do
-                        atomically (writeTQueue (hdlRqtQueue handle) (toStrict msg))
+                        atomically (writeTOrderedQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                       Nothing -> withSession \handle -> liftIO do
-                        atomically (writeTQueue (hdlRqtQueue handle) (toStrict msg))
+                        atomically (writeTOrderedQueue (hdlRqtQueue handle) (Sequenced index (toStrict msg)))
                         handleNewSession config handle
                  in runSessionIO session config
 
@@ -233,6 +238,7 @@ handleControlMessage RemoteClientLogger{logger} handle msg =
 handleRequest :: SessionHandle -> Session ()
 handleRequest handle = do
   let queue = hdlRqtQueue handle
+
   runExceptT (Request.makeRequestReader queue) >>= \case
     Left err -> do
       Session.logError "wire parse error encountered parsing Request" (show err)
@@ -298,27 +304,23 @@ publishClientResponse ::
   RemoteResult s ->
   Session ()
 publishClientResponse options result = do
-  client <- asks cfgClient
-  topic <- askResponseTopic
+  publisher <- asks cfgPublisher
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logResponse result
 
-  Response.makeResponseSender client topic packetSizeLimit rateLimit options result
+  Response.makeResponseSender publisher packetSizeLimit rateLimit options result
 
 publishPackets :: ByteString -> Session ()
 publishPackets message = do
-  client <- asks cfgClient
-  topic <- askResponseTopic
+  publish <- asks cfgPublisher
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logDebug "publishing message as packets" (show message)
 
-  let publish :: ByteString -> IO ()
-      publish bytes = publishq client topic (fromStrict bytes) False QoS1 []
-   in Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
+  Packet.makePacketSender packetSizeLimit rateLimit (liftIO . publish) message
 
 publishGRPCIOError :: WireEncodeOptions -> GRPCIOError -> Session ()
 publishGRPCIOError options err =
@@ -331,29 +333,15 @@ publishRemoteError :: WireEncodeOptions -> RemoteError -> Session ()
 publishRemoteError options err = do
   -- TODO: note why remote error cannot take encoding options
   let response = Proto.WrappedResponse $ Just $ Proto.WrappedResponseOrErrorError err
-  client <- asks cfgClient
-  topic <- askResponseTopic
+  publisher <- asks cfgPublisher
   packetSizeLimit <- asks cfgMsgSize
   rateLimit <- asks cfgRateLimit
 
   Session.logError "publishing remote error as packets" (show response)
 
-  Response.makeErrorResponseSender client topic packetSizeLimit rateLimit options err
+  Response.makeErrorResponseSender publisher packetSizeLimit rateLimit options err
 
 ---------------------------------------------------------------------------------
-
-makePacketReader ::
-  TQueue ByteString ->
-  Session (Either RemoteError ByteString)
-makePacketReader channel = do
-  result <- runExceptT (Packet.makePacketReader channel)
-  case result of
-    Left err -> do
-      Session.logError "wire parse error encountered parsing Packet" (show err)
-      pure (Left $ parseErrorToRCE err)
-    Right bs -> do
-      Session.logDebug "read packets to ByteString" (show bs)
-      pure (Right bs)
 
 handleStreamSend :: WireEncodeOptions -> StreamSend a -> a -> Session ()
 handleStreamSend options send x = do
@@ -375,7 +363,7 @@ handleWritesDone options done =
 ---------------------------------------------------------------------------------
 
 makeServerStreamSender ::
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireEncodeOptions ->
   WireDecodeOptions ->
   StreamSend ByteString ->
@@ -416,19 +404,18 @@ makeServerStreamReader options recv = do
   where
     makeStreamSender :: Session (ByteString -> Session (), Session ())
     makeStreamSender = do
-      client <- asks cfgClient
-      topic <- askResponseTopic
+      publish <- asks cfgPublisher
       packetSizeLimit <- asks cfgMsgSize
       rateLimit <- asks cfgRateLimit
       Stream.makeStreamBatchSender packetSizeLimit rateLimit options \chunk -> do
         Session.logDebug "publish server stream chunk as bytes" (show chunk)
-        liftIO (publishq client topic (fromStrict chunk) False QoS1 [])
+        liftIO (publish chunk)
 
 ---------------------------------------------------------------------------------
 
 makeClientStreamReader ::
   (MonadError RemoteError m, MonadIO m) =>
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   WireDecodeOptions ->
   Session (m (Maybe ByteString))
 makeClientStreamReader queue options = do
@@ -449,7 +436,7 @@ makeClientStreamReader queue options = do
             Right rx -> pure rx
 
 makeClientStreamSender ::
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   ProtoOptions ->
   StreamSend ByteString ->
   Session ()

@@ -229,6 +229,10 @@ testTreeServerStream =
     , after
         Test.AllSucceed
         "Test.Service.ServerStream.Unbatched"
+        (Suite.testFixture "Test.Service.ServerBigStream.Unbatched" testServerBigStreamCall)
+    , after
+        Test.AllSucceed
+        "Test.Service.ServerBigStream.Unbatched"
         (Suite.testFixture "Test.Service.ServerStream.Batched" testBatchServerStreamCall)
     ]
 
@@ -242,6 +246,19 @@ testServerStreamCall = do
 
   let expected :: Seq StreamReply
       expected = fmap (\(n :: Int) -> Message.StreamReply ("Alice" <> show n)) (Seq.fromList [1 .. 100])
+   in checkServerStreamResponse rsp expected buffer
+
+testServerBigStreamCall :: Fixture ()
+testServerBigStreamCall = do
+  buffer <- liftIO $ newIORef Seq.empty
+
+  let bigTxt = toLText $ take 127_000 (cycle "Alice")
+  let msg = Message.StreamRequest bigTxt 2
+  let rqt = MQTTReaderRequest msg 30 mempty (serverStreamHandler buffer)
+  rsp <- makeMethodCall testServiceServerStreamCall rqt
+
+  let expected :: Seq StreamReply
+      expected = fmap (\(n :: Int) -> Message.StreamReply (bigTxt <> show n)) (Seq.fromList [1 .. 2])
    in checkServerStreamResponse rsp expected buffer
 
 testBatchServerStreamCall :: Fixture ()

@@ -54,13 +54,13 @@ module Network.GRPC.MQTT.RemoteClient.Session
     -- * Session Config
     SessionConfig
       ( SessionConfig,
-        cfgClient,
         cfgSessions,
         cfgLogger,
         cfgTopics,
         cfgMsgSize,
         cfgRateLimit,
-        cfgMethods
+        cfgMethods,
+        cfgPublisher
       ),
     insertSessionM,
     lookupSessionM,
@@ -85,8 +85,6 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO)
-
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 
 import Data.Time.Clock (NominalDiffTime)
@@ -95,7 +93,6 @@ import Data.HashMap.Strict qualified as HashMap
 import Data.List (stripPrefix)
 import Data.Text qualified as Text
 
-import Network.MQTT.Client (MQTTClient)
 import Network.MQTT.Topic (Filter, Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
@@ -110,6 +107,12 @@ import System.Timeout qualified as System
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
+import Control.Concurrent.TOrderedQueue
+  ( TOrderedQueue,
+    newTOrderedQueueIO,
+  )
+
+import Network.GRPC.MQTT.Core (Publisher)
 import Network.GRPC.MQTT.Logging (Logger (..), RemoteClientLogger (..))
 import Network.GRPC.MQTT.Logging qualified as Logging
 import Network.GRPC.MQTT.Message (Request)
@@ -317,7 +320,7 @@ askRequestFilter = Topic.makeRequestFilter <$> asks (topicBase . cfgTopics)
 -- @since 1.0.0
 data SessionHandle = SessionHandle
   { hdlThread :: Async ()
-  , hdlRqtQueue :: TQueue ByteString
+  , hdlRqtQueue :: TOrderedQueue ByteString
   , hdlHeartbeat :: TMVar ()
   }
 
@@ -327,7 +330,7 @@ data SessionHandle = SessionHandle
 newSessionHandleIO :: Async () -> IO SessionHandle
 newSessionHandleIO thread = do
   SessionHandle thread
-    <$> newTQueueIO
+    <$> newTOrderedQueueIO
     <*> newTMVarIO ()
 
 -- | TODO
@@ -355,13 +358,13 @@ newWatchdogIO period'sec var = do
 --
 -- @since 1.0.0
 data SessionConfig = SessionConfig
-  { cfgClient :: MQTTClient
-  , cfgSessions :: TMap Topic SessionHandle
+  { cfgSessions :: TMap Topic SessionHandle
   , cfgLogger :: RemoteClientLogger
   , cfgTopics :: {-# UNPACK #-} !SessionTopic
   , cfgMsgSize :: {-# UNPACK #-} !Word32
   , cfgRateLimit :: Maybe Natural
   , cfgMethods :: MethodMap
+  , cfgPublisher :: Publisher
   }
   deriving (Generic)
 

@@ -56,7 +56,10 @@ import Control.Concurrent (getNumCapabilities)
 import Control.Concurrent.TMap (TMap)
 import Control.Concurrent.TMap qualified as TMap
 
-import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
+import Control.Concurrent.TOrderedQueue
+  ( TOrderedQueue,
+    readTOrderedQueue,
+  )
 
 import Control.Monad.Except (MonadError, liftEither)
 
@@ -158,7 +161,7 @@ wireParsePacket =
 -- @since 1.0.0
 makePacketReader ::
   (MonadIO m, MonadError ParseError m) =>
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   m ByteString
 makePacketReader queue = do
   liftEither =<< liftIO (runPacketReader accumulate queue)
@@ -371,14 +374,14 @@ newtype PacketReader a = PacketReader
 --
 -- @since 1.0.0
 data PacketReaderEnv = PacketReaderEnv
-  { queue :: {-# UNPACK #-} !(TQueue ByteString)
+  { queue :: {-# UNPACK #-} !(TOrderedQueue ByteString)
   , packets :: {-# UNPACK #-} !(PacketSet ByteString)
   , npacket :: {-# UNPACK #-} !(TMVar Word32)
   }
 
 runPacketReader ::
   PacketReader a ->
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   IO (Either ParseError a)
 runPacketReader m queue = do
   pxs <- liftIO emptyPacketSetIO
@@ -389,7 +392,7 @@ runPacketReader m queue = do
 
 readNextPacket :: PacketReader ()
 readNextPacket = do
-  query <- asks (readTQueue . queue)
+  query <- asks (readTOrderedQueue . queue)
   bytes <- liftIO (atomically query)
   packet <- wireUnwrapPacket bytes
   pxs <- asks packets

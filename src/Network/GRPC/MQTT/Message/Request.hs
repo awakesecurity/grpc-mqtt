@@ -133,7 +133,7 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Control.Concurrent.STM.TQueue (TQueue)
+import Control.Concurrent.TOrderedQueue (TOrderedQueue)
 
 import Control.Monad.Except (MonadError, liftEither, throwError)
 
@@ -330,7 +330,7 @@ wireParseRequest = do
 
 makeRequestReader ::
   (MonadIO m, MonadError WireDecodeError m) =>
-  TQueue ByteString ->
+  TOrderedQueue ByteString ->
   m (Request ByteString)
 makeRequestReader queue = do
   result <- runExceptT (Packet.makePacketReader queue)

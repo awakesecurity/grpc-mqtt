@@ -19,10 +19,15 @@ module Network.GRPC.MQTT.Core
     defaultMGConfig,
     subscribeOrThrow,
     withSubscription,
+    Publisher,
+    mkSequencedPublish,
+    readIndexFromProperties,
   )
 where
 
 --------------------------------------------------------------------------------
+
+import Control.Concurrent.TOrderedQueue (SequenceId (SequenceId, Unordered))
 
 import Control.Exception (bracket_, throw)
 
@@ -64,15 +69,18 @@ import Network.MQTT.Client
       ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
+    Property (PropUserProperty),
     QoS (QoS1),
     SubOptions (_subQoS),
+    Topic,
+    publishq,
     runMQTTConduit,
     subOptions,
     subscribe,
     unsubscribe,
   )
 import Network.MQTT.Topic (Filter (unFilter))
-import Network.MQTT.Types (LastWill, Property, ProtocolLevel (Protocol311), SubErr)
+import Network.MQTT.Types (LastWill, ProtocolLevel (Protocol50), SubErr)
 
 import Relude
 
@@ -91,7 +99,7 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , -- | Proxy to use to connect to the MQTT broker
     brokerProxy :: Maybe ProxySettings
   , -- | Limit the rate of publishing data to the MQTT broker in bytes per second.
-    -- 4GiB/s is the maximum allowed rate. If a rate larger than 4GiB/s is supplied, 
+    -- 4GiB/s is the maximum allowed rate. If a rate larger than 4GiB/s is supplied,
     -- publishing will still be limited to 4GiB/s
     -- If this option is not supplied, no rate limit is applied.
     mqttPublishRateLimit :: Maybe Natural
@@ -122,7 +130,7 @@ defaultMGConfig =
     , _cleanSession = True
     , _lwt = Nothing
     , _msgCB = NoCallback
-    , _protocol = Protocol311
+    , _protocol = Protocol50
     , _connProps = []
     , _hostname = ""
     , _port = 1883
@@ -187,3 +195,32 @@ withSubscription client topics =
   bracket_
     (subscribeOrThrow client topics)
     (unsubscribe client topics [])
+
+-- | A type synonym representing a simplified function for publishing MQTT messages
+type Publisher = ByteString -> IO ()
+
+-- | Returns a MQTT `Publisher` which will annotate each MQTT message with a
+-- sequence number as a user property "i". The sequence number will be incremented
+-- each time a message is published.
+mkSequencedPublish :: MonadIO m => MQTTClient -> Topic -> m Publisher
+mkSequencedPublish client topic = do
+  indexVar <- newTVarIO (0 :: Natural)
+
+  let sequencedPublish message = do
+        index <- atomically do
+          i <- readTVar indexVar
+          modifyTVar' indexVar (+ 1)
+          pure i
+
+        publishq client topic (fromStrict message) False QoS1 [PropUserProperty "i" (show index)]
+
+  pure sequencedPublish
+
+-- | Takes the first user property "i" as a `SequnceId`. Or returns `Unordered`
+-- if no "i" property is present or the value fails to parse as a `Natural`.
+readIndexFromProperties :: [Property] -> SequenceId
+readIndexFromProperties props = maybe Unordered SequenceId do
+  v <- listToMaybe do
+    PropUserProperty "i" v <- props
+    pure (decodeUtf8 v)
+  readMaybe v

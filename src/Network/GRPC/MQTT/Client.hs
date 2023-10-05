@@ -40,7 +40,12 @@ import Control.Exception
 
 import Control.Concurrent.Async qualified as Async
 
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, writeTQueue)
+import Control.Concurrent.TOrderedQueue
+  ( Sequenced (..),
+    TOrderedQueue,
+    newTOrderedQueueIO,
+    writeTOrderedQueue,
+  )
 
 import Control.Monad.Except (throwError, withExceptT)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
@@ -68,8 +73,10 @@ import Network.GRPC.MQTT.Core
   ( MQTTGRPCConfig (_msgCB),
     connectMQTT,
     heartbeatPeriodSeconds,
+    mkSequencedPublish,
     mqttMsgSizeLimit,
     mqttPublishRateLimit,
+    readIndexFromProperties,
     withSubscription,
   )
 import Network.GRPC.MQTT.Logging (Logger, logDebug, logErr)
@@ -142,7 +149,7 @@ data MQTTGRPCClient = MQTTGRPCClient
   { -- | The MQTT client
     mqttClient :: MQTTClient
   , -- | 'TQueue' for passing MQTT messages back to calling thread
-    responseQueues :: IORef (Map Topic (TQueue ByteString))
+    responseQueues :: IORef (Map Topic (TOrderedQueue ByteString))
   , -- | Random number generator for generating session IDs
     rng :: Nonce.Generator
   , -- | Logging
@@ -182,7 +189,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    responseQueue <- newTQueueIO
+    responseQueue <- newTOrderedQueueIO
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
@@ -199,10 +206,12 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
     requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
+    publish <- mkSequencedPublish mqttClient requestTopic
+
     (publishToStream, publishToStreamCompleted) <-
       Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
         logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
-        publishq mqttClient requestTopic (fromStrict message) False QoS1 []
+        publish message
 
     let publishToRequestStream :: request -> IO (Either GRPCIOError ())
         publishToRequestStream x =
@@ -218,7 +227,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
         Request.makeRequestSender
           packetSizeLimit
           publishRateLimit
-          (\x -> publishq mqttClient requestTopic (fromStrict x) False QoS1 [])
+          publish
           (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
         withControlSignals (publishControl controlTopic) . exceptToResult $ do
@@ -286,7 +295,7 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
               Response.makeBiDiResponseReader responseQueue decodeOptions
   where
     makeMetadataMapReader ::
-      TQueue ByteString ->
+      TOrderedQueue ByteString ->
       ExceptT RemoteError IO MetadataMap
     makeMetadataMapReader queue = do
       bytes <- runExceptT (Packet.makePacketReader queue)
@@ -338,12 +347,12 @@ withControlSignals publishControlMsg =
 -- @since 1.0.0
 connectMQTTGRPC :: MonadIO io => Logger -> MQTTGRPCConfig -> io MQTTGRPCClient
 connectMQTTGRPC logger cfg = do
-  queues <- newIORef (Map.empty @Topic @(TQueue ByteString))
+  queues <- newIORef (Map.empty @Topic @(TOrderedQueue ByteString))
   uuid <- Nonce.new
 
   let clientCallback :: MessageCallback
       clientCallback =
-        SimpleCallback \_ topic msg _ -> do
+        SimpleCallback \_ topic msg props -> do
           cxs <- readIORef queues
           case Map.lookup topic cxs of
             Nothing -> do
@@ -351,7 +360,8 @@ connectMQTTGRPC logger cfg = do
             Just chan -> do
               logDebug logger $ "clientMQTTHandler received message on topic: " <> unTopic topic
               logDebug logger $ " Raw: " <> decodeUtf8 msg
-              atomically $ writeTQueue chan (toStrict msg)
+              let index = readIndexFromProperties props
+              atomically $ writeTOrderedQueue chan (Sequenced index (toStrict msg))
 
   conn <- connectMQTT cfg{_msgCB = clientCallback}
 

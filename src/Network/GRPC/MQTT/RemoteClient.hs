@@ -121,17 +121,37 @@ import Proto.Mqtt qualified as Proto
 
 ---------------------------------------------------------------------------------
 
-runRemoteClient :: RemoteClientLogger -> MQTTGRPCConfig -> Topic -> MethodMap -> IO ()
-runRemoteClient = runRemoteClientWithConnect connectMQTT
-
-runRemoteClientWithConnect ::
-  (MQTTGRPCConfig -> IO MQTTClient) ->
+-- | Run a client that handles incoming GRPC requests.
+runRemoteClient ::
+  -- | Logger for the client
   RemoteClientLogger ->
+  -- | Configuration to establish an MQTT connection
   MQTTGRPCConfig ->
+  -- | Base topic for messages
   Topic ->
+  -- | GRPC method handlers
   MethodMap ->
   IO ()
-runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg baseTopic methods = do
+runRemoteClient = runRemoteClientWithConnect connectMQTT normalDisconnect
+
+-- | Run a client that handles incoming GRPC requests. Unlike
+-- 'runRemoteClient', the caller can supply custom MQTT client
+-- initializer and finalizer functions.
+runRemoteClientWithConnect ::
+  -- | Initialize an MQTT client
+  (MQTTGRPCConfig -> IO MQTTClient) ->
+  -- | Disconnect an MQTT client
+  (MQTTClient -> IO ()) ->
+  -- | Logger for the client
+  RemoteClientLogger ->
+  -- | MQTT configuration
+  MQTTGRPCConfig ->
+  -- | Base topic for messages
+  Topic ->
+  -- | GRPC method handlers
+  MethodMap ->
+  IO ()
+runRemoteClientWithConnect connect disconnect rcLogger@RemoteClientLogger{logger} cfg baseTopic methods = do
   sessions <- TMap.emptyIO
   handleConnect sessions \client -> do
     subRemoteClient client baseTopic
@@ -141,7 +161,7 @@ runRemoteClientWithConnect onConnect rcLogger@RemoteClientLogger{logger} cfg bas
     handleConnect sessions =
       let cfgGateway :: MQTTGRPCConfig
           cfgGateway = cfg{_msgCB = handleGateway sessions}
-       in bracket (onConnect cfgGateway) normalDisconnect
+       in bracket (connect cfgGateway) disconnect
 
     handleGateway :: TMap Topic SessionHandle -> MessageCallback
     handleGateway sessions =

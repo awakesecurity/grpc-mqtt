@@ -14,7 +14,7 @@ final: prev: {
                 else final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/chell.nix { });
 
             # The tests in data-diverse do not build with GHC 9.4.
-            data-diverse = final.haskell.lib.dontCheck hprev.data-diverse;
+            data-diverse = hfinal.callPackage ../packages/data-diverse.nix { };
 
             # Needed by threadscope-0.2.14.1.
             ghc-events = hfinal.callPackage ../packages/ghc-events.nix { };

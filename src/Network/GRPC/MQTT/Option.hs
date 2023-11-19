@@ -56,7 +56,7 @@ where
 import Data.Data (Data)
 import Data.List qualified as List
 
-import GHC.Prim (Proxy#, proxy#)
+import GHC.Exts (Proxy#, proxy#)
 
 import Language.Haskell.TH.Syntax (Lift)
 
@@ -193,7 +193,7 @@ wireEncodeProtoOptions' = toStrict . wireEncodeProtoOptions
 wireBuildProtoOptions :: FieldNumber -> ProtoOptions -> MessageBuilder
 wireBuildProtoOptions n ProtoOptions{..} =
   let varints :: [Word64]
-      varints = 
+      varints =
         [ fromIntegral (fromEnum rpcBatchStream)
         , maybe 0 fromCLevel rpcServerCLevel
         , maybe 0 fromCLevel rpcClientCLevel

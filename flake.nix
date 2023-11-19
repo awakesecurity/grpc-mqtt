@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/21.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/23.05";
     flake-utils.url = "github:numtide/flake-utils";
     gitignore = {
       url = "github:hercules-ci/gitignore.nix";
@@ -11,7 +11,9 @@
   outputs = { self, nixpkgs, flake-utils, gitignore }:
     flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (system:
       let
-        ghc = "ghc8104";
+        ghc = "ghc8107";
+
+        grpcOverlay = import nix/overlays/grpc.nix { };
 
         haskellOverlay = import nix/overlays/haskell.nix {
           inherit gitignore ghc;
@@ -19,7 +21,7 @@
 
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ haskellOverlay ];
+          overlays = [ grpcOverlay haskellOverlay ];
         };
       in {
         packages.default = pkgs.haskell.packages.${ghc}.grpc-mqtt;

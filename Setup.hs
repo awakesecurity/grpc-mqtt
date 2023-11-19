@@ -1,5 +1,6 @@
 -- See the comments for 'ppProto'.
 
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 import Distribution.Simple
@@ -14,6 +15,10 @@ import Distribution.Types.LocalBuildInfo (LocalBuildInfo(..))
 import Distribution.Types.ComponentLocalBuildInfo (ComponentLocalBuildInfo)
 import Distribution.Verbosity (Verbosity)
 import System.FilePath ((</>), normalise)
+
+#if MIN_VERSION_Cabal(3,8,0)
+import Distribution.Simple.PreProcess (unsorted)
+#endif
 
 main :: IO ()
 main = defaultMainWithHooks customHooks
@@ -47,6 +52,9 @@ ppProto ::
 ppProto _buildInfo localBuildInfo _componentLocalBuildInfo = PreProcessor
   { platformIndependent = True
   , runPreProcessor = genProto localBuildInfo
+#if MIN_VERSION_Cabal(3,8,0)
+  , ppOrdering = unsorted
+#endif
   }
 
 genProto ::
@@ -54,11 +62,11 @@ genProto ::
   (FilePath, FilePath) ->
   (FilePath, FilePath) ->
   Verbosity ->
-  IO () 
+  IO ()
 genProto localBuildInfo (inBaseDir, inRelativeFile)
          (outBaseDir, outRelativeFile) verbosity = do
   let inFile = normalise (inBaseDir </> inRelativeFile)
-      outFile = normalise (outBaseDir </> outRelativeFile)  
+      outFile = normalise (outBaseDir </> outRelativeFile)
   info verbosity $ "compiling " ++ show inFile ++ " to " ++ show outFile
   (cpfProg, _) <-
     requireProgram verbosity cpfProgram (withPrograms localBuildInfo)

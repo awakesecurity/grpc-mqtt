@@ -6,17 +6,17 @@
 , lib, mtl, neat-interpolation, optparse-applicative
 , optparse-generic, parsec, parsers, pretty, pretty-show
 , proto3-wire, QuickCheck, quickcheck-instances, range-set-list
-, safe, split, swagger2, system-filepath, tasty, tasty-hedgehog
-, tasty-hunit, tasty-quickcheck, text, text-short, time
-, transformers, turtle, vector
+, record-hasfield, safe, split, swagger2, system-filepath, tasty
+, tasty-hedgehog, tasty-hunit, tasty-quickcheck, text, text-short
+, time, transformers, turtle, vector
 }:
 mkDerivation {
   pname = "proto3-suite";
-  version = "0.6.0";
+  version = "0.7.0";
   src = fetchgit {
-    url = "https://github.com/awakesecurity/proto3-suite";
-    sha256 = "1csl3yqz4yp3pi4vnijbfzd68yqamyky51fxgrc9k3304ssmzb42";
-    rev = "b0a3308d9d1b1b070c371f90de984ff192020537";
+    url = "https://github.com/awakesecurity/proto3-suite.git";
+    sha256 = "16x6acbcd4sqscjqdwmp0j6rlfn7lczp3vsyqv6v8r8zxwm244dk";
+    rev = "30599c127cc53838576992a33c8c9d91fd57b429";
     fetchSubmodules = true;
   };
   isLibrary = true;
@@ -39,8 +39,9 @@ mkDerivation {
     aeson attoparsec base base64-bytestring bytestring cereal
     containers deepseq doctest generic-arbitrary hedgehog
     large-generics large-records mtl parsec pretty pretty-show
-    proto3-wire QuickCheck swagger2 tasty tasty-hedgehog tasty-hunit
-    tasty-quickcheck text text-short transformers turtle vector
+    proto3-wire QuickCheck record-hasfield swagger2 tasty
+    tasty-hedgehog tasty-hunit tasty-quickcheck text text-short
+    transformers turtle vector
   ];
   description = "A higher-level API to the proto3-wire library";
   license = lib.licenses.asl20;

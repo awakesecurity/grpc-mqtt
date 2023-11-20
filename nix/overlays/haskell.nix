@@ -73,12 +73,7 @@ final: prev: {
           final.mosquitto
           hsPkgs.hp2pretty
           hsPkgs.proto3-suite
-        ] ++ (
-          # threadscope does not yet support template-haskell-2.19, the version for ghc 9.4
-          if builtins.compareVersions hsPkgs.ghc.version "9.4" < 0
-            then [hsPkgs.threadscope]
-            else []
-        );
+        ];
 
         packages = pkgs: [pkgs.grpc-mqtt];
       };

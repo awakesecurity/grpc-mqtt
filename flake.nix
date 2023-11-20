@@ -11,7 +11,7 @@
   outputs = { self, nixpkgs, flake-utils, gitignore }:
     flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (system:
       let
-        ghc = "ghc8107";
+        ghc = "ghc94";
 
         grpcOverlay = import nix/overlays/grpc.nix { };
 

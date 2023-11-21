@@ -8,8 +8,8 @@ mkDerivation {
   version = "0.5.0";
   src = fetchgit {
     url = "https://github.com/awakesecurity/gRPC-haskell.git";
-    sha256 = "17wjm9lbyzhm98g4g36v3jlnr00s5yzilrv90p12mqgn3ffhkg28";
-    rev = "d20c20d63c170b5eaf5725f03f7b7060352af402";
+    sha256 = "0jznxcgcg31blihr81q85q3xzssdy1vkg06my97w6hmrfpvrd8gx";
+    rev = "2f30434fe3526b306dcdb0da78dadf84efa315fc";
     fetchSubmodules = true;
   };
   postUnpack = "sourceRoot+=/core; echo source root reset to $sourceRoot";

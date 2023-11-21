@@ -13,10 +13,10 @@
 -- Portability :  non-portable (GHC extensions)
 --
 -- This module defines the 'CLevel' datatype. 'CLevel' represents a zstandard
--- compression level. Zstandard offers compression levels for controlling how 
+-- compression level. Zstandard offers compression levels for controlling how
 -- the algorithm favors speed vs. compression ratio. The supported range for a
--- compression levels is from 1 to 22. See [the "introduction" section of the 
--- zstandard documentation] 
+-- compression levels is from 1 to 22. See [the "introduction" section of the
+-- zstandard documentation]
 -- (https://raw.githack.com/facebook/zstd/release/doc/zstd_manual.html) for more
 -- information regarding zstandard compression levels.
 --
@@ -53,7 +53,7 @@ import Data.Data (Data)
 
 import Data.List qualified as List
 
-import GHC.Prim (Proxy#, proxy#)
+import GHC.Exts (Proxy#, proxy#)
 
 import Language.Haskell.TH.Ppr (Ppr, ppr)
 import Language.Haskell.TH.PprLib qualified as Ppr

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedLists #-}
 
 -- Copyright (c) 2021 Arista Networks, Inc.
@@ -23,7 +24,11 @@ import Test.Tasty.Runners (NumThreads)
 import Network.GRPC.HighLevel.Client (Host, Port)
 import Network.MQTT.Topic (Topic)
 
+#if MIN_VERSION_relude(1,1,0)
+import Relude
+#else
 import Relude hiding (Option)
+#endif
 
 ---------------------------------------------------------------------------------
 

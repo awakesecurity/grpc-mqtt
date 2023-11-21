@@ -1,19 +1,13 @@
 { mkDerivation, async, attoparsec, attoparsec-binary, base, binary
 , bytestring, checkers, conduit, conduit-extra, connection
-, containers, deepseq, fetchgit, hpack, HUnit, lib
-, network-conduit-tls, network-uri, optparse-applicative
-, QuickCheck, stm, tasty, tasty-hunit, tasty-quickcheck, text
-, websockets
+, containers, deepseq, HUnit, lib, network-conduit-tls, network-uri
+, optparse-applicative, QuickCheck, stm, tasty, tasty-hunit
+, tasty-quickcheck, text, websockets
 }:
 mkDerivation {
   pname = "net-mqtt";
-  version = "0.8.2.2";
-  src = fetchgit {
-    url = "https://github.com/dustin/mqtt-hs";
-    sha256 = "0k57pl6vpnp8966bpng87jj80yqkdfy07z5f8x02y1x3dyvi3373";
-    rev = "64c814c36d6a25e3d982873fd4e6fb64e643278b";
-    fetchSubmodules = true;
-  };
+  version = "0.8.2.5";
+  sha256 = "3d41045cbc9b1adbaccab90ee9a4bc3e751fb41d50ea2fa65f7024231f7cde4c";
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
@@ -21,7 +15,6 @@ mkDerivation {
     conduit-extra connection containers deepseq network-conduit-tls
     network-uri QuickCheck stm text websockets
   ];
-  libraryToolDepends = [ hpack ];
   executableHaskellDepends = [
     async attoparsec attoparsec-binary base binary bytestring conduit
     conduit-extra connection containers deepseq network-conduit-tls
@@ -33,7 +26,6 @@ mkDerivation {
     network-conduit-tls network-uri QuickCheck stm tasty tasty-hunit
     tasty-quickcheck text websockets
   ];
-  prePatch = "hpack";
   homepage = "https://github.com/dustin/mqtt-hs#readme";
   description = "An MQTT Protocol Implementation";
   license = lib.licenses.bsd3;

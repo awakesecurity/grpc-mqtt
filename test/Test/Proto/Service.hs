@@ -10,7 +10,7 @@ where
 
 ---------------------------------------------------------------------------------
 
-import Data.ByteString qualified as ByteString 
+import Data.ByteString qualified as ByteString
 
 import Network.GRPC.HighLevel
   ( MetadataMap,
@@ -82,7 +82,7 @@ newTestService = Proto.testServiceServer testServiceHandlers
 
 type Handler s rqt rsp = ServerRequest s rqt rsp -> IO (ServerResponse s rsp)
 
-handleClientLongBytes :: Handler 'Normal Message.OneInt Message.BytesResponse 
+handleClientLongBytes :: Handler 'Normal Message.OneInt Message.BytesResponse
 handleClientLongBytes (ServerNormalRequest ServerCall{metadata=mm} (Message.OneInt x)) =
   let response :: Message.BytesResponse
       response = Message.BytesResponse (ByteString.replicate (1_000_000 * fromIntegral x) 1)
@@ -110,7 +110,7 @@ handleClientStream :: Handler 'ClientStreaming Message.OneInt Message.OneInt
 handleClientStream (ServerReaderRequest _ recv) = loop 0
   where
     loop :: Int32 -> IO (ServerResponse 'ClientStreaming OneInt)
-    loop ! i =
+    loop !i =
       recv >>= \case
         Left err -> return (newReaderRsp Nothing (show err))
         Right Nothing -> do

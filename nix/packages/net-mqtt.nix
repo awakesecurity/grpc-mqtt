@@ -6,8 +6,8 @@
 }:
 mkDerivation {
   pname = "net-mqtt";
-  version = "0.8.2.5";
-  sha256 = "3d41045cbc9b1adbaccab90ee9a4bc3e751fb41d50ea2fa65f7024231f7cde4c";
+  version = "0.8.3.0";
+  sha256 = "d421593781a7360a50f3864eec9ffe67f8dbc2af4429703b7a730f91bb5ec20b";
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [

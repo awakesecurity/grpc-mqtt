@@ -65,7 +65,9 @@ import Network.MQTT.Client
         _port,
         _protocol,
         _tlsSettings,
-        _username
+        _username,
+        _pingPeriod,
+        _pingPatience
       ),
     MQTTException (MQTTException),
     MessageCallback (NoCallback),
@@ -115,6 +117,8 @@ data MQTTGRPCConfig = MQTTGRPCConfig
   , _password :: Maybe String
   , _connectTimeout :: Int
   , _tlsSettings :: TLSSettings
+  , _pingPeriod :: Int
+  , _pingPatience :: Int
   }
 
 -- | The default 'MQTTGRPCConfig'.
@@ -139,6 +143,8 @@ defaultMGConfig =
     , _password = Nothing
     , _connectTimeout = 180000000
     , _tlsSettings = TLSSettingsSimple False False False
+    , _pingPeriod = 30000000
+    , _pingPatience = 90000000
     }
 
 -- | Project 'MQTTConfig' from 'MQTTGRPCConfig'

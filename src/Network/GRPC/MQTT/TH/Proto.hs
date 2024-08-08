@@ -118,7 +118,7 @@ import Network.GRPC.MQTT.Proto
 openProtoFileQ :: Turtle.FilePath -> Q DotProto
 openProtoFileQ filepath = do
   dotproto <- liftIO (openProtoFileIO filepath)
-  TH.addDependentFile (Turtle.encodeString filepath)
+  TH.addDependentFile filepath
   pure dotproto
 
 -- | TODO

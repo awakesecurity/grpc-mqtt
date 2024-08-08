@@ -150,7 +150,7 @@ openProtoFileIO filepath = do
     throwProtoPathIsDirectoryIO filepath
 
   -- Test that path @filepath@ has a *.proto extension.
-  let isproto = Turtle.hasExtension filepath "proto"
+  let isproto = Turtle.extension filepath == Just "proto"
   unless isproto (throwProtoInvalidExtensionIO filepath)
 
   -- Read the contents @filepath@, handle any protobuf compile errors should any
@@ -176,7 +176,7 @@ data ProtoIOError = ProtoIOError
 -- | @since 1.0.0
 instance Show ProtoIOError where
   show (ProtoIOError filepath tag) =
-    let locS = "(" ++ Turtle.encodeString filepath ++ "): "
+    let locS = "(" ++ filepath ++ "): "
         tagS = Show.shows tag "."
      in "protobuf IO error" ++ locS ++ tagS
   {-# INLINE show #-}
@@ -214,7 +214,7 @@ throwProtoPathIsDirectoryIO = throwProtoIO ProtoPathIsDirectory
 throwCompileErrorIO :: Turtle.FilePath -> CompileError -> IO a
 throwCompileErrorIO filepath err =
   let issue :: ErrorCall
-      issue = ErrorCallWithLocation (Turtle.encodeString filepath) (showCompileError err)
+      issue = ErrorCallWithLocation filepath (showCompileError err)
    in throwIO issue
 
 throwProtoIO :: ProtoIOErrorTag -> Turtle.FilePath -> IO a

@@ -21,6 +21,8 @@ final: prev: {
 
             # Support GHC 9.4.
             record-dot-preprocessor = hfinal.callPackage ../packages/record-dot-preprocessor.nix { };
+
+            turtle = hfinal.callPackage ../packages/turtle.nix { };
           })
           (hfinal: hprev: {
             net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });

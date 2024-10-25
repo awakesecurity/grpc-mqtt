@@ -126,7 +126,7 @@ library
 
   build-depends:
     , conduit-extra        >= 1.3.5   && < 1.4
-    , connection           >= 0.3.1   && < 0.4
+    , crypton-connection   >= 0.3.1   && < 0.5
     , network-conduit-tls  >= 1.3.2   && < 1.4
     , nonce                >= 1.0.7   && < 1.1
     , pqueue               >= 1.4.1.3 && < 1.6
@@ -189,7 +189,7 @@ test-suite test
   --   proto3-suite:compile-proto-file
 
   build-depends:
-    , connection
+    , crypton-connection
     , containers
     , data-default
     , grpc-mqtt

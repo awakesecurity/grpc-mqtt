@@ -190,6 +190,7 @@ test-suite test
 
   build-depends:
     , crypton-connection
+    , crypton-x509-store
     , containers
     , data-default
     , grpc-mqtt
@@ -199,4 +200,3 @@ test-suite test
     , tasty-hunit
     , tls
     , uuid
-    , x509-store

@@ -25,9 +25,6 @@ final: prev: {
             turtle = hfinal.callPackage ../packages/turtle.nix { };
           })
           (hfinal: hprev: {
-            net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });
-          })
-          (hfinal: hprev: {
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
 

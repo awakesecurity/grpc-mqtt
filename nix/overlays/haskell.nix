@@ -23,9 +23,8 @@ final: prev: {
             record-dot-preprocessor = hfinal.callPackage ../packages/record-dot-preprocessor.nix { };
 
             turtle = hfinal.callPackage ../packages/turtle.nix { };
-          })
-          (hfinal: hprev: {
-            net-mqtt = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/net-mqtt.nix { });
+
+            large-records = final.haskell.lib.unmarkBroken hprev.large-records;
           })
           (hfinal: hprev: {
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });

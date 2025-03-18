@@ -641,6 +641,13 @@ showCompileError = \case
     let tagS = showErrorName 'DotProto.InvalidModuleName
      in tagS ++ "invalid module name " ++ show mn ++ "."
 #endif
+#if MIN_VERSION_proto3_suite(0,8,3)
+  DotProto.RedefinedFields repeatedFieldNames repeatedFieldNumbers ->
+    let tagS = showErrorName 'DotProto.RedefinedFields
+     in tagS ++ "repeated field names and/or numbers: " ++ intercalate ", "
+          (showHistogram DotProto.getFieldName repeatedFieldNames ++
+           showHistogram id repeatedFieldNumbers) ++ "."
+#endif
   where
     -- @ proto3-suite error: {1}: @
     showErrorName :: Name -> String
@@ -659,6 +666,12 @@ showCompileError = \case
     showIllegalName :: Name -> String -> String -> String
     showIllegalName nm ty str =
       showErrorName nm ++ "illegal " ++ ty ++ " name " ++ show str
+
+#if MIN_VERSION_proto3_suite(0,8,3)
+    showHistogram :: Show b => (a -> b) -> DotProto.Histogram a -> [String]
+    showHistogram f (DotProto.Histogram m) =
+      Map.foldMapWithKey (\k c -> [Show.shows (f k) $ Show.showChar '(' $ Show.shows c ")"]) m
+#endif
 
 -- | Displays a 'CompileError' in a legible format.
 --

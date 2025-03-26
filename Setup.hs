@@ -6,9 +6,9 @@
 import Distribution.Simple
          (UserHooks(..), defaultMainWithHooks, simpleUserHooks)
 import Distribution.Simple.PreProcess (PreProcessor(..))
-import Distribution.Simple.Program (runProgram)
+import Distribution.Simple.Program (runProgram, simpleProgram)
 import Distribution.Simple.Program.Db (requireProgram)
-import Distribution.Simple.Program.Types (Program(..), simpleProgram)
+import Distribution.Simple.Program.Types (Program(..))
 import Distribution.Simple.Utils (info)
 import Distribution.Types.BuildInfo (BuildInfo)
 import Distribution.Types.LocalBuildInfo (LocalBuildInfo(..))

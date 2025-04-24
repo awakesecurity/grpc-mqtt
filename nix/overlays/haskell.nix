@@ -6,36 +6,8 @@ final: prev: {
       "${ghc}" = prev.haskell.packages."${ghc}".override (old: {
         overrides = prev.lib.fold prev.lib.composeExtensions (old.overrides or (_: _: { })) [
           (hfinal: hprev: {
-            # Support text v2 if using GHC 9.4+; otherwise
-            # use an older version that works with GHC 8.10.7.
-            chell =
-              if builtins.compareVersions hfinal.ghc.version "9.4" < 0
-                then hprev.chell
-                else final.haskell.lib.doJailbreak (hfinal.callPackage ../packages/chell.nix { });
-
-            # The tests in data-diverse do not build with GHC 9.4.
-            data-diverse = hfinal.callPackage ../packages/data-diverse.nix { };
-
-            # Needed by threadscope-0.2.14.1.
-            ghc-events = hfinal.callPackage ../packages/ghc-events.nix { };
-
-            # Support GHC 9.4.
-            record-dot-preprocessor = hfinal.callPackage ../packages/record-dot-preprocessor.nix { };
-
-            turtle = hfinal.callPackage ../packages/turtle.nix { };
-
-            large-records = final.haskell.lib.unmarkBroken hprev.large-records;
-          })
-          (hfinal: hprev: {
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
-
-            range-set-list = final.haskell.lib.overrideCabal hprev.range-set-list (_: {
-              broken = false;
-              jailbreak = true;
-            });
-
-            word-compat = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/word-compat.nix { });
           })
           (hfinal: _: {
             grpc-haskell = final.haskell.lib.doJailbreak

@@ -31,6 +31,8 @@ final: prev: {
     };
   };
 
+  grpc-mqtt = final.haskell.packages.${ghc}.grpc-mqtt;
+
   grpc-mqtt-dev-shell =
     let
       hsPkgs = final.haskell.packages.${ghc};

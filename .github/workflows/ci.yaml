@@ -12,6 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        ghc: [ghc96, ghc98]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -27,4 +31,4 @@ jobs:
           name: awakesecurity
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      - run: nix build --print-build-logs
+      - run: nix build --print-build-logs .#with-${{ matrix.ghc }}

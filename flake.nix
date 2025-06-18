@@ -16,14 +16,14 @@
         };
 
         ghcVersions = rec {
-          default = ghc96;
+          default = with-ghc96;
 
-          ghc96 = import nixpkgs {
+          with-ghc96 = import nixpkgs {
             inherit system;
             overlays = [ (haskellOverlay "ghc96") ];
           };
 
-          ghc98 = import nixpkgs {
+          with-ghc98 = import nixpkgs {
             inherit system;
             overlays = [ (haskellOverlay "ghc98") ];
           };

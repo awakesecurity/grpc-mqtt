@@ -15,8 +15,8 @@ extra-source-files:
   README.md
 
 tested-with:
-  GHC == 9.4.8
-  GHC == 9.6.6
+  GHC == 9.6.7
+  GHC == 9.8.4
 
 custom-setup
   setup-depends: base, Cabal, filepath
@@ -50,10 +50,10 @@ common common
 
   build-depends:
     , async                >= 2.2.3    && < 2.3
-    , base                 >= 4.14     && < 4.19
-    , bytestring           >= 0.10.6.0 && < 0.12.0
+    , base                 >= 4.14     && < 4.20
+    , bytestring           >= 0.10.6.0 && < 0.13
     , containers           >= 0.5      && < 0.7
-    , deepseq              == 1.4.*
+    , deepseq              >= 1.4      && < 1.6
     , grpc-haskell         >= 0.3.0    && < 0.5
     , grpc-haskell-core    >= 0.5.0    && < 0.7
     , mtl                  >= 2.2.2    && < 2.4
@@ -128,11 +128,12 @@ library
   build-depends:
     , conduit-extra        >= 1.3.5   && < 1.4
     , crypton-connection   >= 0.3.1   && < 0.5
+    , data-default         >= 0.7     && < 0.9
     , network-conduit-tls  >= 1.3.2   && < 1.5
     , nonce                >= 1.0.7   && < 1.1
     , pqueue               >= 1.4.1.3 && < 1.6
     , safe-exceptions      >= 0.1.7   && < 0.2
-    , template-haskell     >= 2.16.0  && < 2.21
+    , template-haskell     >= 2.16.0  && < 2.23
     , unliftio             >= 0.2.15  && < 0.3
     , unliftio-core        >= 0.2.0   && < 0.3
     , unordered-containers >= 0.2.13  && < 0.3

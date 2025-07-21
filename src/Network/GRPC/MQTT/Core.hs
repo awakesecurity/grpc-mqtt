@@ -42,12 +42,14 @@ import Data.Conduit.Network.TLS
     tlsClientConfig,
   )
 
+import Data.Default (def)
+
 import Data.Time.Clock (NominalDiffTime)
 
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.List qualified as L
 
-import Network.Connection (ProxySettings, TLSSettings (TLSSettingsSimple))
+import Network.Connection (ProxySettings, TLSSettings)
 
 import Network.MQTT.Client
   ( MQTTClient,
@@ -142,7 +144,7 @@ defaultMGConfig =
     , _username = Nothing
     , _password = Nothing
     , _connectTimeout = 180000000
-    , _tlsSettings = TLSSettingsSimple False False False
+    , _tlsSettings = def
     , _pingPeriod = 30000000
     , _pingPatience = 90000000
     }

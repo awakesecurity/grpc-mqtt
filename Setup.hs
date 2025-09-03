@@ -14,19 +14,37 @@ import Distribution.Types.BuildInfo (BuildInfo)
 import Distribution.Types.LocalBuildInfo (LocalBuildInfo(..))
 import Distribution.Types.ComponentLocalBuildInfo (ComponentLocalBuildInfo)
 import Distribution.Verbosity (Verbosity)
+import Data.Maybe (fromMaybe)
+import Data.List qualified as List
 import System.FilePath ((</>), normalise)
+import System.Environment qualified as System
 
 #if MIN_VERSION_Cabal(3,8,0)
 import Distribution.Simple.PreProcess (unsorted)
 #endif
 
 main :: IO ()
-main = defaultMainWithHooks customHooks
+main = do 
+  args <- System.getArgs 
 
-customHooks :: UserHooks
-customHooks = simpleUserHooks
+  let protoInDir :: Maybe String 
+      protoInDir = argProtoPath args 
+
+  defaultMainWithHooks (customHooks protoInDir)
+
+argProtoPath :: [String] -> Maybe FilePath
+argProtoPath [] = Nothing
+argProtoPath (arg : args) 
+  | argName `List.isPrefixOf` arg = pure (drop (length argName) arg)
+  | otherwise = argProtoPath args 
+  where 
+    argName :: String
+    argName = "--includeDir"
+
+customHooks :: Maybe FilePath -> UserHooks
+customHooks protoInDir = simpleUserHooks
   { hookedPreProcessors =
-      ( "proto", ppProto ) : hookedPreProcessors simpleUserHooks
+      ( "proto", ppProto protoInDir ) : hookedPreProcessors simpleUserHooks
   }
 
 -- | Converts a MyModule.proto to MyModule.hs using compile-proto-file,
@@ -45,25 +63,27 @@ customHooks = simpleUserHooks
 -- In fact, such dependency analysis might help with the import of
 -- message.proto by service.proto in the tests.)
 ppProto ::
+  Maybe FilePath ->
   BuildInfo ->
   LocalBuildInfo ->
   ComponentLocalBuildInfo ->
   PreProcessor
-ppProto _buildInfo localBuildInfo _componentLocalBuildInfo = PreProcessor
+ppProto protoInDir _buildInfo localBuildInfo _componentLocalBuildInfo = PreProcessor
   { platformIndependent = True
-  , runPreProcessor = genProto localBuildInfo
+  , runPreProcessor = genProto protoInDir localBuildInfo
 #if MIN_VERSION_Cabal(3,8,0)
   , ppOrdering = unsorted
 #endif
   }
 
 genProto ::
+  Maybe FilePath ->
   LocalBuildInfo ->
   (FilePath, FilePath) ->
   (FilePath, FilePath) ->
   Verbosity ->
   IO ()
-genProto localBuildInfo (inBaseDir, inRelativeFile)
+genProto protoInDir localBuildInfo (inBaseDir, inRelativeFile)
          (outBaseDir, outRelativeFile) verbosity = do
   let inFile = normalise (inBaseDir </> inRelativeFile)
       outFile = normalise (outBaseDir </> outRelativeFile)
@@ -72,7 +92,7 @@ genProto localBuildInfo (inBaseDir, inRelativeFile)
     requireProgram verbosity cpfProgram (withPrograms localBuildInfo)
   let extraArgs =
         [ "--includeDir"
-        , inBaseDir
+        , fromMaybe inBaseDir protoInDir
         , "--out"
         , outBaseDir
         , "--proto"

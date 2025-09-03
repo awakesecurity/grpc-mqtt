@@ -1,4 +1,6 @@
-{ gitignore, ghc }:
+{ gitignore
+, ghc 
+}:
 
 final: prev: {
   haskell = prev.haskell // {
@@ -24,6 +26,10 @@ final: prev: {
               # The tests require a running mosquitto server
               preCheck = "bash ./scripts/host-mosquitto.sh -d &";
               postCheck = "xargs --arg-file=test-files/mqtt-broker.pid kill";
+
+              configureFlags = (old.configureFlags or []) ++ [
+                "--includeDir=${final.grpc}"
+              ];
             });
           })
         ];

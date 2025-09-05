@@ -27,7 +27,7 @@ final: prev: {
               preCheck = "bash ./scripts/host-mosquitto.sh -d &";
               postCheck = "xargs --arg-file=test-files/mqtt-broker.pid kill";
 
-              configureFlags = (old.configureFlags or []) ++ [
+              buildFlags = (old.buildFlags or []) ++ [
                 "--includeDir=${final.grpc}"
               ];
             });

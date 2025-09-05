@@ -12,7 +12,9 @@ category:    Network
 build-type:  Custom
 
 extra-source-files:
-  README.md
+  ./README.md
+  ./proto/haskell/grpc/mqtt/clevel.proto
+  ./proto/haskell/grpc/mqtt/option.proto
 
 tested-with:
   GHC == 9.6.7

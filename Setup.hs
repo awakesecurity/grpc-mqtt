@@ -3,6 +3,7 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
+import Distribution.Compat.Prelude (fromString)
 import Distribution.Simple
          (UserHooks(..), defaultMainWithHooks, simpleUserHooks)
 import Distribution.Simple.PreProcess (PreProcessor(..))
@@ -26,7 +27,7 @@ main = defaultMainWithHooks customHooks
 customHooks :: UserHooks
 customHooks = simpleUserHooks
   { hookedPreProcessors =
-      ( "proto", ppProto ) : hookedPreProcessors simpleUserHooks
+      ( fromString "proto", ppProto ) : hookedPreProcessors simpleUserHooks
   }
 
 -- | Converts a MyModule.proto to MyModule.hs using compile-proto-file,

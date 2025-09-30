@@ -17,6 +17,7 @@ extra-source-files:
 tested-with:
   GHC == 9.6.7
   GHC == 9.8.4
+  GHC == 9.10.1
 
 custom-setup
   setup-depends: base, Cabal, filepath
@@ -50,9 +51,9 @@ common common
 
   build-depends:
     , async                >= 2.2.3    && < 2.3
-    , base                 >= 4.14     && < 4.20
+    , base                 >= 4.14     && < 4.21
     , bytestring           >= 0.10.6.0 && < 0.13
-    , containers           >= 0.5      && < 0.7
+    , containers           >= 0.5      && < 0.8
     , deepseq              >= 1.4      && < 1.6
     , grpc-haskell         >= 0.3.0    && < 0.5
     , grpc-haskell-core    >= 0.5.0    && < 0.7

@@ -6,10 +6,13 @@ final: prev: {
       "${ghc}" = prev.haskell.packages."${ghc}".override (old: {
         overrides = prev.lib.fold prev.lib.composeExtensions (old.overrides or (_: _: { })) [
           (hfinal: hprev: {
+            # Too tight bounds to support GHC 9.10
+            # See: https://github.com/dustin/mqtt-hs/issues/52
+            net-mqtt = final.haskell.lib.doJailbreak hprev.net-mqtt;
+
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
-          })
-          (hfinal: _: {
+
             grpc-haskell = final.haskell.lib.doJailbreak
               (final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { }));
             grpc-haskell-core = final.haskell.lib.doJailbreak

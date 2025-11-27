@@ -210,7 +210,7 @@ askRemoteConfigMQTT = do
 
 data TestOption (opt :: Symbol) (a :: Type) :: Type where
   TestOption :: forall opt a. {getTestOption :: a} -> TestOption opt a
-  deriving (Typeable, Show)
+  deriving (Show)
 
 -- | Identitical to 'Tasty.askOption' except for handling the unwrapping of
 -- 'TestOption', intended to be used via type application:

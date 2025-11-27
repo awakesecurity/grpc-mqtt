@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -102,8 +103,11 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 -- @since 1.0.0
 newtype Batched = Batch {getBatched :: Bool}
   deriving newtype (Primitive, ProtoDatum)
-  deriving stock (Data, Eq, Ord, Generic, Lift, Typeable)
+  deriving stock (Data, Eq, Ord, Generic, Lift)
   deriving anyclass (Message, ProtoEnum)
+#if !MIN_VERSION_base(4,21,0)
+  deriving stock (Typeable)
+#endif
 
 -- | Pattern synonym for enabled batching.
 --

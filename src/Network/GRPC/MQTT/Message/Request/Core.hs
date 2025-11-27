@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 
 -- |
 -- Module      :  Network.GRPC.MQTT.Message.Request.Core
@@ -59,7 +60,10 @@ data Request msg = Request
     metadata :: MetadataMap
   }
   deriving stock (Eq, Ord, Show)
-  deriving stock (Data, Generic, Typeable)
+  deriving stock (Data, Generic)
+#if !MIN_VERSION_base(4,21,0)
+  deriving stock (Typeable)
+#endif
 
 -- | @since 1.0.0
 instance Functor Request where

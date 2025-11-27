@@ -10,15 +10,28 @@ final: prev: {
             # See: https://github.com/dustin/mqtt-hs/issues/52
             net-mqtt = final.haskell.lib.doJailbreak hprev.net-mqtt;
 
-            proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
-            proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
+            # GHC 9.12 support
+            pqueue = final.haskell.lib.doJailbreak hprev.pqueue;
+            optparse-generic = final.haskell.lib.doJailbreak hprev.optparse-generic;
+            insert-ordered-containers = final.haskell.lib.doJailbreak hprev.insert-ordered-containers;
+            swagger2 = final.haskell.lib.doJailbreak hprev.swagger2;
 
-            grpc-haskell = final.haskell.lib.doJailbreak
-              (final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { }));
-            grpc-haskell-core = final.haskell.lib.doJailbreak
-              (final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell-core.nix {
-                 gpr = final.grpc;
-              }));
+            proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
+            proto3-suite = final.lib.pipe (hfinal.callPackage ../packages/proto3-suite.nix { }) [
+              final.haskell.lib.dontCheck
+              final.haskell.lib.doJailbreak
+            ];
+
+            grpc-haskell = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell.nix { }) [
+              final.haskell.lib.dontCheck
+              final.haskell.lib.doJailbreak
+            ];
+            grpc-haskell-core = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell-core.nix { gpr = final.grpc; }) [
+              final.haskell.lib.dontCheck
+              final.haskell.lib.doJailbreak
+              (final.haskell.lib.compose.appendConfigureFlag "--ghc-option=-Wno-deriving-typeable")  # GHC 9.12
+              final.haskell.lib.dontHaddock  # TODO: the configure flags ^^ don't propagate to haddocks :(
+            ];
           })
           (hfinal: _: {
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {

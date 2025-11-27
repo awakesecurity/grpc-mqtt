@@ -32,6 +32,11 @@
             inherit system;
             overlays = [ (haskellOverlay "ghc910") ];
           };
+
+          with-ghc912 = import nixpkgs {
+            inherit system;
+            overlays = [ (haskellOverlay "ghc912") ];
+          };
         };
       in {
         packages = builtins.mapAttrs (_: pkgs: pkgs.grpc-mqtt) ghcVersions;

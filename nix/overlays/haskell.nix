@@ -8,13 +8,13 @@ final: prev: {
           (hfinal: hprev: {
             # Too tight bounds to support GHC 9.10
             # See: https://github.com/dustin/mqtt-hs/issues/52
-            net-mqtt = final.haskell.lib.doJailbreak hprev.net-mqtt;
+            net-mqtt = final.lib.pipe hprev.net-mqtt [
+              final.haskell.lib.unmarkBroken
+              final.haskell.lib.doJailbreak
+            ];
 
             # GHC 9.12 support
             pqueue = final.haskell.lib.doJailbreak hprev.pqueue;
-            optparse-generic = final.haskell.lib.doJailbreak hprev.optparse-generic;
-            insert-ordered-containers = final.haskell.lib.doJailbreak hprev.insert-ordered-containers;
-            swagger2 = final.haskell.lib.doJailbreak hprev.swagger2;
 
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
             proto3-suite = final.lib.pipe (hfinal.callPackage ../packages/proto3-suite.nix { }) [

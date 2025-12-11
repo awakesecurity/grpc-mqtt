@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -105,9 +104,6 @@ newtype Batched = Batch {getBatched :: Bool}
   deriving newtype (Primitive, ProtoDatum)
   deriving stock (Data, Eq, Ord, Generic, Lift)
   deriving anyclass (Message, ProtoEnum)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- | Pattern synonym for enabled batching.
 --

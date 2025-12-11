@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 -- |
 -- Module      :  Network.GRPC.MQTT.Serial
 -- Copyright   :  (c) Arista Networks, 2022-2023
@@ -67,9 +65,6 @@ data WireEncodeOptions = WireEncodeOptions
     encodeBatched :: Batched
   }
   deriving stock (Data, Eq, Ord, Lift, Show)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- Wire Encoding Options - Construction ----------------------------------------
 
@@ -125,9 +120,6 @@ newtype WireDecodeOptions = WireDecodeOptions
     decodeDecompress :: Bool
   }
   deriving stock (Data, Eq, Ord, Lift, Show)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- Wire Decoding Options - Construction ----------------------------------------
 

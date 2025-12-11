@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 -- |
 -- Module      :  Network.GRPC.MQTT.Compress
 -- Copyright   :  (c) Arista Networks, 2022-2023
@@ -68,9 +66,6 @@ compress level bytes
 -- @since 1.0.0
 newtype ZstdError = ZstdError {getZstdError :: String}
   deriving stock (Data, Eq, Ord, Show)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- | @since 1.0.0
 instance Exception ZstdError where

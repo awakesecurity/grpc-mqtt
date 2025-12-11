@@ -489,9 +489,6 @@ data ProtoOptionError
     -- @
     OptionValueTypeMismatch DatumRep DotProtoOption
   deriving stock (Data, Eq, Generic, Ord, Show)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- | @since 1.0.0
 instance Exception ProtoOptionError where

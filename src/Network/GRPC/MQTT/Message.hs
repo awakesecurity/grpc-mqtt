@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 
 -- |
 -- Module      :  Network.GRPC.MQTT.Message
@@ -132,9 +131,6 @@ data WireDecodeError
     -- decompressing the 'ByteString'.
     DecodeZstdError ZstdError
   deriving stock (Eq, Ord, Show)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 throwWireError :: MonadError WireDecodeError m => ParseError -> m a
 throwWireError err = throwError (DecodeWireError err)

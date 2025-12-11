@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
@@ -423,9 +422,6 @@ data ClientTopicError
     -- name that does not form a valid MQTT topic.
     BadRPCMethodTopicError Text
   deriving stock (Eq, Ord)
-#if !MIN_VERSION_base(4,21,0)
-  deriving stock (Typeable)
-#endif
 
 -- | @since 1.0.0
 instance Exception ClientTopicError

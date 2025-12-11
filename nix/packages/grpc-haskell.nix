@@ -9,8 +9,8 @@ mkDerivation {
   version = "0.4.0";
   src = fetchgit {
     url = "https://github.com/awakesecurity/gRPC-haskell.git";
-    sha256 = "1j21cnhd1wbf0fn8vlrv7g6m10d1i7x31a9m1x4srwbqlc2ry51z";
-    rev = "ddf02163fa82f1f287351336fbe9e174b6e5b9db";
+    sha256 = "032157rn88plw7g0f901wh5i6w7hjhlcqfr30cvbcb6xz3wpv91p";
+    rev = "2f89b1ae6c27f521983248a95483123bedd89d05";
     fetchSubmodules = true;
   };
   isLibrary = true;

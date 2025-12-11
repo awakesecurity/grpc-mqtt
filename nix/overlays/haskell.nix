@@ -24,13 +24,9 @@ final: prev: {
 
             grpc-haskell = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell.nix { }) [
               final.haskell.lib.dontCheck
-              final.haskell.lib.doJailbreak
             ];
             grpc-haskell-core = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell-core.nix { gpr = final.grpc; }) [
               final.haskell.lib.dontCheck
-              final.haskell.lib.doJailbreak
-              (final.haskell.lib.compose.appendConfigureFlag "--ghc-option=-Wno-deriving-typeable")  # GHC 9.12
-              final.haskell.lib.dontHaddock  # TODO: the configure flags ^^ don't propagate to haddocks :(
             ];
           })
           (hfinal: _: {

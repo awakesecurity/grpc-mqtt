@@ -102,7 +102,7 @@ import Network.GRPC.MQTT.Proto (ProtoDatum)
 -- @since 1.0.0
 newtype Batched = Batch {getBatched :: Bool}
   deriving newtype (Primitive, ProtoDatum)
-  deriving stock (Data, Eq, Ord, Generic, Lift, Typeable)
+  deriving stock (Data, Eq, Ord, Generic, Lift)
   deriving anyclass (Message, ProtoEnum)
 
 -- | Pattern synonym for enabled batching.

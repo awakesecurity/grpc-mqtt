@@ -130,7 +130,7 @@ data WireDecodeError
   | -- | 'DecodeZstdError' is emitted when a zstandard error is thrown while
     -- decompressing the 'ByteString'.
     DecodeZstdError ZstdError
-  deriving stock (Eq, Ord, Show, Typeable)
+  deriving stock (Eq, Ord, Show)
 
 throwWireError :: MonadError WireDecodeError m => ParseError -> m a
 throwWireError err = throwError (DecodeWireError err)

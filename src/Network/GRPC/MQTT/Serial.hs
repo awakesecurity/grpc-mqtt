@@ -64,7 +64,7 @@ data WireEncodeOptions = WireEncodeOptions
     -- are published by a streaming RPC method type.
     encodeBatched :: Batched
   }
-  deriving stock (Data, Eq, Ord, Lift, Show, Typeable)
+  deriving stock (Data, Eq, Ord, Lift, Show)
 
 -- Wire Encoding Options - Construction ----------------------------------------
 
@@ -119,7 +119,7 @@ newtype WireDecodeOptions = WireDecodeOptions
     -- applied to a 'ByteString' before it is parsed during deserialization.
     decodeDecompress :: Bool
   }
-  deriving stock (Data, Eq, Ord, Lift, Show, Typeable)
+  deriving stock (Data, Eq, Ord, Lift, Show)
 
 -- Wire Decoding Options - Construction ----------------------------------------
 

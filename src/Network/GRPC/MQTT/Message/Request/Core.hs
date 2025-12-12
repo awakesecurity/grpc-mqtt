@@ -59,7 +59,7 @@ data Request msg = Request
     metadata :: MetadataMap
   }
   deriving stock (Eq, Ord, Show)
-  deriving stock (Data, Generic, Typeable)
+  deriving stock (Data, Generic)
 
 -- | @since 1.0.0
 instance Functor Request where

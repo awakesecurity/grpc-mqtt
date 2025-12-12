@@ -8,17 +8,26 @@ final: prev: {
           (hfinal: hprev: {
             # Too tight bounds to support GHC 9.10
             # See: https://github.com/dustin/mqtt-hs/issues/52
-            net-mqtt = final.haskell.lib.doJailbreak hprev.net-mqtt;
+            net-mqtt = final.lib.pipe hprev.net-mqtt [
+              final.haskell.lib.unmarkBroken
+              final.haskell.lib.doJailbreak
+            ];
+
+            # GHC 9.12 support
+            pqueue = final.haskell.lib.doJailbreak hprev.pqueue;
 
             proto3-wire = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-wire.nix  { });
-            proto3-suite = final.haskell.lib.dontCheck (hfinal.callPackage ../packages/proto3-suite.nix { });
+            proto3-suite = final.lib.pipe (hfinal.callPackage ../packages/proto3-suite.nix { }) [
+              final.haskell.lib.dontCheck
+              final.haskell.lib.doJailbreak
+            ];
 
-            grpc-haskell = final.haskell.lib.doJailbreak
-              (final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell.nix { }));
-            grpc-haskell-core = final.haskell.lib.doJailbreak
-              (final.haskell.lib.dontCheck (hfinal.callPackage ../packages/grpc-haskell-core.nix {
-                 gpr = final.grpc;
-              }));
+            grpc-haskell = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell.nix { }) [
+              final.haskell.lib.dontCheck
+            ];
+            grpc-haskell-core = final.lib.pipe (hfinal.callPackage ../packages/grpc-haskell-core.nix { gpr = final.grpc; }) [
+              final.haskell.lib.dontCheck
+            ];
           })
           (hfinal: _: {
             grpc-mqtt = (hfinal.callCabal2nix "grpc-mqtt" (gitignore.lib.gitignoreSource ../..) { }).overrideAttrs (old: {

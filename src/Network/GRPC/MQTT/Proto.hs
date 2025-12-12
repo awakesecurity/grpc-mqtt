@@ -91,7 +91,12 @@ where
 
 --------------------------------------------------------------------------------
 
-import Control.Exception (ErrorCall (ErrorCallWithLocation), throwIO)
+import Control.Exception (throwIO)
+#if MIN_VERSION_base(4,21,0)
+import Control.Exception (ErrorCall (ErrorCall))
+#else
+import Control.Exception (ErrorCall (ErrorCallWithLocation))
+#endif
 
 import Control.Monad.Except (MonadError, throwError)
 
@@ -212,10 +217,12 @@ throwProtoPathIsDirectoryIO = throwProtoIO ProtoPathIsDirectory
 --
 -- @since 1.0.0
 throwCompileErrorIO :: Turtle.FilePath -> CompileError -> IO a
-throwCompileErrorIO filepath err =
-  let issue :: ErrorCall
-      issue = ErrorCallWithLocation filepath (showCompileError err)
-   in throwIO issue
+#if MIN_VERSION_base(4,21,0)
+throwCompileErrorIO _filepath err = throwIO $ ErrorCall $ showCompileError err
+#else
+throwCompileErrorIO filepath err = throwIO $ ErrorCallWithLocation filepath $ showCompileError err
+#endif
+
 
 throwProtoIO :: ProtoIOErrorTag -> Turtle.FilePath -> IO a
 throwProtoIO tag filepath = throwIO (ProtoIOError filepath tag)
@@ -481,7 +488,7 @@ data ProtoOptionError
     -- }
     -- @
     OptionValueTypeMismatch DatumRep DotProtoOption
-  deriving stock (Data, Eq, Generic, Ord, Show, Typeable)
+  deriving stock (Data, Eq, Generic, Ord, Show)
 
 -- | @since 1.0.0
 instance Exception ProtoOptionError where

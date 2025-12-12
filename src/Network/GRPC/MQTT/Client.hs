@@ -421,7 +421,7 @@ data ClientTopicError
   | -- | Exception that is raised when preparing a request for RPC method with a
     -- name that does not form a valid MQTT topic.
     BadRPCMethodTopicError Text
-  deriving stock (Eq, Ord, Typeable)
+  deriving stock (Eq, Ord)
 
 -- | @since 1.0.0
 instance Exception ClientTopicError

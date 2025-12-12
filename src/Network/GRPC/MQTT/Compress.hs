@@ -65,7 +65,7 @@ compress level bytes
 --
 -- @since 1.0.0
 newtype ZstdError = ZstdError {getZstdError :: String}
-  deriving stock (Data, Eq, Ord, Show, Typeable)
+  deriving stock (Data, Eq, Ord, Show)
 
 -- | @since 1.0.0
 instance Exception ZstdError where

@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.11";
     flake-utils.url = "github:numtide/flake-utils";
     gitignore = {
       url = "github:hercules-ci/gitignore.nix";
@@ -31,6 +31,11 @@
           with-ghc910 = import nixpkgs {
             inherit system;
             overlays = [ (haskellOverlay "ghc910") ];
+          };
+
+          with-ghc912 = import nixpkgs {
+            inherit system;
+            overlays = [ (haskellOverlay "ghc912") ];
           };
         };
       in {

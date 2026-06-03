@@ -300,7 +300,7 @@ handleRequest handle = do
 
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
 dispatchClientHandler k = do
-  methodKey <- askMethodKey
+  methodKey <- Session.askMethodKey
   Session.logInfo "dispatch" ("askMethodKey resolved to: " <> decodeUtf8 methodKey)
   handler <- askMethod
   Session.logInfo "dispatch" ("askMethod returned: " <> case handler of { Nothing -> "Nothing"; Just _ -> "Just handler" })

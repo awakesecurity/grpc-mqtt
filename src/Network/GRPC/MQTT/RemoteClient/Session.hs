@@ -96,7 +96,7 @@ import Data.Text qualified as Text
 import Network.MQTT.Topic (Filter, Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
-import Control.Exception (SomeException, catch, displayException, throwIO)
+import Control.Exception (catch, throwIO)
 import UnliftIO.Exception (finally)
 
 import Relude

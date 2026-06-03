@@ -96,6 +96,7 @@ import Data.Text qualified as Text
 import Network.MQTT.Topic (Filter, Topic (unTopic))
 import Network.MQTT.Topic qualified as Topic
 
+import Control.Exception (SomeException, catch, displayException, throwIO)
 import UnliftIO.Exception (finally)
 
 import Relude
@@ -156,11 +157,18 @@ withSession :: (SessionHandle -> Session ()) -> Session ()
 withSession k = do
   config <- ask
   let sessionKey = topicSid (cfgTopics config)
+      sessionLogger = logger (cfgLogger config)
   withRunInIO \runIO -> do
     rec handle <- newSessionHandleIO thread
-        thread <- Async.async $ runIO do
-          insertSessionM sessionKey handle
-          finally (k handle) (deleteSessionM sessionKey)
+        thread <- Async.async $ do
+          Logging.logInfo sessionLogger ("[" <> unTopic sessionKey <> "]: session thread started")
+          runIO (insertSessionM sessionKey handle)
+          runIO (k handle)
+            `catch` \(e :: SomeException) -> do
+              Logging.logErr sessionLogger ("[" <> unTopic sessionKey <> "]: session thread exception: " <> Text.pack (displayException e))
+              throwIO e
+            `finally`
+              runIO (deleteSessionM sessionKey)
     pure ()
 
 -- | Querys the ambient sessions map for session with the given session id

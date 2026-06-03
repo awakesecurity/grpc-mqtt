@@ -270,9 +270,12 @@ handleRequest handle = do
       method <- askMethodTopic
       Session.logRequest (unTopic method) request
 
+      Session.logInfo "dispatch" ("dispatching handler for method: " <> unTopic method)
       dispatchClientHandler \case
         ClientUnaryHandler k -> do
+          Session.logInfo "dispatch" ("invoking ClientUnaryHandler for: " <> unTopic method)
           result <- liftIO (k message timeout metadata)
+          Session.logInfo "dispatch" ("handler returned for: " <> unTopic method)
           publishClientResponse encodeOptions result
         ClientClientStreamHandler k -> do
           result <- withRunInIO \runIO -> do
@@ -297,7 +300,11 @@ handleRequest handle = do
 
 dispatchClientHandler :: (ClientHandler -> Session ()) -> Session ()
 dispatchClientHandler k = do
-  maybe onError k =<< askMethod
+  methodKey <- askMethodKey
+  Session.logInfo "dispatch" ("askMethodKey resolved to: " <> decodeUtf8 methodKey)
+  handler <- askMethod
+  Session.logInfo "dispatch" ("askMethod returned: " <> case handler of { Nothing -> "Nothing"; Just _ -> "Just handler" })
+  maybe onError k handler
   where
     -- FIXME: The error message's details are lost in transit to the client.
     onError :: Session ()

@@ -33,6 +33,7 @@ where
 
 import Control.Exception
   ( bracket,
+    bracket_,
     handle,
     onException,
     throwIO,
@@ -189,110 +190,107 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
 
   handle handleMQTTException $ do
     sessionId <- makeSessionIdTopic rng
-    responseQueue <- newTOrderedQueueIO
 
     -- Topics
     let responseTopic = Topic.makeResponseTopic baseTopic sessionId
     let controlTopic = Topic.makeControlTopic baseTopic sessionId
 
-    atomicModifyIORef' responseQueues \cxs ->
-      (Map.insert responseTopic responseQueue cxs, ())
+    withResponseQueue responseQueues responseTopic \responseQueue -> do
+      -- Message options
+      let encodeOptions = Serial.makeClientEncodeOptions options
+      let decodeOptions = Serial.makeRemoteDecodeOptions options
+      let timeout = requestTimeout request
+      let packetSizeLimit = fromIntegral msgSizeLimit
 
-    -- Message options
-    let encodeOptions = Serial.makeClientEncodeOptions options
-    let decodeOptions = Serial.makeRemoteDecodeOptions options
-    let timeout = requestTimeout request
-    let packetSizeLimit = fromIntegral msgSizeLimit
+      requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
 
-    requestTopic <- makeMethodRequestTopic baseTopic sessionId nmMethod
+      publish <- mkSequencedPublish mqttClient requestTopic
 
-    publish <- mkSequencedPublish mqttClient requestTopic
+      (publishToStream, publishToStreamCompleted) <-
+        Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
+          logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
+          publish message
 
-    (publishToStream, publishToStreamCompleted) <-
-      Stream.makeStreamBatchSender packetSizeLimit publishRateLimit encodeOptions \message -> do
-        logDebug mqttLogger $ "client debug: publishing stream chunk to topic: " <> unTopic requestTopic
-        publish message
+      let publishToRequestStream :: request -> IO (Either GRPCIOError ())
+          publishToRequestStream x =
+            -- TODO: Fix this. Send errors won't be propagated to client's send handler
+            let message :: ByteString
+                message = Message.toWireEncoded encodeOptions x
+             in publishToStream message $> Right ()
 
-    let publishToRequestStream :: request -> IO (Either GRPCIOError ())
-        publishToRequestStream x =
-          -- TODO: Fix this. Send errors won't be propagated to client's send handler
-          let message :: ByteString
-              message = Message.toWireEncoded encodeOptions x
-           in publishToStream message $> Right ()
+      -- Subscribe to response topic
+      withSubscription mqttClient [toFilter responseTopic] $ do
+        -- Process request
+        timeoutGRPC timeout do
+          Request.makeRequestSender
+            packetSizeLimit
+            publishRateLimit
+            publish
+            (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
 
-    -- Subscribe to response topic
-    withSubscription mqttClient [toFilter responseTopic] $ do
-      -- Process request
-      timeoutGRPC timeout do
-        Request.makeRequestSender
-          packetSizeLimit
-          publishRateLimit
-          publish
-          (Message.toWireEncoded encodeOptions <$> Request.fromMQTTRequest options request)
+          withControlSignals (publishControl controlTopic) . exceptToResult $ do
+            case request of
+              -- Unary Requests
+              MQTTNormalRequest{} ->
+                Response.makeNormalResponseReader responseQueue decodeOptions
+              -- Client Streaming Requests
+              MQTTWriterRequest _ _ streamHandler -> do
+                liftIO $ do
+                  -- do client streaming
+                  streamHandler publishToRequestStream
+                  -- Send end of stream indicator
+                  publishToStreamCompleted
 
-        withControlSignals (publishControl controlTopic) . exceptToResult $ do
-          case request of
-            -- Unary Requests
-            MQTTNormalRequest{} ->
-              Response.makeNormalResponseReader responseQueue decodeOptions
-            -- Client Streaming Requests
-            MQTTWriterRequest _ _ streamHandler -> do
-              liftIO $ do
-                -- do client streaming
-                streamHandler publishToRequestStream
-                -- Send end of stream indicator
-                publishToStreamCompleted
+                Response.makeClientResponseReader responseQueue decodeOptions
 
-              Response.makeClientResponseReader responseQueue decodeOptions
+              -- Server Streaming Requests
+              MQTTReaderRequest _ _ _ streamHandler -> do
+                -- Wait for initial metadata
+                metadata <- makeMetadataMapReader responseQueue
 
-            -- Server Streaming Requests
-            MQTTReaderRequest _ _ _ streamHandler -> do
-              -- Wait for initial metadata
-              metadata <- makeMetadataMapReader responseQueue
+                reader <- Stream.makeStreamReader responseQueue decodeOptions
 
-              reader <- Stream.makeStreamReader responseQueue decodeOptions
+                let mqttSRecv :: StreamRecv response
+                    mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                      reader >>= \case
+                        Nothing -> pure Nothing
+                        Just bs -> withExceptT Message.toRemoteError do
+                          Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
 
-              let mqttSRecv :: StreamRecv response
-                  mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                    reader >>= \case
-                      Nothing -> pure Nothing
-                      Just bs -> withExceptT Message.toRemoteError do
-                        Just <$> Message.fromWireEncoded @_ @response decodeOptions bs
+                -- Run user-provided stream handler
+                liftIO (streamHandler metadata mqttSRecv)
 
-              -- Run user-provided stream handler
-              liftIO (streamHandler metadata mqttSRecv)
+                -- Return final result
+                Response.makeServerResponseReader responseQueue decodeOptions
 
-              -- Return final result
-              Response.makeServerResponseReader responseQueue decodeOptions
+              -- BiDirectional Server Streaming Requests
+              MQTTBiDiRequest _ _ streamHandler -> do
+                -- Wait for initial metadata
+                metadata <- makeMetadataMapReader responseQueue
 
-            -- BiDirectional Server Streaming Requests
-            MQTTBiDiRequest _ _ streamHandler -> do
-              -- Wait for initial metadata
-              metadata <- makeMetadataMapReader responseQueue
+                reader <- Stream.makeStreamReader responseQueue decodeOptions
 
-              reader <- Stream.makeStreamReader responseQueue decodeOptions
+                let mqttSRecv :: StreamRecv response
+                    mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
+                      chunk <- reader
+                      case chunk of
+                        Nothing -> pure Nothing
+                        Just bs -> withExceptT Message.toRemoteError do
+                          Just <$> Message.fromWireEncoded decodeOptions bs
 
-              let mqttSRecv :: StreamRecv response
-                  mqttSRecv = runExceptT $ withExceptT toGRPCIOError do
-                    chunk <- reader
-                    case chunk of
-                      Nothing -> pure Nothing
-                      Just bs -> withExceptT Message.toRemoteError do
-                        Just <$> Message.fromWireEncoded decodeOptions bs
+                let mqttSSend :: StreamSend request
+                    mqttSSend = publishToRequestStream
 
-              let mqttSSend :: StreamSend request
-                  mqttSSend = publishToRequestStream
+                let mqttWritesDone :: WritesDone
+                    mqttWritesDone = do
+                      publishToStreamCompleted
+                      return $ Right ()
 
-              let mqttWritesDone :: WritesDone
-                  mqttWritesDone = do
-                    publishToStreamCompleted
-                    return $ Right ()
+                -- Run user-provided stream handler
+                liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
 
-              -- Run user-provided stream handler
-              liftIO $ streamHandler metadata mqttSRecv mqttSSend mqttWritesDone
-
-              -- Return final result
-              Response.makeBiDiResponseReader responseQueue decodeOptions
+                -- Return final result
+                Response.makeBiDiResponseReader responseQueue decodeOptions
   where
     makeMetadataMapReader ::
       TOrderedQueue ByteString ->
@@ -315,6 +313,25 @@ mqttRequest MQTTGRPCClient{..} baseTopic nmMethod options request = do
       let errMsg = toText (displayException e)
       logErr mqttLogger errMsg
       return $ MQTTError errMsg
+
+-- | Creates a response queue, registers it under the given response topic for
+-- the duration of the inner action, and removes it afterwards.
+--
+-- @since 1.0.0
+withResponseQueue ::
+  IORef (Map Topic (TOrderedQueue ByteString)) ->
+  Topic ->
+  (TOrderedQueue ByteString -> IO a) ->
+  IO a
+withResponseQueue queues topic k = do
+  queue <- newTOrderedQueueIO
+  bracket_ (insertQueue queue) deleteQueue (k queue)
+  where
+    insertQueue queue =
+      atomicModifyIORef' queues \cxs -> (Map.insert topic queue cxs, ())
+
+    deleteQueue =
+      atomicModifyIORef' queues \cxs -> (Map.delete topic cxs, ())
 
 -- | Helper function to run an 'ExceptT RemoteError' action and convert any failure
 -- to an 'MQTTResult'

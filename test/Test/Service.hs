@@ -17,8 +17,10 @@ import Test.Tasty.HUnit (assertFailure, (@?=))
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.Async qualified as Async
+import Control.Exception (throwIO, try)
 
 import Data.Sequence qualified as Seq
+import GHC.IO.Exception (userError)
 
 import Network.GRPC.HighLevel qualified as GRPC
 import Network.GRPC.HighLevel.Client
@@ -312,11 +314,15 @@ testTreeErrors =
 
       malform :: TestTree
       malform = Suite.testFixture "Test.Service.Errors.Malform" testMalformedMessage
+
+      cleanup :: TestTree
+      cleanup = Suite.testFixture "Test.Service.Errors.QueueCleanup" testResponseQueueCleanup
    in testGroup
         "Test.Service.Errors"
         [ timeout
         , after Test.AllSucceed "Errors.Timeout" missing
         , after Test.AllSucceed "Errors.Missing" malform
+        , after Test.AllSucceed "Errors.Malform" cleanup
         ]
 
 testClientTimeout :: Fixture ()
@@ -412,6 +418,29 @@ testMalformedMessage = do
 
     rcLogger :: RemoteClientLogger
     rcLogger = defaultRemoteClientLogger{logger = logger}
+
+testResponseQueueCleanup :: Fixture ()
+testResponseQueueCleanup = do
+  baseTopic <- asks Suite.testConfigBaseTopic
+
+  withServiceFixture \_ client -> do
+    let service = testServiceMqttClient client baseTopic
+
+    -- 1. normal completion
+    let msg = Message.TwoInts 5 10
+    _ <- testServicenormalCall service (GRPC.MQTT.MQTTNormalRequest msg 5 mempty)
+    queues0 <- readIORef (GRPC.MQTT.Client.responseQueues client)
+    Map.keys queues0 @?= []
+
+    -- 2. exceptional exit: a user stream handler that throws propagates out of
+    -- 'mqttRequest' (it is not an MQTTException), so only the bracket can clean up.
+    let boom :: StreamSend OneInt -> IO ()
+        boom _ = throwIO (userError "boom")
+    result <- try @SomeException do
+      testServiceClientStreamCall service (GRPC.MQTT.MQTTWriterRequest 5 mempty boom)
+    whenRight_ result \_ -> assertFailure "expected the stream handler to throw"
+    queues1 <- readIORef (GRPC.MQTT.Client.responseQueues client)
+    Map.keys queues1 @?= []
 
 --------------------------------------------------------------------------------
 
